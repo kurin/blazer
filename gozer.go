@@ -30,7 +30,7 @@ func New(account, key string) (*B2, error) {
 
 // Bucket is a reference to a B2 bucket.
 type Bucket struct {
-	b base.Bucket
+	b *base.Bucket
 }
 
 // Bucket returns the named bucket, if it exists.
@@ -91,7 +91,7 @@ type B2Writer struct {
 	once  sync.Once
 	file  *base.LargeFile
 
-	bucket base.Bucket
+	bucket *base.Bucket
 	name   string
 	ctype  string
 	info   map[string]string
@@ -149,7 +149,10 @@ func (bw *B2Writer) simpleWriteFile() error {
 		return err
 	}
 	sha1 := fmt.Sprintf("%x", bw.chsh.Sum(nil))
-	return ue.UploadFile(bw.cbuf, bw.cbuf.Len(), bw.name, bw.ctype, sha1, bw.info)
+	if _, err := ue.UploadFile(bw.cbuf, bw.cbuf.Len(), bw.name, bw.ctype, sha1, bw.info); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (bw *B2Writer) sendChunk() error {
@@ -198,5 +201,8 @@ func (bw *B2Writer) Close() error {
 	}
 	close(bw.ready)
 	bw.wg.Wait()
-	return bw.file.FinishLargeFile()
+	if _, err := bw.file.FinishLargeFile(); err != nil {
+		return err
+	}
+	return nil
 }

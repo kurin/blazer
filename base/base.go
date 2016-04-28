@@ -3,8 +3,6 @@
 //
 // It currently lacks support for the following APIs:
 //
-// b2_create_bucket
-// b2_delete_bucket
 // b2_delete_file_version
 // b2_download_file_by_id
 // b2_download_file_by_name
@@ -111,6 +109,57 @@ func B2AuthorizeAccount(account, key string) (*B2, error) {
 	}, nil
 }
 
+type b2CreateBucketRequest struct {
+	AccountID string `json:"accountId"`
+	Name      string `json:"bucketName"`
+	Type      string `json:"bucketType"`
+}
+
+type b2CreateBucketResponse struct {
+	BucketID string `json:"bucketId"`
+}
+
+// CreateBucket wraps b2_create_bucket.
+func (b *B2) CreateBucket(name, btype string) (*Bucket, error) {
+	if btype != "allPublic" {
+		btype = "allPrivate"
+	}
+	b2req := &b2CreateBucketRequest{
+		AccountID: b.accountID,
+		Name:      name,
+		Type:      btype,
+	}
+	b2resp := &b2CreateBucketResponse{}
+	headers := map[string]string{
+		"Authorization": b.authToken,
+	}
+	if err := makeRequest("POST", b.apiURI+apiV1+"b2_create_bucket", b2req, b2resp, headers, nil); err != nil {
+		return nil, err
+	}
+	return &Bucket{
+		Name: name,
+		id:   b2resp.BucketID,
+		b2:   b,
+	}, nil
+}
+
+type b2DeleteBucketRequest struct {
+	AccountID string `json:"accountId"`
+	BucketID  string `json:"bucketId"`
+}
+
+// DeleteBucket wraps b2_delete_bucket.
+func (b *Bucket) DeleteBucket() error {
+	b2req := &b2DeleteBucketRequest{
+		AccountID: b.b2.accountID,
+		BucketID:  b.id,
+	}
+	headers := map[string]string{
+		"Authorization": b.b2.authToken,
+	}
+	return makeRequest("POST", b.b2.apiURI+apiV1+"b2_delete_bucket", b2req, nil, headers, nil)
+}
+
 // Bucket holds B2 bucket details.
 type Bucket struct {
 	Name string
@@ -131,7 +180,7 @@ type b2ListBucketsResponse struct {
 }
 
 // ListBuckets wraps b2_list_buckets.
-func (b *B2) ListBuckets() ([]Bucket, error) {
+func (b *B2) ListBuckets() ([]*Bucket, error) {
 	b2req := &b2ListBucketsRequest{
 		AccountID: b.accountID,
 	}
@@ -142,9 +191,9 @@ func (b *B2) ListBuckets() ([]Bucket, error) {
 	if err := makeRequest("POST", b.apiURI+apiV1+"b2_list_buckets", b2req, b2resp, headers, nil); err != nil {
 		return nil, err
 	}
-	var buckets []Bucket
+	var buckets []*Bucket
 	for _, bucket := range b2resp.Buckets {
-		buckets = append(buckets, Bucket{
+		buckets = append(buckets, &Bucket{
 			Name: bucket.BucketName,
 			id:   bucket.BucketID,
 			b2:   b,
@@ -166,10 +215,11 @@ type b2GetUploadURLResponse struct {
 type UploadEndpoint struct {
 	uri   string
 	token string
+	b2    *B2
 }
 
 // GetUploadURL wraps b2_get_upload_url.
-func (b Bucket) GetUploadURL() (*UploadEndpoint, error) {
+func (b *Bucket) GetUploadURL() (*UploadEndpoint, error) {
 	b2req := &b2GetUploadURLRequest{
 		BucketID: b.id,
 	}
@@ -183,11 +233,22 @@ func (b Bucket) GetUploadURL() (*UploadEndpoint, error) {
 	return &UploadEndpoint{
 		uri:   b2resp.URI,
 		token: b2resp.Token,
+		b2:    b.b2,
 	}, nil
 }
 
+type File struct {
+	Name string
+	id   string
+	b2   *B2
+}
+
+type b2UploadFileResponse struct {
+	FileID string `json:"fileId"`
+}
+
 // UploadFile wraps b2_upload_file.
-func (ue UploadEndpoint) UploadFile(r io.Reader, size int, name, contentType, sha1 string, info map[string]string) error {
+func (ue *UploadEndpoint) UploadFile(r io.Reader, size int, name, contentType, sha1 string, info map[string]string) (*File, error) {
 	headers := map[string]string{
 		"Authorization":     ue.token,
 		"X-Bz-File-Name":    name,
@@ -198,7 +259,32 @@ func (ue UploadEndpoint) UploadFile(r io.Reader, size int, name, contentType, sh
 	for k, v := range info {
 		headers[fmt.Sprintf("X-Bz-Info-%s", k)] = v
 	}
-	return makeRequest("POST", ue.uri, nil, nil, headers, r)
+	b2resp := &b2UploadFileResponse{}
+	if err := makeRequest("POST", ue.uri, nil, b2resp, headers, r); err != nil {
+		return nil, err
+	}
+	return &File{
+		Name: name,
+		id:   b2resp.FileID,
+		b2:   ue.b2,
+	}, nil
+}
+
+type b2DeleteFileVersionRequest struct {
+	Name   string `json:"fileName"`
+	FileID string `json:"fileId"`
+}
+
+// DeleteFileVersion wraps b2_delete_file_version.
+func (f *File) DeleteFileVersion() error {
+	b2req := &b2DeleteFileVersionRequest{
+		Name:   f.Name,
+		FileID: f.id,
+	}
+	headers := map[string]string{
+		"Authorization": f.b2.authToken,
+	}
+	return makeRequest("POST", f.b2.apiURI+apiV1+"b2_delete_file_version", b2req, nil, headers, nil)
 }
 
 type startLargeFileRequest struct {
@@ -222,7 +308,7 @@ type LargeFile struct {
 }
 
 // StartLargeFile wraps b2_start_large_file.
-func (b Bucket) StartLargeFile(name, contentType string, info map[string]string) (*LargeFile, error) {
+func (b *Bucket) StartLargeFile(name, contentType string, info map[string]string) (*LargeFile, error) {
 	b2req := &startLargeFileRequest{
 		BucketID:    b.id,
 		Name:        name,
@@ -313,27 +399,37 @@ func (fc *FileChunk) UploadPart(r io.Reader, sha1 string, size, index int) (int,
 	return int(size), nil
 }
 
-type finishLargeFileRequest struct {
+type b2FinishLargeFileRequest struct {
 	ID     string   `json:"fileId"`
 	Hashes []string `json:"partSha1Array"`
 }
 
+type b2FinishLargeFileResponse struct {
+	Name   string `json:"fileName"`
+	FileID string `json:"fileId"`
+}
+
 // FinishLargeFile wraps b2_finish_large_file.
-func (l *LargeFile) FinishLargeFile() error {
+func (l *LargeFile) FinishLargeFile() (*File, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	b2req := &finishLargeFileRequest{
+	b2req := &b2FinishLargeFileRequest{
 		ID:     l.id,
 		Hashes: make([]string, len(l.hashes)),
 	}
+	b2resp := &b2FinishLargeFileResponse{}
 	for k, v := range l.hashes {
 		b2req.Hashes[k-1] = v
 	}
 	headers := map[string]string{
 		"Authorization": l.b2.authToken,
 	}
-	if err := makeRequest("POST", l.b2.apiURI+apiV1+"b2_finish_large_file", b2req, nil, headers, nil); err != nil {
-		return err
+	if err := makeRequest("POST", l.b2.apiURI+apiV1+"b2_finish_large_file", b2req, b2resp, headers, nil); err != nil {
+		return nil, err
 	}
-	return nil
+	return &File{
+		Name: b2resp.Name,
+		id:   b2resp.FileID,
+		b2:   l.b2,
+	}, nil
 }

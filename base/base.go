@@ -7,7 +7,6 @@
 // b2_download_file_by_name
 // b2_get_file_info
 // b2_hide_file
-// b2_list_file_names
 // b2_list_file_versions
 // b2_list_parts
 // b2_list_unfinished_large_files
@@ -431,4 +430,44 @@ func (l *LargeFile) FinishLargeFile() (*File, error) {
 		id:   b2resp.FileID,
 		b2:   l.b2,
 	}, nil
+}
+
+type b2ListFileNamesRequest struct {
+	BucketID     string `json:"bucketId"`
+	Count        int    `json:"maxFileCount"`
+	Continuation string `json:"startFileName,omitempty"`
+}
+
+type b2ListFileNamesResponse struct {
+	Continuation string `json:"nextFileName"`
+	Files        []struct {
+		FileID string `json:"fileId"`
+		Name   string `json:"fileName"`
+	} `json:"files"`
+}
+
+// ListFileNames wraps b2_list_file_names.
+func (b *Bucket) ListFileNames(count int, continuation string) ([]*File, string, error) {
+	b2req := &b2ListFileNamesRequest{
+		Count:        count,
+		Continuation: continuation,
+		BucketID:     b.id,
+	}
+	b2resp := &b2ListFileNamesResponse{}
+	headers := map[string]string{
+		"Authorization": b.b2.authToken,
+	}
+	if err := makeRequest("POST", b.b2.apiURI+apiV1+"b2_list_file_names", b2req, b2resp, headers, nil); err != nil {
+		return nil, "", err
+	}
+	cont := b2resp.Continuation
+	var files []*File
+	for _, f := range b2resp.Files {
+		files = append(files, &File{
+			Name: f.Name,
+			id:   f.FileID,
+			b2:   b.b2,
+		})
+	}
+	return files, cont, nil
 }

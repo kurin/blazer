@@ -88,10 +88,12 @@ func TestStorage(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// b2_delete_file_version
-	if err := file.DeleteFileVersion(); err != nil {
-		t.Fatal(err)
-	}
+	defer func() {
+		// b2_delete_file_version
+		if err := file.DeleteFileVersion(); err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	// b2_start_large_file
 	lf, err := bucket.StartLargeFile(largeFileName, "application/octet-stream", nil)
@@ -126,9 +128,11 @@ func TestStorage(t *testing.T) {
 		t.Error(err)
 	}
 
-	if err := lfile.DeleteFileVersion(); err != nil {
-		t.Error(err)
-	}
+	defer func() {
+		if err := lfile.DeleteFileVersion(); err != nil {
+			t.Error(err)
+		}
+	}()
 
 	clf, err := bucket.StartLargeFile(largeFileName, "application/octet-stream", nil)
 	if err != nil {
@@ -138,5 +142,14 @@ func TestStorage(t *testing.T) {
 	// b2_cancel_large_file
 	if err := clf.CancelLargeFile(); err != nil {
 		t.Fatal(err)
+	}
+
+	// b2_list_file_names
+	files, _, err := bucket.ListFileNames(100, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 2 {
+		t.Errorf("expected 2 files, got %d: %v", len(files), files)
 	}
 }

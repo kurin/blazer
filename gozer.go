@@ -51,8 +51,8 @@ func (b *B2) Bucket(name string) (*Bucket, error) {
 }
 
 // NewWriter returns a new writer for the given file.
-func (b *Bucket) NewWriter(name, contentType string, info map[string]string) *B2Writer {
-	bw := &B2Writer{
+func (b *Bucket) NewWriter(name, contentType string, info map[string]string) *Writer {
+	bw := &Writer{
 		bucket: b.b,
 		name:   name,
 		ctype:  contentType,
@@ -72,10 +72,10 @@ type chunk struct {
 	buf     *bytes.Buffer
 }
 
-// B2Writer writes data into Backblaze.  It automatically switches to the large
+// Writer writes data into Backblaze.  It automatically switches to the large
 // file API if the file exceeds 100MB (that is, 1e8 bytes).  Due to that and
 // other Backblaze API details, there is a large (100MB) buffer.
-type B2Writer struct {
+type Writer struct {
 	// ConcurrentUploads is number of different threads sending data concurrently
 	// to Backblaze for large files.  This can increase performance greatly, as
 	// each thread will hit a different endpoint.  However, there is a 100MB
@@ -102,7 +102,7 @@ type B2Writer struct {
 	w    io.Writer
 }
 
-func (bw *B2Writer) thread() {
+func (bw *Writer) thread() {
 	go func() {
 		fc, err := bw.file.GetUploadPartURL()
 		if err != nil {
@@ -127,7 +127,7 @@ func (bw *B2Writer) thread() {
 }
 
 // Write satisfies the io.Writer interface.
-func (bw *B2Writer) Write(p []byte) (int, error) {
+func (bw *Writer) Write(p []byte) (int, error) {
 	left := 1e8 - bw.cbuf.Len()
 	if len(p) < left {
 		return bw.w.Write(p)
@@ -143,7 +143,7 @@ func (bw *B2Writer) Write(p []byte) (int, error) {
 	return i + k, err
 }
 
-func (bw *B2Writer) simpleWriteFile() error {
+func (bw *Writer) simpleWriteFile() error {
 	ue, err := bw.bucket.GetUploadURL()
 	if err != nil {
 		return err
@@ -155,7 +155,7 @@ func (bw *B2Writer) simpleWriteFile() error {
 	return nil
 }
 
-func (bw *B2Writer) sendChunk() error {
+func (bw *Writer) sendChunk() error {
 	var err error
 	bw.once.Do(func() {
 		lf, e := bw.bucket.StartLargeFile(bw.name, bw.ctype, bw.info)
@@ -190,7 +190,7 @@ func (bw *B2Writer) sendChunk() error {
 
 // Close satisfies the io.Closer interface.  It should not be called more than
 // once.
-func (bw *B2Writer) Close() error {
+func (bw *Writer) Close() error {
 	if bw.cidx == 0 {
 		return bw.simpleWriteFile()
 	}

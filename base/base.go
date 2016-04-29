@@ -3,7 +3,6 @@
 //
 // It currently lacks support for the following APIs:
 //
-// b2_delete_file_version
 // b2_download_file_by_id
 // b2_download_file_by_name
 // b2_get_file_info

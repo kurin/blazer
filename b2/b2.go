@@ -53,12 +53,11 @@ func (c *Client) Bucket(ctx context.Context, name string) (*Bucket, error) {
 }
 
 // NewWriter returns a new writer for the given file.
-func (b *Bucket) NewWriter(ctx context.Context, name, contentType string, info map[string]string) *Writer {
+func (b *Bucket) NewWriter(ctx context.Context, name string) *Writer {
 	bw := &Writer{
 		bucket: b.b,
 		name:   name,
-		ctype:  contentType,
-		info:   info,
+		Info:   make(map[string]string),
 		chsh:   sha1.New(),
 		cbuf:   &bytes.Buffer{},
 		ctx:    ctx,
@@ -85,9 +84,12 @@ type Writer struct {
 	// buffer for each thread.  Values less than 1 are equivalent to 1.
 	ConcurrentUploads int
 
-	// TotalRetries is the number of times a failed partial write will be retried
-	// until the operation returns an error.
-	TotalRetries int
+	// ContentType sets the content type of the file to be uploaded.  If unset,
+	// "application/octet-stream" is used.
+	ContentType string
+
+	// Info is a map of up to ten key/value pairs that are stored with the file.
+	Info map[string]string
 
 	ctx   context.Context
 	ready chan chunk
@@ -98,8 +100,6 @@ type Writer struct {
 
 	bucket *base.Bucket
 	name   string
-	ctype  string
-	info   map[string]string
 
 	cbuf *bytes.Buffer
 	cidx int
@@ -154,7 +154,11 @@ func (bw *Writer) simpleWriteFile() error {
 		return err
 	}
 	sha1 := fmt.Sprintf("%x", bw.chsh.Sum(nil))
-	if _, err := ue.UploadFile(bw.ctx, bw.cbuf, bw.cbuf.Len(), bw.name, bw.ctype, sha1, bw.info); err != nil {
+	ctype := bw.ContentType
+	if ctype == "" {
+		ctype = "application/octet-stream"
+	}
+	if _, err := ue.UploadFile(bw.ctx, bw.cbuf, bw.cbuf.Len(), bw.name, ctype, sha1, bw.Info); err != nil {
 		return err
 	}
 	return nil
@@ -163,7 +167,11 @@ func (bw *Writer) simpleWriteFile() error {
 func (bw *Writer) sendChunk() error {
 	var err error
 	bw.once.Do(func() {
-		lf, e := bw.bucket.StartLargeFile(bw.ctx, bw.name, bw.ctype, bw.info)
+		ctype := bw.ContentType
+		if ctype == "" {
+			ctype = "application/octet-stream"
+		}
+		lf, e := bw.bucket.StartLargeFile(bw.ctx, bw.name, ctype, bw.Info)
 		if e != nil {
 			err = e
 			return

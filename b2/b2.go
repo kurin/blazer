@@ -9,21 +9,23 @@ import (
 	"log"
 	"sync"
 
+	"golang.org/x/net/context"
+
 	"github.com/kurin/gozer/base"
 )
 
-// B2 is a Backblaze connection.
-type B2 struct {
+// B2 is a Backblaze client.
+type Client struct {
 	b2 *base.B2
 }
 
-// New returns a new connection to Backblaze B2.
-func New(account, key string) (*B2, error) {
-	b2, err := base.B2AuthorizeAccount(account, key)
+// NewClient returns a new Backblaze B2 client.
+func NewClient(ctx context.Context, account, key string) (*Client, error) {
+	b2, err := base.B2AuthorizeAccount(ctx, account, key)
 	if err != nil {
 		return nil, err
 	}
-	return &B2{
+	return &Client{
 		b2: b2,
 	}, nil
 }
@@ -34,8 +36,8 @@ type Bucket struct {
 }
 
 // Bucket returns the named bucket, if it exists.
-func (b *B2) Bucket(name string) (*Bucket, error) {
-	buckets, err := b.b2.ListBuckets()
+func (c *Client) Bucket(ctx context.Context, name string) (*Bucket, error) {
+	buckets, err := c.b2.ListBuckets(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +53,7 @@ func (b *B2) Bucket(name string) (*Bucket, error) {
 }
 
 // NewWriter returns a new writer for the given file.
-func (b *Bucket) NewWriter(name, contentType string, info map[string]string) *Writer {
+func (b *Bucket) NewWriter(ctx context.Context, name, contentType string, info map[string]string) *Writer {
 	bw := &Writer{
 		bucket: b.b,
 		name:   name,
@@ -59,6 +61,7 @@ func (b *Bucket) NewWriter(name, contentType string, info map[string]string) *Wr
 		info:   info,
 		chsh:   sha1.New(),
 		cbuf:   &bytes.Buffer{},
+		ctx:    ctx,
 	}
 	bw.w = io.MultiWriter(bw.chsh, bw.cbuf)
 	return bw
@@ -86,9 +89,11 @@ type Writer struct {
 	// until the operation returns an error.
 	TotalRetries int
 
+	ctx   context.Context
 	ready chan chunk
 	wg    sync.WaitGroup
 	once  sync.Once
+	done  sync.Once
 	file  *base.LargeFile
 
 	bucket *base.Bucket
@@ -104,7 +109,7 @@ type Writer struct {
 
 func (bw *Writer) thread() {
 	go func() {
-		fc, err := bw.file.GetUploadPartURL()
+		fc, err := bw.file.GetUploadPartURL(bw.ctx)
 		if err != nil {
 			log.Print(err)
 			return
@@ -116,7 +121,7 @@ func (bw *Writer) thread() {
 			if !ok {
 				return
 			}
-			if _, err := fc.UploadPart(chunk.buf, chunk.sha1, chunk.size, chunk.id); err != nil {
+			if _, err := fc.UploadPart(bw.ctx, chunk.buf, chunk.sha1, chunk.size, chunk.id); err != nil {
 				log.Print(err)
 				chunk.attempt++
 				bw.ready <- chunk
@@ -144,12 +149,12 @@ func (bw *Writer) Write(p []byte) (int, error) {
 }
 
 func (bw *Writer) simpleWriteFile() error {
-	ue, err := bw.bucket.GetUploadURL()
+	ue, err := bw.bucket.GetUploadURL(bw.ctx)
 	if err != nil {
 		return err
 	}
 	sha1 := fmt.Sprintf("%x", bw.chsh.Sum(nil))
-	if _, err := ue.UploadFile(bw.cbuf, bw.cbuf.Len(), bw.name, bw.ctype, sha1, bw.info); err != nil {
+	if _, err := ue.UploadFile(bw.ctx, bw.cbuf, bw.cbuf.Len(), bw.name, bw.ctype, sha1, bw.info); err != nil {
 		return err
 	}
 	return nil
@@ -158,7 +163,7 @@ func (bw *Writer) simpleWriteFile() error {
 func (bw *Writer) sendChunk() error {
 	var err error
 	bw.once.Do(func() {
-		lf, e := bw.bucket.StartLargeFile(bw.name, bw.ctype, bw.info)
+		lf, e := bw.bucket.StartLargeFile(bw.ctx, bw.name, bw.ctype, bw.info)
 		if e != nil {
 			err = e
 			return
@@ -188,21 +193,26 @@ func (bw *Writer) sendChunk() error {
 	return nil
 }
 
-// Close satisfies the io.Closer interface.  It should not be called more than
-// once.
+// Close satisfies the io.Closer interface.
 func (bw *Writer) Close() error {
-	if bw.cidx == 0 {
-		return bw.simpleWriteFile()
-	}
-	if bw.cbuf.Len() > 0 {
-		if err := bw.sendChunk(); err != nil {
-			return err
+	var oerr error
+	bw.done.Do(func() {
+		if bw.cidx == 0 {
+			oerr = bw.simpleWriteFile()
+			return
 		}
-	}
-	close(bw.ready)
-	bw.wg.Wait()
-	if _, err := bw.file.FinishLargeFile(); err != nil {
-		return err
-	}
-	return nil
+		if bw.cbuf.Len() > 0 {
+			if err := bw.sendChunk(); err != nil {
+				oerr = err
+				return
+			}
+		}
+		close(bw.ready)
+		bw.wg.Wait()
+		if _, err := bw.file.FinishLargeFile(bw.ctx); err != nil {
+			oerr = err
+			return
+		}
+	})
+	return oerr
 }

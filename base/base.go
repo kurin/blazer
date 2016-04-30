@@ -22,6 +22,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 
 	"golang.org/x/net/context"
@@ -507,6 +508,7 @@ type FileReader struct {
 	ContentLength int
 	ContentType   string
 	SHA1          string
+	Info          map[string]string
 }
 
 func mkRange(offset, size int64) string {
@@ -548,10 +550,19 @@ func (b *Bucket) DownloadFileByName(ctx context.Context, name string, offset, si
 	if err != nil {
 		return nil, err
 	}
+	info := make(map[string]string)
+	for key := range reply.resp.Header {
+		if !strings.HasPrefix(key, "X-Bz-Info-") {
+			continue
+		}
+		name := strings.TrimPrefix(key, "X-Bz-Info-")
+		info[name] = reply.resp.Header.Get(key)
+	}
 	return &FileReader{
 		ReadCloser:    reply.resp.Body,
 		SHA1:          reply.resp.Header.Get("X-Bz-Content-Sha1"),
 		ContentType:   reply.resp.Header.Get("Content-Type"),
 		ContentLength: int(clen),
+		Info:          info,
 	}, nil
 }

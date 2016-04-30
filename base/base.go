@@ -4,7 +4,6 @@
 // It currently lacks support for the following APIs:
 //
 // b2_download_file_by_id
-// b2_download_file_by_name
 // b2_get_file_info
 // b2_hide_file
 // b2_list_file_versions
@@ -22,6 +21,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"strconv"
 	"sync"
 
 	"golang.org/x/net/context"
@@ -500,4 +500,58 @@ func (b *Bucket) ListFileNames(ctx context.Context, count int, continuation stri
 		})
 	}
 	return files, cont, nil
+}
+
+type FileReader struct {
+	io.ReadCloser
+	ContentLength int
+	ContentType   string
+	SHA1          string
+}
+
+func mkRange(offset, size int64) string {
+	if offset == 0 || size == 0 {
+		return ""
+	}
+	if size == 0 {
+		return fmt.Sprintf("bytes=%d-", offset)
+	}
+	return fmt.Sprintf("bytes=%d-%d", offset, offset+size-1)
+}
+
+// DownloadFileByName wraps b2_download_file_by_name.
+func (b *Bucket) DownloadFileByName(ctx context.Context, name string, offset, size int64) (*FileReader, error) {
+	url := fmt.Sprintf("%s/file/%s/%s", b.b2.downloadURI, b.Name, name)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", b.b2.authToken)
+	rng := mkRange(offset, size)
+	if rng != "" {
+		req.Header.Set("Range", rng)
+	}
+	cancel := make(chan struct{})
+	req.Cancel = cancel
+	ch := makeNetRequest(req)
+	var reply httpReply
+	select {
+	case reply = <-ch:
+	case <-ctx.Done():
+		close(cancel)
+		return nil, ctx.Err()
+	}
+	if reply.err != nil {
+		return nil, reply.err
+	}
+	clen, err := strconv.ParseInt(reply.resp.Header.Get("Content-Length"), 10, 64)
+	if err != nil {
+		return nil, err
+	}
+	return &FileReader{
+		ReadCloser:    reply.resp.Body,
+		SHA1:          reply.resp.Header.Get("X-Bz-Content-Sha1"),
+		ContentType:   reply.resp.Header.Get("Content-Type"),
+		ContentLength: int(clen),
+	}, nil
 }

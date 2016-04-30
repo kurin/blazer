@@ -86,7 +86,8 @@ func TestStorage(t *testing.T) {
 	if _, err := io.Copy(w, smallFile); err != nil {
 		t.Error(err)
 	}
-	file, err := ue.UploadFile(ctx, buf, buf.Len(), smallFileName, "application/octet-stream", fmt.Sprintf("%x", hash.Sum(nil)), nil)
+	smallSHA1 := fmt.Sprintf("%x", hash.Sum(nil))
+	file, err := ue.UploadFile(ctx, buf, buf.Len(), smallFileName, "application/octet-stream", smallSHA1, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,5 +155,21 @@ func TestStorage(t *testing.T) {
 	}
 	if len(files) != 2 {
 		t.Errorf("expected 2 files, got %d: %v", len(files), files)
+	}
+
+	// b2_download_file_by_name
+	fr, err := bucket.DownloadFileByName(ctx, smallFileName, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fr.SHA1 != smallSHA1 {
+		t.Errorf("small file SHAs don't match: got %q, want %q", fr.SHA1, smallSHA1)
+	}
+	lbuf := &bytes.Buffer{}
+	if _, err := io.Copy(lbuf, fr); err != nil {
+		t.Fatal(err)
+	}
+	if lbuf.Len() != fr.ContentLength {
+		t.Errorf("small file retreived lengths don't match: got %d, want %d", lbuf.Len(), fr.ContentLength)
 	}
 }

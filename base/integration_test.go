@@ -7,6 +7,8 @@ import (
 	"io"
 	"os"
 	"testing"
+
+	"golang.org/x/net/context"
 )
 
 const (
@@ -33,28 +35,29 @@ func TestStorage(t *testing.T) {
 		t.Logf("B2_ACCOUNT_ID or B2_SECRET_KEY unset; skipping integration tests")
 		return
 	}
+	ctx := context.Background()
 
 	// b2_authorize_account
-	b2, err := B2AuthorizeAccount(id, key)
+	b2, err := B2AuthorizeAccount(ctx, id, key)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// b2_create_bucket
-	bucket, err := b2.CreateBucket(bucketName, "")
+	bucket, err := b2.CreateBucket(ctx, bucketName, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	defer func() {
 		// b2_delete_bucket
-		if err := bucket.DeleteBucket(); err != nil {
+		if err := bucket.DeleteBucket(ctx); err != nil {
 			t.Error(err)
 		}
 	}()
 
 	// b2_list_buckets
-	buckets, err := b2.ListBuckets()
+	buckets, err := b2.ListBuckets(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +73,7 @@ func TestStorage(t *testing.T) {
 	}
 
 	// b2_get_upload_url
-	ue, err := bucket.GetUploadURL()
+	ue, err := bucket.GetUploadURL(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,26 +86,26 @@ func TestStorage(t *testing.T) {
 	if _, err := io.Copy(w, smallFile); err != nil {
 		t.Error(err)
 	}
-	file, err := ue.UploadFile(buf, buf.Len(), smallFileName, "application/octet-stream", fmt.Sprintf("%x", hash.Sum(nil)), nil)
+	file, err := ue.UploadFile(ctx, buf, buf.Len(), smallFileName, "application/octet-stream", fmt.Sprintf("%x", hash.Sum(nil)), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	defer func() {
 		// b2_delete_file_version
-		if err := file.DeleteFileVersion(); err != nil {
+		if err := file.DeleteFileVersion(ctx); err != nil {
 			t.Fatal(err)
 		}
 	}()
 
 	// b2_start_large_file
-	lf, err := bucket.StartLargeFile(largeFileName, "application/octet-stream", nil)
+	lf, err := bucket.StartLargeFile(ctx, largeFileName, "application/octet-stream", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// b2_get_upload_part_url
-	fc, err := lf.GetUploadPartURL()
+	fc, err := lf.GetUploadPartURL(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,35 +120,35 @@ func TestStorage(t *testing.T) {
 		if _, err := io.Copy(w, r); err != nil {
 			t.Error(err)
 		}
-		if _, err := fc.UploadPart(buf, fmt.Sprintf("%x", hash.Sum(nil)), buf.Len(), i+1); err != nil {
+		if _, err := fc.UploadPart(ctx, buf, fmt.Sprintf("%x", hash.Sum(nil)), buf.Len(), i+1); err != nil {
 			t.Error(err)
 		}
 	}
 
 	// b2_finish_large_file
-	lfile, err := lf.FinishLargeFile()
+	lfile, err := lf.FinishLargeFile(ctx)
 	if err != nil {
 		t.Error(err)
 	}
 
 	defer func() {
-		if err := lfile.DeleteFileVersion(); err != nil {
+		if err := lfile.DeleteFileVersion(ctx); err != nil {
 			t.Error(err)
 		}
 	}()
 
-	clf, err := bucket.StartLargeFile(largeFileName, "application/octet-stream", nil)
+	clf, err := bucket.StartLargeFile(ctx, largeFileName, "application/octet-stream", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// b2_cancel_large_file
-	if err := clf.CancelLargeFile(); err != nil {
+	if err := clf.CancelLargeFile(ctx); err != nil {
 		t.Fatal(err)
 	}
 
 	// b2_list_file_names
-	files, _, err := bucket.ListFileNames(100, "")
+	files, _, err := bucket.ListFileNames(ctx, 100, "")
 	if err != nil {
 		t.Fatal(err)
 	}

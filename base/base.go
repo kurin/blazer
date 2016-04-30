@@ -69,6 +69,8 @@ func makeNetRequest(req *http.Request) <-chan httpReply {
 	return ch
 }
 
+var failUploads = false
+
 func makeRequest(ctx context.Context, verb, url string, b2req, b2resp interface{}, headers map[string]string, body io.Reader) error {
 	if b2req != nil {
 		enc, err := json.Marshal(b2req)
@@ -83,6 +85,9 @@ func makeRequest(ctx context.Context, verb, url string, b2req, b2resp interface{
 	}
 	for k, v := range headers {
 		req.Header.Set(k, v)
+	}
+	if failUploads {
+		req.Header.Set("X-Bz-Test-Mode", "fail_some_uploads")
 	}
 	cancel := make(chan struct{})
 	req.Cancel = cancel

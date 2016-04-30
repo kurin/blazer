@@ -54,24 +54,24 @@ type Writer struct {
 	w    io.Writer
 }
 
-func (bw *Writer) thread() {
+func (w *Writer) thread() {
 	go func() {
-		fc, err := bw.file.GetUploadPartURL(bw.ctx)
+		fc, err := w.file.GetUploadPartURL(w.ctx)
 		if err != nil {
 			log.Print(err)
 			return
 		}
-		bw.wg.Add(1)
-		defer bw.wg.Done()
+		w.wg.Add(1)
+		defer w.wg.Done()
 		for {
-			chunk, ok := <-bw.ready
+			chunk, ok := <-w.ready
 			if !ok {
 				return
 			}
-			if _, err := fc.UploadPart(bw.ctx, chunk.buf, chunk.sha1, chunk.size, chunk.id); err != nil {
+			if _, err := fc.UploadPart(w.ctx, chunk.buf, chunk.sha1, chunk.size, chunk.id); err != nil {
 				log.Print(err)
 				chunk.attempt++
-				bw.ready <- chunk
+				w.ready <- chunk
 				continue
 			}
 		}
@@ -79,92 +79,92 @@ func (bw *Writer) thread() {
 }
 
 // Write satisfies the io.Writer interface.
-func (bw *Writer) Write(p []byte) (int, error) {
-	left := 1e8 - bw.cbuf.Len()
+func (w *Writer) Write(p []byte) (int, error) {
+	left := 1e8 - w.cbuf.Len()
 	if len(p) < left {
-		return bw.w.Write(p)
+		return w.w.Write(p)
 	}
-	i, err := bw.w.Write(p[:left])
+	i, err := w.w.Write(p[:left])
 	if err != nil {
 		return i, err
 	}
-	if err := bw.sendChunk(); err != nil {
+	if err := w.sendChunk(); err != nil {
 		return i, err
 	}
-	k, err := bw.Write(p[left:])
+	k, err := w.Write(p[left:])
 	return i + k, err
 }
 
-func (bw *Writer) simpleWriteFile() error {
-	ue, err := bw.bucket.GetUploadURL(bw.ctx)
+func (w *Writer) simpleWriteFile() error {
+	ue, err := w.bucket.GetUploadURL(w.ctx)
 	if err != nil {
 		return err
 	}
-	sha1 := fmt.Sprintf("%x", bw.chsh.Sum(nil))
-	ctype := bw.ContentType
+	sha1 := fmt.Sprintf("%x", w.chsh.Sum(nil))
+	ctype := w.ContentType
 	if ctype == "" {
 		ctype = "application/octet-stream"
 	}
-	if _, err := ue.UploadFile(bw.ctx, bw.cbuf, bw.cbuf.Len(), bw.name, ctype, sha1, bw.Info); err != nil {
+	if _, err := ue.UploadFile(w.ctx, w.cbuf, w.cbuf.Len(), w.name, ctype, sha1, w.Info); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (bw *Writer) sendChunk() error {
+func (w *Writer) sendChunk() error {
 	var err error
-	bw.once.Do(func() {
-		ctype := bw.ContentType
+	w.once.Do(func() {
+		ctype := w.ContentType
 		if ctype == "" {
 			ctype = "application/octet-stream"
 		}
-		lf, e := bw.bucket.StartLargeFile(bw.ctx, bw.name, ctype, bw.Info)
+		lf, e := w.bucket.StartLargeFile(w.ctx, w.name, ctype, w.Info)
 		if e != nil {
 			err = e
 			return
 		}
-		bw.file = lf
-		bw.ready = make(chan chunk)
-		if bw.ConcurrentUploads < 1 {
-			bw.ConcurrentUploads = 1
+		w.file = lf
+		w.ready = make(chan chunk)
+		if w.ConcurrentUploads < 1 {
+			w.ConcurrentUploads = 1
 		}
-		for i := 0; i < bw.ConcurrentUploads; i++ {
-			bw.thread()
+		for i := 0; i < w.ConcurrentUploads; i++ {
+			w.thread()
 		}
 	})
 	if err != nil {
 		return err
 	}
-	bw.ready <- chunk{
-		id:   bw.cidx + 1,
-		size: bw.cbuf.Len(),
-		sha1: fmt.Sprintf("%x", bw.chsh.Sum(nil)),
-		buf:  bw.cbuf,
+	w.ready <- chunk{
+		id:   w.cidx + 1,
+		size: w.cbuf.Len(),
+		sha1: fmt.Sprintf("%x", w.chsh.Sum(nil)),
+		buf:  w.cbuf,
 	}
-	bw.cidx++
-	bw.chsh = sha1.New()
-	bw.cbuf = &bytes.Buffer{}
-	bw.w = io.MultiWriter(bw.chsh, bw.cbuf)
+	w.cidx++
+	w.chsh = sha1.New()
+	w.cbuf = &bytes.Buffer{}
+	w.w = io.MultiWriter(w.chsh, w.cbuf)
 	return nil
 }
 
 // Close satisfies the io.Closer interface.
-func (bw *Writer) Close() error {
+func (w *Writer) Close() error {
 	var oerr error
-	bw.done.Do(func() {
-		if bw.cidx == 0 {
-			oerr = bw.simpleWriteFile()
+	w.done.Do(func() {
+		if w.cidx == 0 {
+			oerr = w.simpleWriteFile()
 			return
 		}
-		if bw.cbuf.Len() > 0 {
-			if err := bw.sendChunk(); err != nil {
+		if w.cbuf.Len() > 0 {
+			if err := w.sendChunk(); err != nil {
 				oerr = err
 				return
 			}
 		}
-		close(bw.ready)
-		bw.wg.Wait()
-		if _, err := bw.file.FinishLargeFile(bw.ctx); err != nil {
+		close(w.ready)
+		w.wg.Wait()
+		if _, err := w.file.FinishLargeFile(w.ctx); err != nil {
 			oerr = err
 			return
 		}

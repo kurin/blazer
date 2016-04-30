@@ -1,4 +1,4 @@
-package gozer
+package b2
 
 import (
 	"bytes"

@@ -95,13 +95,26 @@ func (r *Reader) thread() {
 	}()
 }
 
-func (r *Reader) curChunk() (*bytes.Buffer, error) { // make this return a channel
-	r.rmux.Lock()
-	defer r.rmux.Unlock()
-	for r.chunks[r.chrid] == nil && r.getErr() == nil {
-		r.rcond.Wait()
+func (r *Reader) curChunk() (*bytes.Buffer, error) {
+	ch := make(chan *bytes.Buffer)
+	go func() {
+		r.rmux.Lock()
+		defer r.rmux.Unlock()
+		for r.chunks[r.chrid] == nil && r.getErr() == nil {
+			r.rcond.Wait()
+		}
+		select {
+		case ch <- r.chunks[r.chrid]:
+		case <-r.ctx.Done():
+			return
+		}
+	}()
+	select {
+	case buf := <-ch:
+		return buf, r.getErr()
+	case <-r.ctx.Done():
+		return nil, r.ctx.Err()
 	}
-	return r.chunks[r.chrid], r.getErr()
 }
 
 func (r *Reader) initFunc() {

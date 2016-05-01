@@ -102,7 +102,7 @@ func (b *Bucket) NewReader(ctx context.Context, name string) (*Reader, error) {
 	}, nil
 }
 
-func (b *Bucket) DeleteObject(ctx context.Context, name string) error {
+func (b *Bucket) DeleteFile(ctx context.Context, name string) error {
 	file, err := b.getFile(ctx, name)
 	if err != nil {
 		return err

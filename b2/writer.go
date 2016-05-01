@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"hash"
 	"io"
-	"log"
 	"sync"
 
 	"github.com/kurin/gozer/base"
@@ -52,13 +51,30 @@ type Writer struct {
 	cidx int
 	chsh hash.Hash
 	w    io.Writer
+
+	emux sync.RWMutex
+	err  error
+}
+
+func (w *Writer) setErr(err error) {
+	w.emux.Lock()
+	defer w.emux.Unlock()
+	if w.err == nil {
+		w.err = err
+	}
+}
+
+func (w *Writer) getErr() error {
+	w.emux.RLock()
+	defer w.emux.RUnlock()
+	return w.err
 }
 
 func (w *Writer) thread() {
 	go func() {
 		fc, err := w.file.GetUploadPartURL(w.ctx)
 		if err != nil {
-			log.Print(err)
+			w.setErr(err)
 			return
 		}
 		w.wg.Add(1)
@@ -69,10 +85,8 @@ func (w *Writer) thread() {
 				return
 			}
 			if _, err := fc.UploadPart(w.ctx, chunk.buf, chunk.sha1, chunk.size, chunk.id); err != nil {
-				log.Print(err)
-				chunk.attempt++
-				w.ready <- chunk
-				continue
+				w.setErr(err)
+				return
 			}
 		}
 	}()
@@ -80,18 +94,26 @@ func (w *Writer) thread() {
 
 // Write satisfies the io.Writer interface.
 func (w *Writer) Write(p []byte) (int, error) {
+	if err := w.getErr(); err != nil {
+		return 0, err
+	}
 	left := 1e8 - w.cbuf.Len()
 	if len(p) < left {
 		return w.w.Write(p)
 	}
 	i, err := w.w.Write(p[:left])
 	if err != nil {
+		w.setErr(err)
 		return i, err
 	}
 	if err := w.sendChunk(); err != nil {
+		w.setErr(err)
 		return i, err
 	}
 	k, err := w.Write(p[left:])
+	if err != nil {
+		w.setErr(err)
+	}
 	return i + k, err
 }
 

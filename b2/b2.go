@@ -3,6 +3,7 @@ package b2
 import (
 	"bytes"
 	"crypto/sha1"
+	"errors"
 	"fmt"
 	"io"
 
@@ -45,8 +46,15 @@ func (c *Client) Bucket(ctx context.Context, name string) (*Bucket, error) {
 			}, nil
 		}
 	}
-	// TODO: create bucket
-	return nil, fmt.Errorf("%s: no such bucket", name)
+	b, err := c.b2.CreateBucket(ctx, name, "")
+	if err != nil {
+		return nil, err
+	}
+	return &Bucket{b}, err
+}
+
+func (b *Bucket) Delete(ctx context.Context) error {
+	return b.b.DeleteBucket(ctx)
 }
 
 // NewWriter returns a new writer for the given file.
@@ -61,4 +69,43 @@ func (b *Bucket) NewWriter(ctx context.Context, name string) *Writer {
 	}
 	bw.w = io.MultiWriter(bw.chsh, bw.cbuf)
 	return bw
+}
+
+func (b *Bucket) getFile(ctx context.Context, name string) (*base.File, error) {
+	files, _, err := b.b.ListFileNames(ctx, 1, name)
+	if err != nil {
+		return nil, err
+	}
+	if len(files) != 1 {
+		return nil, errors.New("no files found")
+	}
+	if files[0].Name != name {
+		return nil, fmt.Errorf("not found: %s", name)
+	}
+	return files[0], nil
+}
+
+// NewReader returns a reader for the given file.
+func (b *Bucket) NewReader(ctx context.Context, name string) (*Reader, error) {
+	file, err := b.getFile(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	return &Reader{
+		ctx:    ctx,
+		cancel: cancel,
+		bucket: b.b,
+		name:   name,
+		size:   file.Size,
+		chunks: make(map[int]*bytes.Buffer),
+	}, nil
+}
+
+func (b *Bucket) DeleteObject(ctx context.Context, name string) error {
+	file, err := b.getFile(ctx, name)
+	if err != nil {
+		return err
+	}
+	return file.DeleteFileVersion(ctx)
 }

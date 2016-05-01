@@ -69,7 +69,7 @@ func makeNetRequest(req *http.Request) <-chan httpReply {
 	return ch
 }
 
-var failUploads = false
+var FailSomeUploads = false
 
 func makeRequest(ctx context.Context, verb, url string, b2req, b2resp interface{}, headers map[string]string, body io.Reader) error {
 	if b2req != nil {
@@ -86,7 +86,7 @@ func makeRequest(ctx context.Context, verb, url string, b2req, b2resp interface{
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
-	if failUploads {
+	if FailSomeUploads {
 		req.Header.Set("X-Bz-Test-Mode", "fail_some_uploads")
 	}
 	cancel := make(chan struct{})
@@ -273,6 +273,7 @@ func (b *Bucket) GetUploadURL(ctx context.Context) (*UploadEndpoint, error) {
 
 type File struct {
 	Name string
+	Size int64
 	id   string
 	b2   *B2
 }
@@ -479,6 +480,7 @@ type b2ListFileNamesResponse struct {
 	Files        []struct {
 		FileID string `json:"fileId"`
 		Name   string `json:"fileName"`
+		Size   int64  `json:"size"`
 	} `json:"files"`
 }
 
@@ -501,6 +503,7 @@ func (b *Bucket) ListFileNames(ctx context.Context, count int, continuation stri
 	for _, f := range b2resp.Files {
 		files = append(files, &File{
 			Name: f.Name,
+			Size: f.Size,
 			id:   f.FileID,
 			b2:   b.b2,
 		})
@@ -517,7 +520,7 @@ type FileReader struct {
 }
 
 func mkRange(offset, size int64) string {
-	if offset == 0 || size == 0 {
+	if offset == 0 && size == 0 {
 		return ""
 	}
 	if size == 0 {
@@ -550,6 +553,19 @@ func (b *Bucket) DownloadFileByName(ctx context.Context, name string, offset, si
 	}
 	if reply.err != nil {
 		return nil, reply.err
+	}
+	resp := reply.resp
+	if resp.StatusCode != 200 && resp.StatusCode != 206 {
+		defer resp.Body.Close()
+		data, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+		msg := &errMsg{}
+		if err := json.Unmarshal(data, msg); err != nil {
+			return nil, err
+		}
+		return nil, errors.New(msg.Msg)
 	}
 	clen, err := strconv.ParseInt(reply.resp.Header.Get("Content-Length"), 10, 64)
 	if err != nil {

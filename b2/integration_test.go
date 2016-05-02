@@ -54,34 +54,34 @@ func TestReadWrite(t *testing.T) {
 			t.Error(err)
 		}
 	}()
-	/*
-		wsha, err := writeFile(ctx, bucket, smallFileName, 1e6+42)
-		if err != nil {
-			t.Error(err)
-		}
-		defer func() {
-			if err := bucket.DeleteFile(ctx, smallFileName); err != nil {
+
+	wsha, err := writeFile(ctx, bucket, smallFileName, 1e6+42)
+	if err != nil {
+		t.Error(err)
+	}
+	/*		defer func() {
+				if err := bucket.DeleteFile(ctx, smallFileName); err != nil {
+					t.Error(err)
+				}
+			}()
+
+			if err := readFile(ctx, bucket, smallFileName, wsha, 1e5, 10); err != nil {
 				t.Error(err)
 			}
-		}()
 
-		if err := readFile(ctx, bucket, smallFileName, wsha, 1e5, 10); err != nil {
-			t.Error(err)
-		}
-
-		wshaL, err := writeFile(ctx, bucket, largeFileName, 4e8-50)
-		if err != nil {
-			t.Error(err)
-		}
-		defer func() {
-			if err := bucket.DeleteFile(ctx, largeFileName); err != nil {
+			wshaL, err := writeFile(ctx, bucket, largeFileName, 4e8-50)
+			if err != nil {
 				t.Error(err)
 			}
-		}()
+			defer func() {
+				if err := bucket.DeleteFile(ctx, largeFileName); err != nil {
+					t.Error(err)
+				}
+			}()
 
-		if err := readFile(ctx, bucket, largeFileName, wshaL, 1e7, 10); err != nil {
-			t.Error(err)
-		}
+			if err := readFile(ctx, bucket, largeFileName, wshaL, 1e7, 10); err != nil {
+				t.Error(err)
+			}
 	*/
 }
 

@@ -48,14 +48,12 @@ func (e b2err) Error() string {
 	return fmt.Sprintf("%s: %s", e.method, e.msg)
 }
 
-func IsTransient(err error) bool {
-	e, ok := err.(b2err)
-	return ok && e.transient
-}
-
 func Action(err error) ErrAction {
 	e, ok := err.(b2err)
 	if !ok {
+		return Punt
+	}
+	if !e.transient {
 		return Punt
 	}
 	if e.retry > 0 {
@@ -128,7 +126,7 @@ func Backoff(err error) (time.Duration, bool) {
 		return 0, false
 	}
 	if e.retry == 0 {
-		return 0, false
+		return 0, true
 	}
 	return time.Duration(e.retry) * time.Second, true
 }
@@ -140,6 +138,14 @@ type B2 struct {
 	apiURI      string
 	downloadURI string
 	minPartSize int
+}
+
+func (b *B2) Update(n *B2) {
+	b.accountID = n.accountID
+	b.authToken = n.authToken
+	b.apiURI = n.apiURI
+	b.downloadURI = n.downloadURI
+	b.minPartSize = n.minPartSize
 }
 
 type b2AuthorizeAccountResponse struct {

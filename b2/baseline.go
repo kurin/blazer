@@ -126,7 +126,7 @@ func (r *b2Root) transient(err error) bool {
 	return base.Action(err) != base.Punt
 }
 
-func (b *b2Root) createBucket(ctx context.Context, name, btype string) (b2BucketInterface, error) {
+func (r *b2Root) createBucket(ctx context.Context, name, btype string) (b2BucketInterface, error) {
 	bucket, err := b.b.CreateBucket(ctx, name, btype)
 	if err != nil {
 		return nil, err
@@ -134,7 +134,7 @@ func (b *b2Root) createBucket(ctx context.Context, name, btype string) (b2Bucket
 	return &b2Bucket{bucket}, nil
 }
 
-func (b *b2Root) listBuckets(ctx context.Context) ([]b2BucketInterface, error) {
+func (r *b2Root) listBuckets(ctx context.Context) ([]b2BucketInterface, error) {
 	buckets, err := b.b.ListBuckets(ctx)
 	if err != nil {
 		return nil, err

@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package b2 provides a high-level interface to Backblaze's B2 cloud storage
+// service.
 package b2
 
 import (
@@ -24,20 +26,23 @@ import (
 	"golang.org/x/net/context"
 )
 
-// B2 is a Backblaze client.
+// Client is a Backblaze B2 client.
 type Client struct {
 	backend beRootInterface
 }
 
-// AuthorizeAccount logs into the Backblaze B2 service.  It is necessary to
-// call this on a new client.
-func (c *Client) AuthorizeAccount(ctx context.Context, account, key string) error {
-	if c.backend == nil {
-		c.backend = &beRoot{
+// NewClient creates and returns a new Client with valid B2 service account
+// tokens.
+func NewClient(ctx context.Context, account, key string) (*Client, error) {
+	c := &Client{
+		backend: &beRoot{
 			b2i: &b2Root{},
-		}
+		},
 	}
-	return c.backend.authorizeAccount(ctx, account, key)
+	if err := c.backend.authorizeAccount(ctx, account, key); err != nil {
+		return nil, err
+	}
+	return c, nil
 }
 
 // Bucket is a reference to a B2 bucket.
@@ -45,7 +50,8 @@ type Bucket struct {
 	b beBucketInterface
 }
 
-// Bucket returns the named bucket, if it exists.
+// Bucket returns the named bucket.  If the bucket already exists (and belongs
+// to this account), it is reused.  Otherwise a new bucket is created.
 func (c *Client) Bucket(ctx context.Context, name string) (*Bucket, error) {
 	buckets, err := c.backend.listBuckets(ctx)
 	if err != nil {
@@ -65,6 +71,7 @@ func (c *Client) Bucket(ctx context.Context, name string) (*Bucket, error) {
 	return &Bucket{b}, err
 }
 
+// Delete removes an empty bucket.
 func (b *Bucket) Delete(ctx context.Context) error {
 	return b.b.deleteBucket(ctx)
 }
@@ -114,6 +121,8 @@ func (b *Bucket) NewReader(ctx context.Context, name string) (*Reader, error) {
 	}, nil
 }
 
+// DeleteFile removes the named file.  If there were other files of the same
+// name hidden by the named file, they will be revealed.
 func (b *Bucket) DeleteFile(ctx context.Context, name string) error {
 	file, err := b.getFile(ctx, name)
 	if err != nil {

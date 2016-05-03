@@ -22,9 +22,17 @@ import (
 	"golang.org/x/net/context"
 )
 
+// Reader reads files from B2.
 type Reader struct {
+	// ConcurrentDownloads is the number of simultaneous downloads to pull from
+	// B2.  Values greater than one will cause B2 to make multiple HTTP requests
+	// for a given file, increasing available bandwidth at the cost of buffering
+	// the downloads in memory.
 	ConcurrentDownloads int
-	ChunkSize           int
+
+	// ChunkSize is the size to fetch per ConcurrentDownload.  The default is
+	// 10MB.
+	ChunkSize int
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -45,6 +53,7 @@ type Reader struct {
 	err  error
 }
 
+// Close frees resources associated with the download.
 func (r *Reader) Close() error {
 	r.cancel()
 	return nil

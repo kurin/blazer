@@ -62,6 +62,7 @@ func (e b2err) Error() string {
 	return fmt.Sprintf("%s: %s", e.method, e.msg)
 }
 
+// Action checks an error and returns a recommended course of action.
 func Action(err error) ErrAction {
 	e, ok := err.(b2err)
 	if !ok {
@@ -90,12 +91,26 @@ func Action(err error) ErrAction {
 	return Punt
 }
 
+// ErrAction is an action that a caller can take when any function returns an
+// error.
 type ErrAction int
 
 const (
+	// ReAuthenticate indicates that the B2 account authentication tokens have
+	// expired, and should be refreshed with a new call to AuthorizeAccount.
 	ReAuthenticate ErrAction = iota
+
+	// AttemptNewUpload indicates that an upload's authentication token (or URL
+	// endpoint) has expored, and that users should request new ones with a call
+	// to GetUploadURL or GetUploadPartURL.
 	AttemptNewUpload
+
+	// Retry indicates that the caller should wait an appropriate amount of time,
+	// and then reattempt the RPC.
 	Retry
+
+	// Punt means that there is no useful action to be taken on this error, and
+	// that it should be displayed to the user.
 	Punt
 )
 
@@ -134,15 +149,16 @@ func mkErr(resp *http.Response) error {
 	}
 }
 
-func Backoff(err error) (time.Duration, bool) {
+// Backoff returns an appropriate amount of time to wait, given an error, if
+// any was returned by the server.  If the return value is 0, but Action
+// indicates Retry, the user should implement their own exponential backoff,
+// beginning with one second.
+func Backoff(err error) time.Duration {
 	e, ok := err.(b2err)
 	if !ok {
-		return 0, false
+		return 0
 	}
-	if e.retry == 0 {
-		return 0, true
-	}
-	return time.Duration(e.retry) * time.Second, true
+	return time.Duration(e.retry) * time.Second
 }
 
 // B2 holds account information for Backblaze.
@@ -154,6 +170,7 @@ type B2 struct {
 	minPartSize int
 }
 
+// Update replaces the B2 object with a new one, in-place.
 func (b *B2) Update(n *B2) {
 	b.accountID = n.accountID
 	b.authToken = n.authToken
@@ -185,6 +202,8 @@ func makeNetRequest(req *http.Request) <-chan httpReply {
 	return ch
 }
 
+// FailSomeUploads causes B2 to return errors, randomly, to some RPCs.  It is
+// intended to be used for integration testing.
 var FailSomeUploads = false
 
 func makeRequest(ctx context.Context, method, verb, url string, b2req, b2resp interface{}, headers map[string]string, body io.Reader) error {
@@ -394,6 +413,7 @@ func (b *Bucket) GetUploadURL(ctx context.Context) (*URL, error) {
 	}, nil
 }
 
+// File represents a B2 file.
 type File struct {
 	Name string
 	Size int64
@@ -645,6 +665,7 @@ func (b *Bucket) ListFileNames(ctx context.Context, count int, continuation stri
 	return files, cont, nil
 }
 
+// FileReader is an io.ReadCloser that downloads a file from B2.
 type FileReader struct {
 	io.ReadCloser
 	ContentLength int

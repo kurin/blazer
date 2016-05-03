@@ -183,7 +183,8 @@ func (w *Writer) sendChunk() error {
 	return nil
 }
 
-// Close satisfies the io.Closer interface.
+// Close satisfies the io.Closer interface.  It is critical to check the return
+// value of Close on all writers.
 func (w *Writer) Close() error {
 	var oerr error
 	w.done.Do(func() {

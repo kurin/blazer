@@ -2,6 +2,10 @@
 Blazer is a Go library for Backblaze's B2.  It is designed for simple
 integration, by exporting only a few standard Go types.
 
+```go
+import "github.com/kurin/blazer/b2"
+```
+
 ## Examples
 
 ### Copying a file into B2

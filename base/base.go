@@ -356,9 +356,22 @@ type b2GetUploadURLResponse struct {
 
 // URL holds information from the b2_get_upload_url API.
 type URL struct {
-	uri   string
-	token string
-	b2    *B2
+	uri    string
+	token  string
+	b2     *B2
+	bucket *Bucket
+}
+
+// Reload reloads URL in-place, by reissuing a b2_get_upload_url and
+// overwriting the previous values.
+func (url *URL) Reload(ctx context.Context) error {
+	n, err := url.bucket.GetUploadURL(ctx)
+	if err != nil {
+		return err
+	}
+	url.uri = n.uri
+	url.token = n.token
+	return nil
 }
 
 // GetUploadURL wraps b2_get_upload_url.
@@ -374,9 +387,10 @@ func (b *Bucket) GetUploadURL(ctx context.Context) (*URL, error) {
 		return nil, err
 	}
 	return &URL{
-		uri:   b2resp.URI,
-		token: b2resp.Token,
-		b2:    b.b2,
+		uri:    b2resp.URI,
+		token:  b2resp.Token,
+		b2:     b.b2,
+		bucket: b,
 	}, nil
 }
 
@@ -524,6 +538,17 @@ func (l *LargeFile) GetUploadPartURL(ctx context.Context) (*FileChunk, error) {
 		token: b2resp.Token,
 		file:  l,
 	}, nil
+}
+
+// Reload reloads FileChunk in-place.
+func (fc *FileChunk) Reload(ctx context.Context) error {
+	n, err := fc.file.GetUploadPartURL(ctx)
+	if err != nil {
+		return err
+	}
+	fc.url = n.url
+	fc.token = n.token
+	return nil
 }
 
 // UploadPart wraps b2_upload_part.

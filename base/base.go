@@ -392,9 +392,9 @@ type b2UploadFileResponse struct {
 }
 
 // UploadFile wraps b2_upload_file.
-func (ue *URL) UploadFile(ctx context.Context, r io.Reader, size int, name, contentType, sha1 string, info map[string]string) (*File, error) {
+func (url *URL) UploadFile(ctx context.Context, r io.Reader, size int, name, contentType, sha1 string, info map[string]string) (*File, error) {
 	headers := map[string]string{
-		"Authorization":     ue.token,
+		"Authorization":     url.token,
 		"X-Bz-File-Name":    name,
 		"Content-Type":      contentType,
 		"Content-Length":    fmt.Sprintf("%d", size),
@@ -404,13 +404,13 @@ func (ue *URL) UploadFile(ctx context.Context, r io.Reader, size int, name, cont
 		headers[fmt.Sprintf("X-Bz-Info-%s", k)] = v
 	}
 	b2resp := &b2UploadFileResponse{}
-	if err := makeRequest(ctx, "b2_upload_file", "POST", ue.uri, nil, b2resp, headers, r); err != nil {
+	if err := makeRequest(ctx, "b2_upload_file", "POST", url.uri, nil, b2resp, headers, r); err != nil {
 		return nil, err
 	}
 	return &File{
 		Name: name,
 		id:   b2resp.FileID,
-		b2:   ue.b2,
+		b2:   url.b2,
 	}, nil
 }
 
@@ -478,7 +478,7 @@ type cancelLargeFileRequest struct {
 }
 
 // CancelLargeFile wraps b2_cancel_large_file.
-func (l LargeFile) CancelLargeFile(ctx context.Context) error {
+func (l *LargeFile) CancelLargeFile(ctx context.Context) error {
 	b2req := &cancelLargeFileRequest{
 		ID: l.id,
 	}

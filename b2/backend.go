@@ -25,7 +25,7 @@ import (
 // This file wraps the baseline interfaces with backoff and retry semantics.
 
 type beRootInterface interface {
-	backoff(error) (time.Duration, bool)
+	backoff(error) time.Duration
 	reauth(error) bool
 	transient(error) bool
 	authorizeAccount(context.Context, string, string) error
@@ -104,9 +104,9 @@ type beFileReader struct {
 	ri           beRootInterface
 }
 
-func (r *beRoot) backoff(err error) (time.Duration, bool) { return r.b2i.backoff(err) }
-func (r *beRoot) reauth(err error) bool                   { return r.b2i.reauth(err) }
-func (r *beRoot) transient(err error) bool                { return r.b2i.transient(err) }
+func (r *beRoot) backoff(err error) time.Duration { return r.b2i.backoff(err) }
+func (r *beRoot) reauth(err error) bool           { return r.b2i.reauth(err) }
+func (r *beRoot) transient(err error) bool        { return r.b2i.transient(err) }
 
 func (r *beRoot) authorizeAccount(ctx context.Context, account, key string) error {
 	f := func() error {
@@ -423,8 +423,8 @@ func withBackoff(ctx context.Context, ri beRootInterface, f func() error) error 
 		if !ri.transient(err) {
 			return err
 		}
-		bo, ok := ri.backoff(err)
-		if ok {
+		bo := ri.backoff(err)
+		if bo > 0 {
 			backoff = bo
 		} else {
 			backoff = getBackoff(backoff)

@@ -29,7 +29,7 @@ import (
 type b2RootInterface interface {
 	authorizeAccount(context.Context, string, string) error
 	transient(error) bool
-	backoff(error) (time.Duration, bool)
+	backoff(error) time.Duration
 	reauth(error) bool
 	createBucket(context.Context, string, string) (b2BucketInterface, error)
 	listBuckets(context.Context) ([]b2BucketInterface, error)
@@ -111,22 +111,22 @@ func (r *b2Root) authorizeAccount(ctx context.Context, account, key string) erro
 	return nil
 }
 
-func (r *b2Root) backoff(err error) (time.Duration, bool) {
+func (*b2Root) backoff(err error) time.Duration {
 	if base.Action(err) != base.Retry {
-		return 0, false
+		return 0
 	}
 	return base.Backoff(err)
 }
 
-func (r *b2Root) reauth(err error) bool {
+func (*b2Root) reauth(err error) bool {
 	return base.Action(err) == base.ReAuthenticate
 }
 
-func (r *b2Root) transient(err error) bool {
+func (*b2Root) transient(err error) bool {
 	return base.Action(err) != base.Punt
 }
 
-func (r *b2Root) createBucket(ctx context.Context, name, btype string) (b2BucketInterface, error) {
+func (b *b2Root) createBucket(ctx context.Context, name, btype string) (b2BucketInterface, error) {
 	bucket, err := b.b.CreateBucket(ctx, name, btype)
 	if err != nil {
 		return nil, err
@@ -134,7 +134,7 @@ func (r *b2Root) createBucket(ctx context.Context, name, btype string) (b2Bucket
 	return &b2Bucket{bucket}, nil
 }
 
-func (r *b2Root) listBuckets(ctx context.Context) ([]b2BucketInterface, error) {
+func (b *b2Root) listBuckets(ctx context.Context) ([]b2BucketInterface, error) {
 	buckets, err := b.b.ListBuckets(ctx)
 	if err != nil {
 		return nil, err

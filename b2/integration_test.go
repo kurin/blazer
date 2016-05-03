@@ -22,8 +22,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kurin/blazer/base"
-
 	"golang.org/x/net/context"
 )
 
@@ -57,7 +55,7 @@ func TestReadWrite(t *testing.T) {
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
-	base.FailSomeUploads = true
+	//base.FailSomeUploads = true
 
 	client := &Client{}
 	if err := client.AuthorizeAccount(ctx, id, key); err != nil {
@@ -74,7 +72,7 @@ func TestReadWrite(t *testing.T) {
 		}
 	}()
 
-	_, err = writeFile(ctx, bucket, smallFileName, 1e6+42)
+	wsha, err := writeFile(ctx, bucket, smallFileName, 1e6+42)
 	if err != nil {
 		t.Error(err)
 	}
@@ -84,11 +82,11 @@ func TestReadWrite(t *testing.T) {
 		}
 	}()
 
-	/*		if err := readFile(ctx, bucket, smallFileName, wsha, 1e5, 10); err != nil {
-			t.Error(err)
-		}*/
+	if err := readFile(ctx, bucket, smallFileName, wsha, 1e5, 10); err != nil {
+		t.Error(err)
+	}
 
-	_, err = writeFile(ctx, bucket, largeFileName, 4e8-50)
+	wshaL, err := writeFile(ctx, bucket, largeFileName, 4e8-50)
 	if err != nil {
 		t.Error(err)
 	}
@@ -97,11 +95,10 @@ func TestReadWrite(t *testing.T) {
 			t.Error(err)
 		}
 	}()
-	/*
-		if err := readFile(ctx, bucket, largeFileName, wshaL, 1e7, 10); err != nil {
-			t.Error(err)
-		}
-	*/
+
+	if err := readFile(ctx, bucket, largeFileName, wshaL, 1e7, 10); err != nil {
+		t.Error(err)
+	}
 }
 
 func writeFile(ctx context.Context, bucket *Bucket, name string, size int64) (string, error) {
@@ -119,7 +116,6 @@ func writeFile(ctx context.Context, bucket *Bucket, name string, size int64) (st
 	return fmt.Sprintf("%x", h.Sum(nil)), nil
 }
 
-/*
 func readFile(ctx context.Context, bucket *Bucket, name, sha string, chunk, concur int) error {
 	r, err := bucket.NewReader(ctx, name)
 	if err != nil {
@@ -139,4 +135,4 @@ func readFile(ctx context.Context, bucket *Bucket, name, sha string, chunk, conc
 		return fmt.Errorf("bad hash: got %s, want %s", rsha, sha)
 	}
 	return nil
-}*/
+}

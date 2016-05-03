@@ -41,6 +41,7 @@ type b2BucketInterface interface {
 	getUploadURL(context.Context) (b2URLInterface, error)
 	startLargeFile(ctx context.Context, name, contentType string, info map[string]string) (b2LargeFileInterface, error)
 	listFileNames(context.Context, int, string) ([]b2FileInterface, string, error)
+	downloadFileByName(context.Context, string, int64, int64) (b2FileReaderInterface, error)
 }
 
 type b2URLInterface interface {
@@ -50,6 +51,7 @@ type b2URLInterface interface {
 
 type b2FileInterface interface {
 	name() string
+	size() int64
 	deleteFileVersion(context.Context) error
 }
 
@@ -61,6 +63,11 @@ type b2LargeFileInterface interface {
 type b2FileChunkInterface interface {
 	reload(context.Context) error
 	uploadPart(context.Context, io.Reader, string, int, int) (int, error)
+}
+
+type b2FileReaderInterface interface {
+	io.ReadCloser
+	stats() (int, string, string, map[string]string)
 }
 
 type b2Root struct {
@@ -85,6 +92,10 @@ type b2LargeFile struct {
 
 type b2FileChunk struct {
 	b *base.FileChunk
+}
+
+type b2FileReader struct {
+	b *base.FileReader
 }
 
 func (r *b2Root) authorizeAccount(ctx context.Context, account, key string) error {
@@ -171,6 +182,14 @@ func (b *b2Bucket) listFileNames(ctx context.Context, count int, continuation st
 	return files, c, nil
 }
 
+func (b *b2Bucket) downloadFileByName(ctx context.Context, name string, offset, size int64) (b2FileReaderInterface, error) {
+	fr, err := b.b.DownloadFileByName(ctx, name, offset, size)
+	if err != nil {
+		return nil, err
+	}
+	return &b2FileReader{fr}, nil
+}
+
 func (b *b2URL) uploadFile(ctx context.Context, r io.Reader, size int, name, contentType, sha1 string, info map[string]string) (b2FileInterface, error) {
 	file, err := b.b.UploadFile(ctx, r, size, name, contentType, sha1, info)
 	if err != nil {
@@ -189,6 +208,10 @@ func (b *b2File) deleteFileVersion(ctx context.Context) error {
 
 func (b *b2File) name() string {
 	return b.b.Name
+}
+
+func (b *b2File) size() int64 {
+	return b.b.Size
 }
 
 func (b *b2LargeFile) finishLargeFile(ctx context.Context) (b2FileInterface, error) {
@@ -213,4 +236,16 @@ func (b *b2FileChunk) reload(ctx context.Context) error {
 
 func (b *b2FileChunk) uploadPart(ctx context.Context, r io.Reader, sha1 string, size, index int) (int, error) {
 	return b.b.UploadPart(ctx, r, sha1, size, index)
+}
+
+func (b *b2FileReader) Read(p []byte) (int, error) {
+	return b.b.Read(p)
+}
+
+func (b *b2FileReader) Close() error {
+	return b.b.Close()
+}
+
+func (b *b2FileReader) stats() (int, string, string, map[string]string) {
+	return b.b.ContentLength, b.b.ContentType, b.b.SHA1, b.b.Info
 }

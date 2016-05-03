@@ -45,6 +45,7 @@ type beBucketInterface interface {
 	getUploadURL(context.Context) (beURLInterface, error)
 	startLargeFile(ctx context.Context, name, contentType string, info map[string]string) (beLargeFileInterface, error)
 	listFileNames(context.Context, int, string) ([]beFileInterface, string, error)
+	downloadFileByName(context.Context, string, int64, int64) (beFileReaderInterface, error)
 }
 
 type beBucket struct {
@@ -63,6 +64,7 @@ type beURL struct {
 
 type beFileInterface interface {
 	name() string
+	size() int64
 	deleteFileVersion(context.Context) error
 }
 
@@ -90,6 +92,16 @@ type beFileChunkInterface interface {
 type beFileChunk struct {
 	b2fileChunk b2FileChunkInterface
 	ri          beRootInterface
+}
+
+type beFileReaderInterface interface {
+	io.ReadCloser
+	stats() (int, string, string, map[string]string)
+}
+
+type beFileReader struct {
+	b2fileReader b2FileReaderInterface
+	ri           beRootInterface
 }
 
 func (r *beRoot) backoff(err error) (time.Duration, bool) { return r.b2i.backoff(err) }
@@ -242,6 +254,28 @@ func (b *beBucket) listFileNames(ctx context.Context, count int, continuation st
 	return files, cont, nil
 }
 
+func (b *beBucket) downloadFileByName(ctx context.Context, name string, offset, size int64) (beFileReaderInterface, error) {
+	var reader beFileReaderInterface
+	f := func() error {
+		g := func() error {
+			fr, err := b.b2bucket.downloadFileByName(ctx, name, offset, size)
+			if err != nil {
+				return err
+			}
+			reader = &beFileReader{
+				b2fileReader: fr,
+				ri:           b.ri,
+			}
+			return nil
+		}
+		return withReauth(ctx, b.ri, g)
+	}
+	if err := withBackoff(ctx, b.ri, f); err != nil {
+		return nil, err
+	}
+	return reader, nil
+}
+
 func (b *beURL) uploadFile(ctx context.Context, r io.Reader, size int, name, ct, sha1 string, info map[string]string) (beFileInterface, error) {
 	var file beFileInterface
 	f := func() error {
@@ -273,6 +307,10 @@ func (b *beFile) deleteFileVersion(ctx context.Context) error {
 		return withReauth(ctx, b.ri, g)
 	}
 	return withBackoff(ctx, b.ri, f)
+}
+
+func (b *beFile) size() int64 {
+	return b.b2file.size()
 }
 
 func (b *beFile) name() string {
@@ -350,6 +388,18 @@ func (b *beFileChunk) uploadPart(ctx context.Context, r io.Reader, sha1 string, 
 		return 0, err
 	}
 	return i, nil
+}
+
+func (b *beFileReader) Read(p []byte) (int, error) {
+	return b.b2fileReader.Read(p)
+}
+
+func (b *beFileReader) Close() error {
+	return b.b2fileReader.Close()
+}
+
+func (b *beFileReader) stats() (int, string, string, map[string]string) {
+	return b.b2fileReader.stats()
 }
 
 func jitter(d time.Duration) time.Duration {

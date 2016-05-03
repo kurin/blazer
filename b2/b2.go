@@ -97,22 +97,22 @@ func (b *Bucket) getFile(ctx context.Context, name string) (beFileInterface, err
 	return files[0], nil
 }
 
-//// NewReader returns a reader for the given file.
-//func (b *Bucket) NewReader(ctx context.Context, name string) (*Reader, error) {
-//	file, err := b.getFile(ctx, name)
-//	if err != nil {
-//		return nil, err
-//	}
-//	ctx, cancel := context.WithCancel(ctx)
-//	return &Reader{
-//		ctx:    ctx,
-//		cancel: cancel,
-//		bucket: b.b,
-//		name:   name,
-//		size:   file.Size,
-//		chunks: make(map[int]*bytes.Buffer),
-//	}, nil
-//}
+// NewReader returns a reader for the given file.
+func (b *Bucket) NewReader(ctx context.Context, name string) (*Reader, error) {
+	file, err := b.getFile(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	return &Reader{
+		ctx:    ctx,
+		cancel: cancel,
+		bucket: b.b,
+		name:   name,
+		size:   file.size(),
+		chunks: make(map[int]*bytes.Buffer),
+	}, nil
+}
 
 func (b *Bucket) DeleteFile(ctx context.Context, name string) error {
 	file, err := b.getFile(ctx, name)

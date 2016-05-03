@@ -40,11 +40,20 @@ type beRoot struct {
 type beBucketInterface interface {
 	name() string
 	deleteBucket(context.Context) error
+	getUploadURL(context.Context) (beURLInterface, error)
 }
 
 type beBucket struct {
 	b2bucket b2BucketInterface
 	ri       beRootInterface
+}
+
+type beURLInterface interface {
+}
+
+type beURL struct {
+	b2url b2URLInterface
+	ri    beRootInterface
 }
 
 func (r *beRoot) backoff(err error) (time.Duration, bool) {
@@ -138,6 +147,31 @@ func (b *beBucket) deleteBucket(ctx context.Context) error {
 		return true, nil
 	}
 	return withBackoff(ctx, b.ri, f)
+}
+
+func (b *beBucket) getUploadURL(ctx context.Context) (beURLInterface, error) {
+	var url beURLInterface
+	f := func() (bool, error) {
+		g := func() error {
+			u, err := b.b2bucket.getUploadURL(ctx)
+			if err != nil {
+				return err
+			}
+			url = &beURL{
+				b2url: u,
+				ri:    b.ri,
+			}
+			return nil
+		}
+		if err := withReauth(ctx, b.ri, g); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+	if err := withBackoff(ctx, b.ri, f); err != nil {
+		return nil, err
+	}
+	return url, nil
 }
 
 func jitter(d time.Duration) time.Duration {

@@ -18,7 +18,8 @@ import (
 	"io"
 	"time"
 
-	"github.com/kurin/gozer/base"
+	"github.com/kurin/blazer/base"
+
 	"golang.org/x/net/context"
 )
 
@@ -43,7 +44,9 @@ type b2URLInterface interface {
 	uploadFile(context.Context, io.Reader, int, string, string, string, map[string]string) (b2FileInterface, error)
 }
 
-type b2FileInterface interface{}
+type b2FileInterface interface {
+	deleteFileVersion(context.Context) error
+}
 
 type b2Root struct {
 	b *base.B2
@@ -127,4 +130,8 @@ func (b b2URL) uploadFile(ctx context.Context, r io.Reader, size int, name, cont
 		return nil, err
 	}
 	return b2File{file}, nil
+}
+
+func (b b2File) deleteFileVersion(ctx context.Context) error {
+	return b.b.DeleteFileVersion(ctx)
 }

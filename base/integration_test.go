@@ -52,7 +52,7 @@ func TestStorage(t *testing.T) {
 	ctx := context.Background()
 
 	// b2_authorize_account
-	b2, err := B2AuthorizeAccount(ctx, id, key)
+	b2, err := AuthorizeAccount(ctx, id, key)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,6 +1,5 @@
-# Blazer
-
-[![GoDoc](https://godoc.org/github.com/kurin/blazer/b2?status.svg)](https://godoc.org/github.com/kurin/blazer/b2)
+Blazer [![GoDoc](https://godoc.org/github.com/kurin/blazer/b2?status.svg)](https://godoc.org/github.com/kurin/blazer/b2)
+====
 
 Blazer is a Go library for Backblaze's B2.  It is designed for simple
 integration, by exporting only a few standard Go types.
@@ -84,5 +83,5 @@ func downloadFile(ctx context.Context, bucket *b2.Bucket, downloads int, src, ds
 	return f.Close()
 }
 ```
-
+====
 This is not an official Google product.

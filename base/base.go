@@ -335,7 +335,7 @@ type b2ListBucketsRequest struct {
 
 type b2ListBucketsResponse struct {
 	Buckets []struct {
-		BucketID   string `json:"bucketId`
+		BucketID   string `json:"bucketId"`
 		BucketName string `json:"bucketName"`
 		BucketType string `json:"bucketType"`
 	} `json:"buckets"`

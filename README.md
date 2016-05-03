@@ -24,6 +24,7 @@ func copyFile(ctx context.Context, bucket *b2.Bucket, src, dst, string) error {
 		return err
 	}
 	return w.Close()
+}
 ```
 
 If the file is less than 100MB, Blazer will simply buffer the file and use the
@@ -50,6 +51,7 @@ func copyFile(ctx context.Context, bucket *b2.Bucket, writers int, src, dst, str
 		return err
 	}
 	return w.Close()
+}
 ```
 
 This will automatically split the file into `writers` chunks of 100MB uploads.

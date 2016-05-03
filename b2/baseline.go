@@ -40,6 +40,7 @@ type b2BucketInterface interface {
 	deleteBucket(context.Context) error
 	getUploadURL(context.Context) (b2URLInterface, error)
 	startLargeFile(ctx context.Context, name, contentType string, info map[string]string) (b2LargeFileInterface, error)
+	listFileNames(context.Context, int, string) ([]b2FileInterface, string, error)
 }
 
 type b2URLInterface interface {
@@ -48,6 +49,7 @@ type b2URLInterface interface {
 }
 
 type b2FileInterface interface {
+	name() string
 	deleteFileVersion(context.Context) error
 }
 
@@ -85,7 +87,7 @@ type b2FileChunk struct {
 	b *base.FileChunk
 }
 
-func (r b2Root) authorizeAccount(ctx context.Context, account, key string) error {
+func (r *b2Root) authorizeAccount(ctx context.Context, account, key string) error {
 	b, err := base.AuthorizeAccount(ctx, account, key)
 	if err != nil {
 		return err
@@ -98,101 +100,117 @@ func (r b2Root) authorizeAccount(ctx context.Context, account, key string) error
 	return nil
 }
 
-func (r b2Root) backoff(err error) (time.Duration, bool) {
+func (r *b2Root) backoff(err error) (time.Duration, bool) {
 	if base.Action(err) != base.Retry {
 		return 0, false
 	}
 	return base.Backoff(err)
 }
 
-func (r b2Root) reauth(err error) bool {
+func (r *b2Root) reauth(err error) bool {
 	return base.Action(err) == base.ReAuthenticate
 }
 
-func (r b2Root) transient(err error) bool {
+func (r *b2Root) transient(err error) bool {
 	return base.Action(err) != base.Punt
 }
 
-func (b b2Root) createBucket(ctx context.Context, name, btype string) (b2BucketInterface, error) {
+func (b *b2Root) createBucket(ctx context.Context, name, btype string) (b2BucketInterface, error) {
 	bucket, err := b.b.CreateBucket(ctx, name, btype)
 	if err != nil {
 		return nil, err
 	}
-	return b2Bucket{bucket}, nil
+	return &b2Bucket{bucket}, nil
 }
 
-func (b b2Root) listBuckets(ctx context.Context) ([]b2BucketInterface, error) {
+func (b *b2Root) listBuckets(ctx context.Context) ([]b2BucketInterface, error) {
 	buckets, err := b.b.ListBuckets(ctx)
 	if err != nil {
 		return nil, err
 	}
 	var rtn []b2BucketInterface
 	for _, bucket := range buckets {
-		rtn = append(rtn, b2Bucket{bucket})
+		rtn = append(rtn, &b2Bucket{bucket})
 	}
 	return rtn, err
 }
 
-func (b b2Bucket) deleteBucket(ctx context.Context) error {
+func (b *b2Bucket) deleteBucket(ctx context.Context) error {
 	return b.b.DeleteBucket(ctx)
 }
 
-func (b b2Bucket) name() string {
+func (b *b2Bucket) name() string {
 	return b.b.Name
 }
 
-func (b b2Bucket) getUploadURL(ctx context.Context) (b2URLInterface, error) {
+func (b *b2Bucket) getUploadURL(ctx context.Context) (b2URLInterface, error) {
 	url, err := b.b.GetUploadURL(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return b2URL{url}, nil
+	return &b2URL{url}, nil
 }
 
-func (b b2Bucket) startLargeFile(ctx context.Context, name, ct string, info map[string]string) (b2LargeFileInterface, error) {
+func (b *b2Bucket) startLargeFile(ctx context.Context, name, ct string, info map[string]string) (b2LargeFileInterface, error) {
 	lf, err := b.b.StartLargeFile(ctx, name, ct, info)
 	if err != nil {
 		return nil, err
 	}
-	return b2LargeFile{lf}, nil
+	return &b2LargeFile{lf}, nil
 }
 
-func (b b2URL) uploadFile(ctx context.Context, r io.Reader, size int, name, contentType, sha1 string, info map[string]string) (b2FileInterface, error) {
+func (b *b2Bucket) listFileNames(ctx context.Context, count int, continuation string) ([]b2FileInterface, string, error) {
+	fs, c, err := b.b.ListFileNames(ctx, count, continuation)
+	if err != nil {
+		return nil, "", err
+	}
+	var files []b2FileInterface
+	for _, f := range fs {
+		files = append(files, &b2File{f})
+	}
+	return files, c, nil
+}
+
+func (b *b2URL) uploadFile(ctx context.Context, r io.Reader, size int, name, contentType, sha1 string, info map[string]string) (b2FileInterface, error) {
 	file, err := b.b.UploadFile(ctx, r, size, name, contentType, sha1, info)
 	if err != nil {
 		return nil, err
 	}
-	return b2File{file}, nil
+	return &b2File{file}, nil
 }
 
-func (b b2URL) reload(ctx context.Context) error {
+func (b *b2URL) reload(ctx context.Context) error {
 	return b.b.Reload(ctx)
 }
 
-func (b b2File) deleteFileVersion(ctx context.Context) error {
+func (b *b2File) deleteFileVersion(ctx context.Context) error {
 	return b.b.DeleteFileVersion(ctx)
 }
 
-func (b b2LargeFile) finishLargeFile(ctx context.Context) (b2FileInterface, error) {
+func (b *b2File) name() string {
+	return b.b.Name
+}
+
+func (b *b2LargeFile) finishLargeFile(ctx context.Context) (b2FileInterface, error) {
 	f, err := b.b.FinishLargeFile(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return b2File{f}, nil
+	return &b2File{f}, nil
 }
 
-func (b b2LargeFile) getUploadPartURL(ctx context.Context) (b2FileChunkInterface, error) {
+func (b *b2LargeFile) getUploadPartURL(ctx context.Context) (b2FileChunkInterface, error) {
 	c, err := b.b.GetUploadPartURL(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return b2FileChunk{c}, nil
+	return &b2FileChunk{c}, nil
 }
 
-func (b b2FileChunk) reload(ctx context.Context) error {
+func (b *b2FileChunk) reload(ctx context.Context) error {
 	return b.b.Reload(ctx)
 }
 
-func (b b2FileChunk) uploadPart(ctx context.Context, r io.Reader, sha1 string, size, index int) (int, error) {
+func (b *b2FileChunk) uploadPart(ctx context.Context, r io.Reader, sha1 string, size, index int) (int, error) {
 	return b.b.UploadPart(ctx, r, sha1, size, index)
 }

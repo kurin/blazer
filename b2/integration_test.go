@@ -15,9 +15,14 @@
 package b2
 
 import (
+	"crypto/sha1"
+	"fmt"
+	"io"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/kurin/blazer/base"
 
 	"golang.org/x/net/context"
 )
@@ -43,7 +48,6 @@ func (zReader) Read(p []byte) (int, error) {
 }
 
 func TestReadWrite(t *testing.T) {
-	return
 	id := os.Getenv(apiID)
 	key := os.Getenv(apiKey)
 	if id == "" || key == "" {
@@ -53,6 +57,7 @@ func TestReadWrite(t *testing.T) {
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
+	base.FailSomeUploads = true
 
 	client := &Client{}
 	if err := client.AuthorizeAccount(ctx, id, key); err != nil {
@@ -69,82 +74,36 @@ func TestReadWrite(t *testing.T) {
 		}
 	}()
 
-	wsha, err := writeFile(ctx, bucket, smallFileName, 1e6+42)
+	_, err = writeFile(ctx, bucket, smallFileName, 1e6+42)
 	if err != nil {
 		t.Error(err)
 	}
-	/*		defer func() {
-				if err := bucket.DeleteFile(ctx, smallFileName); err != nil {
-					t.Error(err)
-				}
-			}()
+	defer func() {
+		if err := bucket.DeleteFile(ctx, smallFileName); err != nil {
+			t.Error(err)
+		}
+	}()
 
-			if err := readFile(ctx, bucket, smallFileName, wsha, 1e5, 10); err != nil {
-				t.Error(err)
-			}
+	/*		if err := readFile(ctx, bucket, smallFileName, wsha, 1e5, 10); err != nil {
+			t.Error(err)
+		}*/
 
-			wshaL, err := writeFile(ctx, bucket, largeFileName, 4e8-50)
-			if err != nil {
-				t.Error(err)
-			}
-			defer func() {
-				if err := bucket.DeleteFile(ctx, largeFileName); err != nil {
-					t.Error(err)
-				}
-			}()
-
-			if err := readFile(ctx, bucket, largeFileName, wshaL, 1e7, 10); err != nil {
-				t.Error(err)
-			}
+	_, err = writeFile(ctx, bucket, largeFileName, 4e8-50)
+	if err != nil {
+		t.Error(err)
+	}
+	defer func() {
+		if err := bucket.DeleteFile(ctx, largeFileName); err != nil {
+			t.Error(err)
+		}
+	}()
+	/*
+		if err := readFile(ctx, bucket, largeFileName, wshaL, 1e7, 10); err != nil {
+			t.Error(err)
+		}
 	*/
 }
 
-/*
-func TestFailures(t *testing.T) {
-	id := os.Getenv(apiID)
-	key := os.Getenv(apiKey)
-	if id == "" || key == "" {
-		t.Logf("B2_ACCOUNT_ID or B2_SECRET_KEY unset; skipping integration tests")
-		return
-	}
-	ctx := context.Background()
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
-	defer cancel()
-
-	base.FailSomeUploads = true
-	defer func() {
-		base.FailSomeUploads = false
-	}()
-
-	client, err := NewClient(ctx, id, key)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	bucket, err := client.Bucket(ctx, bucketName)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if err := bucket.Delete(ctx); err != nil {
-			t.Error(err)
-		}
-	}()
-
-	for i := 0; i < 10; i++ {
-		fname := fmt.Sprintf("%s.%d", smallFileName, i)
-		if _, err := writeFile(ctx, bucket, fname, 1e6+(100*int64(i))); err != nil {
-			t.Error(err)
-		}
-		defer func() {
-			if err := bucket.DeleteFile(ctx, fname); err != nil {
-				t.Error(err)
-			}
-		}()
-	}
-}
-*/
-/*
 func writeFile(ctx context.Context, bucket *Bucket, name string, size int64) (string, error) {
 	r := io.LimitReader(zReader{}, size)
 	f := bucket.NewWriter(ctx, name)
@@ -160,6 +119,7 @@ func writeFile(ctx context.Context, bucket *Bucket, name string, size int64) (st
 	return fmt.Sprintf("%x", h.Sum(nil)), nil
 }
 
+/*
 func readFile(ctx context.Context, bucket *Bucket, name, sha string, chunk, concur int) error {
 	r, err := bucket.NewReader(ctx, name)
 	if err != nil {

@@ -43,6 +43,8 @@ type beBucketInterface interface {
 	name() string
 	deleteBucket(context.Context) error
 	getUploadURL(context.Context) (beURLInterface, error)
+	startLargeFile(ctx context.Context, name, contentType string, info map[string]string) (beLargeFileInterface, error)
+	listFileNames(context.Context, int, string) ([]beFileInterface, string, error)
 }
 
 type beBucket struct {
@@ -60,6 +62,7 @@ type beURL struct {
 }
 
 type beFileInterface interface {
+	name() string
 	deleteFileVersion(context.Context) error
 }
 
@@ -69,18 +72,38 @@ type beFile struct {
 	ri     beRootInterface
 }
 
+type beLargeFileInterface interface {
+	finishLargeFile(context.Context) (beFileInterface, error)
+	getUploadPartURL(context.Context) (beFileChunkInterface, error)
+}
+
+type beLargeFile struct {
+	b2largeFile b2LargeFileInterface
+	ri          beRootInterface
+}
+
+type beFileChunkInterface interface {
+	reload(context.Context) error
+	uploadPart(context.Context, io.Reader, string, int, int) (int, error)
+}
+
+type beFileChunk struct {
+	b2fileChunk b2FileChunkInterface
+	ri          beRootInterface
+}
+
 func (r *beRoot) backoff(err error) (time.Duration, bool) { return r.b2i.backoff(err) }
 func (r *beRoot) reauth(err error) bool                   { return r.b2i.reauth(err) }
 func (r *beRoot) transient(err error) bool                { return r.b2i.transient(err) }
 
 func (r *beRoot) authorizeAccount(ctx context.Context, account, key string) error {
-	f := func() (bool, error) {
+	f := func() error {
 		if err := r.b2i.authorizeAccount(ctx, account, key); err != nil {
-			return false, err
+			return err
 		}
 		r.account = account
 		r.key = key
-		return true, nil
+		return nil
 	}
 	return withBackoff(ctx, r, f)
 }
@@ -91,7 +114,7 @@ func (r *beRoot) reauthorizeAccount(ctx context.Context) error {
 
 func (r *beRoot) createBucket(ctx context.Context, name, btype string) (beBucketInterface, error) {
 	var bi beBucketInterface
-	f := func() (bool, error) {
+	f := func() error {
 		g := func() error {
 			bucket, err := r.b2i.createBucket(ctx, name, btype)
 			if err != nil {
@@ -103,10 +126,7 @@ func (r *beRoot) createBucket(ctx context.Context, name, btype string) (beBucket
 			}
 			return nil
 		}
-		if err := withReauth(ctx, r, g); err != nil {
-			return false, err
-		}
-		return true, nil
+		return withReauth(ctx, r, g)
 	}
 	if err := withBackoff(ctx, r, f); err != nil {
 		return nil, err
@@ -116,7 +136,7 @@ func (r *beRoot) createBucket(ctx context.Context, name, btype string) (beBucket
 
 func (r *beRoot) listBuckets(ctx context.Context) ([]beBucketInterface, error) {
 	var buckets []beBucketInterface
-	f := func() (bool, error) {
+	f := func() error {
 		g := func() error {
 			bs, err := r.b2i.listBuckets(ctx)
 			if err != nil {
@@ -130,10 +150,7 @@ func (r *beRoot) listBuckets(ctx context.Context) ([]beBucketInterface, error) {
 			}
 			return nil
 		}
-		if err := withReauth(ctx, r, g); err != nil {
-			return false, err
-		}
-		return true, nil
+		return withReauth(ctx, r, g)
 	}
 	if err := withBackoff(ctx, r, f); err != nil {
 		return nil, err
@@ -146,21 +163,18 @@ func (b *beBucket) name() string {
 }
 
 func (b *beBucket) deleteBucket(ctx context.Context) error {
-	f := func() (bool, error) {
+	f := func() error {
 		g := func() error {
 			return b.b2bucket.deleteBucket(ctx)
 		}
-		if err := withReauth(ctx, b.ri, g); err != nil {
-			return false, err
-		}
-		return true, nil
+		return withReauth(ctx, b.ri, g)
 	}
 	return withBackoff(ctx, b.ri, f)
 }
 
 func (b *beBucket) getUploadURL(ctx context.Context) (beURLInterface, error) {
 	var url beURLInterface
-	f := func() (bool, error) {
+	f := func() error {
 		g := func() error {
 			u, err := b.b2bucket.getUploadURL(ctx)
 			if err != nil {
@@ -172,10 +186,7 @@ func (b *beBucket) getUploadURL(ctx context.Context) (beURLInterface, error) {
 			}
 			return nil
 		}
-		if err := withReauth(ctx, b.ri, g); err != nil {
-			return false, err
-		}
-		return true, nil
+		return withReauth(ctx, b.ri, g)
 	}
 	if err := withBackoff(ctx, b.ri, f); err != nil {
 		return nil, err
@@ -183,9 +194,57 @@ func (b *beBucket) getUploadURL(ctx context.Context) (beURLInterface, error) {
 	return url, nil
 }
 
+func (b *beBucket) startLargeFile(ctx context.Context, name, ct string, info map[string]string) (beLargeFileInterface, error) {
+	var file beLargeFileInterface
+	f := func() error {
+		g := func() error {
+			f, err := b.b2bucket.startLargeFile(ctx, name, ct, info)
+			if err != nil {
+				return err
+			}
+			file = &beLargeFile{
+				b2largeFile: f,
+				ri:          b.ri,
+			}
+			return nil
+		}
+		return withReauth(ctx, b.ri, g)
+	}
+	if err := withBackoff(ctx, b.ri, f); err != nil {
+		return nil, err
+	}
+	return file, nil
+}
+
+func (b *beBucket) listFileNames(ctx context.Context, count int, continuation string) ([]beFileInterface, string, error) {
+	var cont string
+	var files []beFileInterface
+	f := func() error {
+		g := func() error {
+			fs, c, err := b.b2bucket.listFileNames(ctx, count, continuation)
+			if err != nil {
+				return err
+			}
+			cont = c
+			for _, f := range fs {
+				files = append(files, &beFile{
+					b2file: f,
+					ri:     b.ri,
+				})
+			}
+			return nil
+		}
+		return withReauth(ctx, b.ri, g)
+	}
+	if err := withBackoff(ctx, b.ri, f); err != nil {
+		return nil, "", err
+	}
+	return files, cont, nil
+}
+
 func (b *beURL) uploadFile(ctx context.Context, r io.Reader, size int, name, ct, sha1 string, info map[string]string) (beFileInterface, error) {
 	var file beFileInterface
-	f := func() (bool, error) {
+	f := func() error {
 		g := func() error {
 			f, err := b.b2url.uploadFile(ctx, r, size, name, ct, sha1, info)
 			if err != nil {
@@ -198,10 +257,7 @@ func (b *beURL) uploadFile(ctx context.Context, r io.Reader, size int, name, ct,
 			}
 			return nil
 		}
-		if err := withReauth(ctx, b.ri, g); err != nil {
-			return false, err
-		}
-		return true, nil
+		return withReauth(ctx, b.ri, g)
 	}
 	if err := withBackoff(ctx, b.ri, f); err != nil {
 		return nil, err
@@ -210,16 +266,90 @@ func (b *beURL) uploadFile(ctx context.Context, r io.Reader, size int, name, ct,
 }
 
 func (b *beFile) deleteFileVersion(ctx context.Context) error {
-	f := func() (bool, error) {
+	f := func() error {
 		g := func() error {
 			return b.b2file.deleteFileVersion(ctx)
 		}
-		if err := withReauth(ctx, b.ri, g); err != nil {
-			return false, err
-		}
-		return true, nil
+		return withReauth(ctx, b.ri, g)
 	}
 	return withBackoff(ctx, b.ri, f)
+}
+
+func (b *beFile) name() string {
+	return b.b2file.name()
+}
+
+func (b *beLargeFile) getUploadPartURL(ctx context.Context) (beFileChunkInterface, error) {
+	var chunk beFileChunkInterface
+	f := func() error {
+		g := func() error {
+			fc, err := b.b2largeFile.getUploadPartURL(ctx)
+			if err != nil {
+				return err
+			}
+			chunk = &beFileChunk{
+				b2fileChunk: fc,
+				ri:          b.ri,
+			}
+			return nil
+		}
+		return withReauth(ctx, b.ri, g)
+	}
+	if err := withBackoff(ctx, b.ri, f); err != nil {
+		return nil, err
+	}
+	return chunk, nil
+}
+
+func (b *beLargeFile) finishLargeFile(ctx context.Context) (beFileInterface, error) {
+	var file beFileInterface
+	f := func() error {
+		g := func() error {
+			f, err := b.b2largeFile.finishLargeFile(ctx)
+			if err != nil {
+				return err
+			}
+			file = &beFile{
+				b2file: f,
+				ri:     b.ri,
+			}
+			return nil
+		}
+		return withReauth(ctx, b.ri, g)
+	}
+	if err := withBackoff(ctx, b.ri, f); err != nil {
+		return nil, err
+	}
+	return file, nil
+}
+
+func (b *beFileChunk) reload(ctx context.Context) error {
+	f := func() error {
+		g := func() error {
+			return b.b2fileChunk.reload(ctx)
+		}
+		return withReauth(ctx, b.ri, g)
+	}
+	return withBackoff(ctx, b.ri, f)
+}
+
+func (b *beFileChunk) uploadPart(ctx context.Context, r io.Reader, sha1 string, size, index int) (int, error) {
+	var i int
+	f := func() error {
+		g := func() error {
+			j, err := b.b2fileChunk.uploadPart(ctx, r, sha1, size, index)
+			if err != nil {
+				return err
+			}
+			i = j
+			return nil
+		}
+		return withReauth(ctx, b.ri, g)
+	}
+	if err := withBackoff(ctx, b.ri, f); err != nil {
+		return 0, err
+	}
+	return i, nil
 }
 
 func jitter(d time.Duration) time.Duration {
@@ -236,13 +366,10 @@ func getBackoff(d time.Duration) time.Duration {
 	return d*2 + jitter(d*2)
 }
 
-func withBackoff(ctx context.Context, ri beRootInterface, f func() (bool, error)) error {
+func withBackoff(ctx context.Context, ri beRootInterface, f func() error) error {
 	backoff := 500 * time.Millisecond
 	for {
-		final, err := f()
-		if final {
-			return err
-		}
+		err := f()
 		if !ri.transient(err) {
 			return err
 		}

@@ -416,6 +416,8 @@ func getBackoff(d time.Duration) time.Duration {
 	return d*2 + jitter(d*2)
 }
 
+var after = time.After
+
 func withBackoff(ctx context.Context, ri beRootInterface, f func() error) error {
 	backoff := 500 * time.Millisecond
 	for {
@@ -432,7 +434,7 @@ func withBackoff(ctx context.Context, ri beRootInterface, f func() error) error 
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(backoff):
+		case <-after(backoff):
 		}
 	}
 }

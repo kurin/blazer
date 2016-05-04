@@ -93,7 +93,7 @@ func (t *testRoot) transient(err error) bool {
 	if !ok {
 		return false
 	}
-	return e.retry
+	return e.retry || e.backoff > 0
 }
 
 func (t *testRoot) createBucket(_ context.Context, name, _ string) (b2BucketInterface, error) {
@@ -285,10 +285,47 @@ func TestReauth(t *testing.T) {
 	}
 	auths := root.auths
 	if _, err := client.Bucket(ctx, "fun"); err != nil {
-		t.Errorf("Bucket should not err, got %v", err)
+		t.Errorf("bucket should not err, got %v", err)
 	}
 	if root.auths != auths+1 {
-		t.Errorf("Client should have re-authenticated; did not")
+		t.Errorf("client should have re-authenticated; did not")
+	}
+}
+
+func TestBackoff(t *testing.T) {
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	var calls []time.Duration
+	ch := make(chan time.Time)
+	close(ch)
+	after = func(d time.Duration) <-chan time.Time {
+		calls = append(calls, d)
+		return ch
+	}
+
+	root := &testRoot{
+		bucketMap: make(map[string]map[string]string),
+		errs: &errCont{
+			errMap: map[string]map[int]error{
+				"createBucket": {
+					0: testError{backoff: time.Second},
+					1: testError{backoff: 2 * time.Second},
+				},
+			},
+		},
+	}
+	client := &Client{
+		backend: &beRoot{
+			b2i: root,
+		},
+	}
+	if _, err := client.Bucket(ctx, "fun"); err != nil {
+		t.Errorf("bucket should not err, got %v", err)
+	}
+	if len(calls) != 2 {
+		t.Errorf("wrong number of backoff calls; got %d, want 2", len(calls))
 	}
 }
 

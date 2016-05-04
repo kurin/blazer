@@ -50,6 +50,7 @@ type Writer struct {
 	// Info is a map of up to ten key/value pairs that are stored with the file.
 	Info map[string]string
 
+	csize int
 	ctx   context.Context
 	ready chan chunk
 	wg    sync.WaitGroup
@@ -110,7 +111,10 @@ func (w *Writer) Write(p []byte) (int, error) {
 	if err := w.getErr(); err != nil {
 		return 0, err
 	}
-	left := 1e8 - w.cbuf.Len()
+	if w.csize == 0 {
+		w.csize = 1e8
+	}
+	left := w.csize - w.cbuf.Len()
 	if len(p) < left {
 		return w.w.Write(p)
 	}

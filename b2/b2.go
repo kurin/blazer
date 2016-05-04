@@ -130,3 +130,42 @@ func (b *Bucket) DeleteFile(ctx context.Context, name string) error {
 	}
 	return file.deleteFileVersion(ctx)
 }
+
+// Cursor is passed to ListFiles to return subsequent pages.
+type Cursor struct {
+	name string
+	id   string
+}
+
+// File represents a file object in a B2 bucket.
+type File struct {
+	b beFileInterface
+}
+
+// Delete removes the given file.
+func (f *File) Delete(ctx context.Context) error {
+	return f.b.deleteFileVersion(ctx)
+}
+
+// ListFiles returns files in the bucket.  Cursor may be nil; when passed to a
+// subsequent query, it will continue the file listing.
+func (b *Bucket) ListFiles(ctx context.Context, count int, c *Cursor) ([]*File, *Cursor, error) {
+	if c == nil {
+		c = &Cursor{}
+	}
+	fs, name, id, err := b.b.listFileVersions(ctx, count, c.name, c.id)
+	if err != nil {
+		return nil, nil, err
+	}
+	next := &Cursor{
+		name: name,
+		id:   id,
+	}
+	var files []*File
+	for _, f := range fs {
+		files = append(files, &File{
+			b: f,
+		})
+	}
+	return files, next, nil
+}

@@ -104,8 +104,14 @@ func (r *Reader) thread() {
 				r.rcond.Broadcast()
 				return
 			}
-			if _, err := copyContext(r.ctx, buf, fr); err != nil {
+			i, err := copyContext(r.ctx, buf, fr)
+			if err != nil {
 				r.setErr(err)
+				r.rcond.Broadcast()
+				return
+			}
+			if i < size {
+				r.setErr(io.ErrUnexpectedEOF)
 				r.rcond.Broadcast()
 				return
 			}

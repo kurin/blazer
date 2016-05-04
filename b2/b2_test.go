@@ -34,14 +34,72 @@ const (
 	largeFileName = "BigBytes"
 )
 
+type testError struct {
+	retry   bool
+	backoff time.Duration
+	reauth  bool
+}
+
+func (t testError) Error() string {
+	return fmt.Sprintf("retry %v; backoff %v; reauth %v", t.retry, t.backoff, t.reauth)
+}
+
+type errCont struct {
+	errMap map[string]map[int]error
+	opMap  map[string]int
+}
+
+func (e *errCont) getError(name string) error {
+	if e.errMap == nil {
+		return nil
+	}
+	if e.opMap == nil {
+		e.opMap = make(map[string]int)
+	}
+	i := e.opMap[name]
+	e.opMap[name]++
+	return e.errMap[name][i]
+}
+
 type testRoot struct {
+	errs      *errCont
+	auths     int
 	bucketMap map[string]map[string]string
 }
 
-func (t *testRoot) authorizeAccount(context.Context, string, string) error { return nil }
-func (t *testRoot) backoff(error) time.Duration                            { return 0 }
+func (t *testRoot) authorizeAccount(context.Context, string, string) error {
+	t.auths++
+	return nil
+}
+
+func (t *testRoot) backoff(err error) time.Duration {
+	e, ok := err.(testError)
+	if !ok {
+		return 0
+	}
+	return e.backoff
+}
+
+func (t *testRoot) reauth(err error) bool {
+	e, ok := err.(testError)
+	if !ok {
+		return false
+	}
+	return e.reauth
+}
+
+func (t *testRoot) transient(err error) bool {
+	e, ok := err.(testError)
+	if !ok {
+		return false
+	}
+	return e.retry
+}
 
 func (t *testRoot) createBucket(_ context.Context, name, _ string) (b2BucketInterface, error) {
+	if err := t.errs.getError("createBucket"); err != nil {
+		return nil, err
+	}
 	if _, ok := t.bucketMap[name]; ok {
 		return nil, fmt.Errorf("%s: bucket exists", name)
 	}
@@ -63,9 +121,6 @@ func (t *testRoot) listBuckets(context.Context) ([]b2BucketInterface, error) {
 	}
 	return b, nil
 }
-
-func (t *testRoot) reauth(error) bool    { return false }
-func (t *testRoot) transient(error) bool { return false }
 
 type testBucket struct {
 	n     string
@@ -211,15 +266,42 @@ func (zReader) Read(p []byte) (int, error) {
 	return len(p), nil
 }
 
+func TestReauth(t *testing.T) {
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	root := &testRoot{
+		bucketMap: make(map[string]map[string]string),
+		errs: &errCont{
+			errMap: map[string]map[int]error{
+				"createBucket": {0: testError{reauth: true}},
+			},
+		},
+	}
+	client := &Client{
+		backend: &beRoot{
+			b2i: root,
+		},
+	}
+	auths := root.auths
+	if _, err := client.Bucket(ctx, "fun"); err != nil {
+		t.Errorf("Bucket should not err, got %v", err)
+	}
+	if root.auths != auths+1 {
+		t.Errorf("Client should have re-authenticated; did not")
+	}
+}
+
 func TestReadWrite(t *testing.T) {
 	ctx := context.Background()
-	ctx, cancel := context.WithTimeout(ctx, time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
 	client := &Client{
 		backend: &beRoot{
 			b2i: &testRoot{
 				bucketMap: make(map[string]map[string]string),
+				errs:      &errCont{},
 			},
 		},
 	}

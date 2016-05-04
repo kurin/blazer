@@ -163,6 +163,7 @@ func (r *Reader) initFunc() {
 }
 
 func (r *Reader) Read(p []byte) (int, error) {
+	// TODO: check the SHA1 hash here and verify it on Close.
 	r.init.Do(r.initFunc)
 	chunk, err := r.curChunk()
 	if err != nil {

@@ -41,6 +41,7 @@ type b2BucketInterface interface {
 	getUploadURL(context.Context) (b2URLInterface, error)
 	startLargeFile(ctx context.Context, name, contentType string, info map[string]string) (b2LargeFileInterface, error)
 	listFileNames(context.Context, int, string) ([]b2FileInterface, string, error)
+	listFileVersions(context.Context, int, string, string) ([]b2FileInterface, string, string, error)
 	downloadFileByName(context.Context, string, int64, int64) (b2FileReaderInterface, error)
 }
 
@@ -180,6 +181,18 @@ func (b *b2Bucket) listFileNames(ctx context.Context, count int, continuation st
 		files = append(files, &b2File{f})
 	}
 	return files, c, nil
+}
+
+func (b *b2Bucket) listFileVersions(ctx context.Context, count int, nextName, nextID string) ([]b2FileInterface, string, string, error) {
+	fs, name, id, err := b.b.ListFileVersions(ctx, count, nextName, nextID)
+	if err != nil {
+		return nil, "", "", err
+	}
+	var files []b2FileInterface
+	for _, f := range fs {
+		files = append(files, &b2File{f})
+	}
+	return files, name, id, nil
 }
 
 func (b *b2Bucket) downloadFileByName(ctx context.Context, name string, offset, size int64) (b2FileReaderInterface, error) {

@@ -20,7 +20,6 @@
 // b2_download_file_by_id
 // b2_get_file_info
 // b2_hide_file
-// b2_list_file_versions
 // b2_list_parts
 // b2_list_unfinished_large_files
 // b2_update_bucket
@@ -415,10 +414,11 @@ func (b *Bucket) GetUploadURL(ctx context.Context) (*URL, error) {
 
 // File represents a B2 file.
 type File struct {
-	Name string
-	Size int64
-	id   string
-	b2   *B2
+	Name   string
+	Size   int64
+	Status string
+	id     string
+	b2     *B2
 }
 
 type b2UploadFileResponse struct {
@@ -635,6 +635,7 @@ type b2ListFileNamesResponse struct {
 		FileID string `json:"fileId"`
 		Name   string `json:"fileName"`
 		Size   int64  `json:"size"`
+		Action string `json:"action"`
 	} `json:"files"`
 }
 
@@ -656,13 +657,60 @@ func (b *Bucket) ListFileNames(ctx context.Context, count int, continuation stri
 	var files []*File
 	for _, f := range b2resp.Files {
 		files = append(files, &File{
-			Name: f.Name,
-			Size: f.Size,
-			id:   f.FileID,
-			b2:   b.b2,
+			Name:   f.Name,
+			Size:   f.Size,
+			Status: f.Action,
+			id:     f.FileID,
+			b2:     b.b2,
 		})
 	}
 	return files, cont, nil
+}
+
+type b2ListFileVersionsRequest struct {
+	BucketID  string `json:"bucketId"`
+	Count     int    `json:"maxFileCount"`
+	StartName string `json:"startFileName,omitempty"`
+	StartID   string `json:"startFileId,omitempty"`
+}
+
+type b2ListFileVersionsResponse struct {
+	NextName string `json:"nextFileName"`
+	NextID   string `json:"nextFileId"`
+	Files    []struct {
+		FileID string `json:"fileId"`
+		Name   string `json:"fileName"`
+		Size   int64  `json:"size"`
+		Action string `json:"action"`
+	} `json:"files"`
+}
+
+// ListFileVersions wraps b2_list_file_versions.
+func (b *Bucket) ListFileVersions(ctx context.Context, count int, startName, startID string) ([]*File, string, string, error) {
+	b2req := &b2ListFileVersionsRequest{
+		BucketID:  b.id,
+		Count:     count,
+		StartName: startName,
+		StartID:   startID,
+	}
+	b2resp := &b2ListFileVersionsResponse{}
+	headers := map[string]string{
+		"Authorization": b.b2.authToken,
+	}
+	if err := makeRequest(ctx, "b2_list_file_versions", "POST", b.b2.apiURI+apiV1+"b2_list_file_versions", b2req, b2resp, headers, nil); err != nil {
+		return nil, "", "", err
+	}
+	var files []*File
+	for _, f := range b2resp.Files {
+		files = append(files, &File{
+			Name:   f.Name,
+			Size:   f.Size,
+			Status: f.Action,
+			id:     f.FileID,
+			b2:     b.b2,
+		})
+	}
+	return files, b2resp.NextName, b2resp.NextID, nil
 }
 
 // FileReader is an io.ReadCloser that downloads a file from B2.

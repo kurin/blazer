@@ -45,6 +45,7 @@ type beBucketInterface interface {
 	getUploadURL(context.Context) (beURLInterface, error)
 	startLargeFile(ctx context.Context, name, contentType string, info map[string]string) (beLargeFileInterface, error)
 	listFileNames(context.Context, int, string) ([]beFileInterface, string, error)
+	listFileVersions(context.Context, int, string, string) ([]beFileInterface, string, string, error)
 	downloadFileByName(context.Context, string, int64, int64) (beFileReaderInterface, error)
 }
 
@@ -252,6 +253,33 @@ func (b *beBucket) listFileNames(ctx context.Context, count int, continuation st
 		return nil, "", err
 	}
 	return files, cont, nil
+}
+
+func (b *beBucket) listFileVersions(ctx context.Context, count int, nextName, nextID string) ([]beFileInterface, string, string, error) {
+	var name, id string
+	var files []beFileInterface
+	f := func() error {
+		g := func() error {
+			fs, n, d, err := b.b2bucket.listFileVersions(ctx, count, nextName, nextID)
+			if err != nil {
+				return err
+			}
+			name = n
+			id = d
+			for _, f := range fs {
+				files = append(files, &beFile{
+					b2file: f,
+					ri:     b.ri,
+				})
+			}
+			return nil
+		}
+		return withReauth(ctx, b.ri, g)
+	}
+	if err := withBackoff(ctx, b.ri, f); err != nil {
+		return nil, "", "", err
+	}
+	return files, name, id, nil
 }
 
 func (b *beBucket) downloadFileByName(ctx context.Context, name string, offset, size int64) (beFileReaderInterface, error) {

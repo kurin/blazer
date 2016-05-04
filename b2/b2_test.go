@@ -169,6 +169,11 @@ func (t *testBucket) listFileNames(ctx context.Context, count int, cont string) 
 	return b, next, nil
 }
 
+func (t *testBucket) listFileVersions(ctx context.Context, count int, a, b string) ([]b2FileInterface, string, string, error) {
+	x, y, z := t.listFileNames(ctx, count, a)
+	return x, y, "", z
+}
+
 func (t *testBucket) downloadFileByName(_ context.Context, name string, _, _ int64) (b2FileReaderInterface, error) {
 	return &testFileReader{
 		b: ioutil.NopCloser(bytes.NewBufferString(t.files[name])),
@@ -312,6 +317,43 @@ func TestBackoff(t *testing.T) {
 				"createBucket": {
 					0: testError{backoff: time.Second},
 					1: testError{backoff: 2 * time.Second},
+				},
+			},
+		},
+	}
+	client := &Client{
+		backend: &beRoot{
+			b2i: root,
+		},
+	}
+	if _, err := client.Bucket(ctx, "fun"); err != nil {
+		t.Errorf("bucket should not err, got %v", err)
+	}
+	if len(calls) != 2 {
+		t.Errorf("wrong number of backoff calls; got %d, want 2", len(calls))
+	}
+}
+
+func TestBackoffWithoutRetryAfter(t *testing.T) {
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	var calls []time.Duration
+	ch := make(chan time.Time)
+	close(ch)
+	after = func(d time.Duration) <-chan time.Time {
+		calls = append(calls, d)
+		return ch
+	}
+
+	root := &testRoot{
+		bucketMap: make(map[string]map[string]string),
+		errs: &errCont{
+			errMap: map[string]map[int]error{
+				"createBucket": {
+					0: testError{retry: true},
+					1: testError{retry: true},
 				},
 			},
 		},

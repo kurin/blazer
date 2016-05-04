@@ -60,11 +60,6 @@ func TestReadWriteLive(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	defer func() {
-		if err := bucket.DeleteFile(ctx, smallFileName); err != nil {
-			t.Error(err)
-		}
-	}()
 
 	if err := readFile(ctx, bucket, smallFileName, wsha, 1e5, 10); err != nil {
 		t.Error(err)
@@ -74,13 +69,25 @@ func TestReadWriteLive(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	defer func() {
-		if err := bucket.DeleteFile(ctx, largeFileName); err != nil {
-			t.Error(err)
-		}
-	}()
 
 	if err := readFile(ctx, bucket, largeFileName, wshaL, 1e7, 10); err != nil {
 		t.Error(err)
+	}
+
+	var cur *Cursor
+	for {
+		files, c, err := bucket.ListFiles(ctx, 100, cur)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(files) == 0 {
+			break
+		}
+		for _, f := range files {
+			if err := f.Delete(ctx); err != nil {
+				t.Error(err)
+			}
+		}
+		cur = c
 	}
 }

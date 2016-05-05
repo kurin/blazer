@@ -58,7 +58,7 @@ func (e b2err) Error() string {
 	if e.method == "" {
 		return fmt.Sprintf("b2: %s", e.msg)
 	}
-	return fmt.Sprintf("%s: %s", e.method, e.msg)
+	return fmt.Sprintf("%s: %d: %s", e.method, e.code, e.msg)
 }
 
 // Action checks an error and returns a recommended course of action.

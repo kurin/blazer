@@ -56,7 +56,7 @@ type beBucket struct {
 }
 
 type beURLInterface interface {
-	uploadFile(context.Context, io.Reader, int, string, string, string, map[string]string) (beFileInterface, error)
+	uploadFile(context.Context, io.ReadSeeker, int, string, string, string, map[string]string) (beFileInterface, error)
 }
 
 type beURL struct {
@@ -88,7 +88,7 @@ type beLargeFile struct {
 
 type beFileChunkInterface interface {
 	reload(context.Context) error
-	uploadPart(context.Context, io.Reader, string, int, int) (int, error)
+	uploadPart(context.Context, io.ReadSeeker, string, int, int) (int, error)
 }
 
 type beFileChunk struct {
@@ -306,10 +306,13 @@ func (b *beBucket) downloadFileByName(ctx context.Context, name string, offset, 
 	return reader, nil
 }
 
-func (b *beURL) uploadFile(ctx context.Context, r io.Reader, size int, name, ct, sha1 string, info map[string]string) (beFileInterface, error) {
+func (b *beURL) uploadFile(ctx context.Context, r io.ReadSeeker, size int, name, ct, sha1 string, info map[string]string) (beFileInterface, error) {
 	var file beFileInterface
 	f := func() error {
 		g := func() error {
+			if _, err := r.Seek(0, 0); err != nil {
+				return err
+			}
 			f, err := b.b2url.uploadFile(ctx, r, size, name, ct, sha1, info)
 			if err != nil {
 				return err
@@ -401,10 +404,13 @@ func (b *beFileChunk) reload(ctx context.Context) error {
 	return withBackoff(ctx, b.ri, f)
 }
 
-func (b *beFileChunk) uploadPart(ctx context.Context, r io.Reader, sha1 string, size, index int) (int, error) {
+func (b *beFileChunk) uploadPart(ctx context.Context, r io.ReadSeeker, sha1 string, size, index int) (int, error) {
 	var i int
 	f := func() error {
 		g := func() error {
+			if _, err := r.Seek(0, 0); err != nil {
+				return err
+			}
 			j, err := b.b2fileChunk.uploadPart(ctx, r, sha1, size, index)
 			if err != nil {
 				return err

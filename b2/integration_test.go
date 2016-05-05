@@ -70,8 +70,6 @@ func TestReadWriteLive(t *testing.T) {
 	}
 	t.Logf("successfully wrote file %q", largeFileName)
 
-	time.Sleep(10 * time.Second) // give backblaze time to catch up
-
 	if err := readFile(ctx, lobj, wshaL, 1e7, 10); err != nil {
 		t.Error(err)
 	}

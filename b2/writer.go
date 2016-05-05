@@ -110,12 +110,6 @@ func (w *Writer) thread() {
 						return
 					}
 					fc = f
-					uerr := err
-					if _, err := r.Seek(0, 0); err != nil {
-						log.Print(err)
-						w.setErr(uerr)
-						return
-					}
 					goto redo
 				}
 				w.setErr(err)
@@ -163,8 +157,9 @@ func (w *Writer) simpleWriteFile() error {
 	if ctype == "" {
 		ctype = "application/octet-stream"
 	}
+	r := bytes.NewReader(w.cbuf.Bytes())
 redo:
-	f, err := ue.uploadFile(w.ctx, w.cbuf, w.cbuf.Len(), w.name, ctype, sha1, w.Info)
+	f, err := ue.uploadFile(w.ctx, r, int(r.Size()), w.name, ctype, sha1, w.Info)
 	if err != nil {
 		if w.o.b.r.reupload(err) {
 			log.Printf("b2 writer: %v; retrying", err)

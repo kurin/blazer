@@ -17,6 +17,7 @@ package b2
 import (
 	"bytes"
 	"io"
+	"log"
 	"sync"
 
 	"golang.org/x/net/context"
@@ -36,7 +37,7 @@ type Reader struct {
 
 	ctx    context.Context
 	cancel context.CancelFunc
-	bucket beBucketInterface
+	o      *Object
 	name   string
 	size   int64
 	csize  int
@@ -64,6 +65,7 @@ func (r *Reader) setErr(err error) {
 	defer r.emux.Unlock()
 	if r.err == nil {
 		r.err = err
+		r.cancel()
 	}
 }
 
@@ -98,20 +100,30 @@ func (r *Reader) thread() {
 			if offset+size > r.size {
 				size = r.size - offset
 			}
-			fr, err := r.bucket.downloadFileByName(r.ctx, r.name, offset, size)
+			var tries int
+		redo:
+			fr, err := r.o.b.b.downloadFileByName(r.ctx, r.name, offset, size)
 			if err != nil {
 				r.setErr(err)
 				r.rcond.Broadcast()
 				return
 			}
 			i, err := copyContext(r.ctx, buf, fr)
+			if i < size || err == io.ErrUnexpectedEOF {
+				tries++
+				if tries > 15 {
+					log.Printf("b2 reader %d (%s: %d-%d of %d): giving up", chunkID, r.name, offset, offset+size, r.size)
+					r.setErr(io.ErrUnexpectedEOF)
+					r.rcond.Broadcast()
+					return
+				}
+				// Probably the network connection was closed early.  Retry.
+				log.Printf("b2 reader %d: got %dB of %dB; retrying", chunkID, i, size)
+				buf.Reset()
+				goto redo
+			}
 			if err != nil {
 				r.setErr(err)
-				r.rcond.Broadcast()
-				return
-			}
-			if i < size {
-				r.setErr(io.ErrUnexpectedEOF)
 				r.rcond.Broadcast()
 				return
 			}
@@ -128,7 +140,7 @@ func (r *Reader) curChunk() (*bytes.Buffer, error) {
 	go func() {
 		r.rmux.Lock()
 		defer r.rmux.Unlock()
-		for r.chunks[r.chrid] == nil && r.getErr() == nil {
+		for r.chunks[r.chrid] == nil && r.getErr() == nil && r.ctx.Err() == nil {
 			r.rcond.Wait()
 		}
 		select {
@@ -141,11 +153,19 @@ func (r *Reader) curChunk() (*bytes.Buffer, error) {
 	case buf := <-ch:
 		return buf, r.getErr()
 	case <-r.ctx.Done():
+		if r.getErr() != nil {
+			return nil, r.getErr()
+		}
 		return nil, r.ctx.Err()
 	}
 }
 
 func (r *Reader) initFunc() {
+	if err := r.o.ensure(r.ctx); err != nil {
+		r.setErr(err)
+		return
+	}
+	r.size = r.o.f.size()
 	r.rcond = sync.NewCond(&r.rmux)
 	cr := r.ConcurrentDownloads
 	if cr < 1 {

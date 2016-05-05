@@ -28,6 +28,7 @@ type beRootInterface interface {
 	backoff(error) time.Duration
 	reauth(error) bool
 	transient(error) bool
+	reupload(error) bool
 	authorizeAccount(context.Context, string, string) error
 	reauthorizeAccount(context.Context) error
 	createBucket(ctx context.Context, name, btype string) (beBucketInterface, error)
@@ -107,6 +108,7 @@ type beFileReader struct {
 
 func (r *beRoot) backoff(err error) time.Duration { return r.b2i.backoff(err) }
 func (r *beRoot) reauth(err error) bool           { return r.b2i.reauth(err) }
+func (r *beRoot) reupload(err error) bool         { return r.b2i.reupload(err) }
 func (r *beRoot) transient(err error) bool        { return r.b2i.transient(err) }
 
 func (r *beRoot) authorizeAccount(ctx context.Context, account, key string) error {

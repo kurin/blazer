@@ -35,13 +35,14 @@ const (
 )
 
 type testError struct {
-	retry   bool
-	backoff time.Duration
-	reauth  bool
+	retry    bool
+	backoff  time.Duration
+	reauth   bool
+	reupload bool
 }
 
 func (t testError) Error() string {
-	return fmt.Sprintf("retry %v; backoff %v; reauth %v", t.retry, t.backoff, t.reauth)
+	return fmt.Sprintf("retry %v; backoff %v; reauth %v; reupload %v", t.retry, t.backoff, t.reauth, t.reupload)
 }
 
 type errCont struct {
@@ -88,12 +89,20 @@ func (t *testRoot) reauth(err error) bool {
 	return e.reauth
 }
 
+func (t *testRoot) reupload(err error) bool {
+	e, ok := err.(testError)
+	if !ok {
+		return false
+	}
+	return e.reupload
+}
+
 func (t *testRoot) transient(err error) bool {
 	e, ok := err.(testError)
 	if !ok {
 		return false
 	}
-	return e.retry || e.backoff > 0
+	return e.retry || e.reupload || e.backoff > 0
 }
 
 func (t *testRoot) createBucket(_ context.Context, name, _ string) (b2BucketInterface, error) {
@@ -107,6 +116,7 @@ func (t *testRoot) createBucket(_ context.Context, name, _ string) (b2BucketInte
 	t.bucketMap[name] = m
 	return &testBucket{
 		n:     name,
+		errs:  t.errs,
 		files: m,
 	}, nil
 }
@@ -116,6 +126,7 @@ func (t *testRoot) listBuckets(context.Context) ([]b2BucketInterface, error) {
 	for k, v := range t.bucketMap {
 		b = append(b, &testBucket{
 			n:     k,
+			errs:  t.errs,
 			files: v,
 		})
 	}
@@ -124,6 +135,7 @@ func (t *testRoot) listBuckets(context.Context) ([]b2BucketInterface, error) {
 
 type testBucket struct {
 	n     string
+	errs  *errCont
 	files map[string]string
 }
 
@@ -131,6 +143,9 @@ func (t *testBucket) name() string                       { return t.n }
 func (t *testBucket) deleteBucket(context.Context) error { return nil }
 
 func (t *testBucket) getUploadURL(context.Context) (b2URLInterface, error) {
+	if err := t.errs.getError("getUploadURL"); err != nil {
+		return nil, err
+	}
 	return &testURL{
 		files: t.files,
 	}, nil
@@ -174,9 +189,9 @@ func (t *testBucket) listFileVersions(ctx context.Context, count int, a, b strin
 	return x, y, "", z
 }
 
-func (t *testBucket) downloadFileByName(_ context.Context, name string, _, _ int64) (b2FileReaderInterface, error) {
+func (t *testBucket) downloadFileByName(_ context.Context, name string, offset, size int64) (b2FileReaderInterface, error) {
 	return &testFileReader{
-		b: ioutil.NopCloser(bytes.NewBufferString(t.files[name])),
+		b: ioutil.NopCloser(bytes.NewBufferString(t.files[name][offset : offset+size])),
 	}, nil
 }
 
@@ -192,7 +207,11 @@ func (t *testURL) uploadFile(_ context.Context, r io.Reader, _ int, name, _, _ s
 		return nil, err
 	}
 	t.files[name] = buf.String()
-	return nil, nil
+	return &testFile{
+		n:     name,
+		s:     int64(len(t.files[name])),
+		files: t.files,
+	}, nil
 }
 
 type testLargeFile struct {
@@ -310,27 +329,62 @@ func TestBackoff(t *testing.T) {
 		return ch
 	}
 
-	root := &testRoot{
-		bucketMap: make(map[string]map[string]string),
-		errs: &errCont{
-			errMap: map[string]map[int]error{
-				"createBucket": {
-					0: testError{backoff: time.Second},
-					1: testError{backoff: 2 * time.Second},
+	table := []struct {
+		root *testRoot
+		want int
+	}{
+		{
+			root: &testRoot{
+				bucketMap: make(map[string]map[string]string),
+				errs: &errCont{
+					errMap: map[string]map[int]error{
+						"createBucket": {
+							0: testError{backoff: time.Second},
+							1: testError{backoff: 2 * time.Second},
+						},
+					},
 				},
 			},
+			want: 2,
+		},
+		{
+			root: &testRoot{
+				bucketMap: make(map[string]map[string]string),
+				errs: &errCont{
+					errMap: map[string]map[int]error{
+						"getUploadURL": {
+							0: testError{retry: true},
+						},
+					},
+				},
+			},
+			want: 1,
 		},
 	}
-	client := &Client{
-		backend: &beRoot{
-			b2i: root,
-		},
+
+	var total int
+	for _, ent := range table {
+		client := &Client{
+			backend: &beRoot{
+				b2i: ent.root,
+			},
+		}
+		b, err := client.Bucket(ctx, "fun")
+		if err != nil {
+			t.Fatal(err)
+		}
+		o := b.Object("foo")
+		w := o.NewWriter(ctx)
+		if _, err := io.Copy(w, bytes.NewBufferString("foo")); err != nil {
+			t.Fatal(err)
+		}
+		if err := w.Close(); err != nil {
+			t.Fatal(err)
+		}
+		total += ent.want
 	}
-	if _, err := client.Bucket(ctx, "fun"); err != nil {
-		t.Errorf("bucket should not err, got %v", err)
-	}
-	if len(calls) != 2 {
-		t.Errorf("wrong number of backoff calls; got %d, want 2", len(calls))
+	if len(calls) != total {
+		t.Errorf("got %d calls, wanted %d", len(calls), total)
 	}
 }
 
@@ -395,56 +449,55 @@ func TestReadWrite(t *testing.T) {
 		}
 	}()
 
-	wsha, err := writeFile(ctx, bucket, smallFileName, 1e6+42, 1e8)
+	sobj, wsha, err := writeFile(ctx, bucket, smallFileName, 1e6+42, 1e8)
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
+
 	defer func() {
-		if err := bucket.DeleteFile(ctx, smallFileName); err != nil {
+		if err := sobj.Delete(ctx); err != nil {
 			t.Error(err)
 		}
 	}()
 
-	if err := readFile(ctx, bucket, smallFileName, wsha, 1e5, 10); err != nil {
+	if err := readFile(ctx, sobj, wsha, 1e5, 10); err != nil {
 		t.Error(err)
 	}
 
-	wshaL, err := writeFile(ctx, bucket, largeFileName, 1e6-1e5, 1e4)
+	lobj, wshaL, err := writeFile(ctx, bucket, largeFileName, 1e6-1e5, 1e4)
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	defer func() {
-		if err := bucket.DeleteFile(ctx, largeFileName); err != nil {
+		if err := lobj.Delete(ctx); err != nil {
 			t.Error(err)
 		}
 	}()
 
-	if err := readFile(ctx, bucket, largeFileName, wshaL, 1e7, 10); err != nil {
+	if err := readFile(ctx, lobj, wshaL, 1e7, 10); err != nil {
 		t.Error(err)
 	}
 }
 
-func writeFile(ctx context.Context, bucket *Bucket, name string, size int64, csize int) (string, error) {
+func writeFile(ctx context.Context, bucket *Bucket, name string, size int64, csize int) (*Object, string, error) {
 	r := io.LimitReader(zReader{}, size)
-	f := bucket.NewWriter(ctx, name)
+	o := bucket.Object(name)
+	f := o.NewWriter(ctx)
 	h := sha1.New()
 	w := io.MultiWriter(f, h)
 	f.ConcurrentUploads = 5
 	f.csize = csize
 	if _, err := io.Copy(w, r); err != nil {
-		return "", err
+		return nil, "", err
 	}
 	if err := f.Close(); err != nil {
-		return "", err
+		return nil, "", err
 	}
-	return fmt.Sprintf("%x", h.Sum(nil)), nil
+	return o, fmt.Sprintf("%x", h.Sum(nil)), nil
 }
 
-func readFile(ctx context.Context, bucket *Bucket, name, sha string, chunk, concur int) error {
-	r, err := bucket.NewReader(ctx, name)
-	if err != nil {
-		return err
-	}
+func readFile(ctx context.Context, obj *Object, sha string, chunk, concur int) error {
+	r := obj.NewReader(ctx)
 	r.ChunkSize = chunk
 	r.ConcurrentDownloads = concur
 	h := sha1.New()

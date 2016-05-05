@@ -19,7 +19,6 @@ package b2
 import (
 	"bytes"
 	"crypto/sha1"
-	"errors"
 	"fmt"
 	"io"
 
@@ -48,6 +47,7 @@ func NewClient(ctx context.Context, account, key string) (*Client, error) {
 // Bucket is a reference to a B2 bucket.
 type Bucket struct {
 	b beBucketInterface
+	r beRootInterface
 }
 
 // Bucket returns the named bucket.  If the bucket already exists (and belongs
@@ -61,6 +61,7 @@ func (c *Client) Bucket(ctx context.Context, name string) (*Bucket, error) {
 		if bucket.name() == name {
 			return &Bucket{
 				b: bucket,
+				r: c.backend,
 			}, nil
 		}
 	}
@@ -68,88 +69,89 @@ func (c *Client) Bucket(ctx context.Context, name string) (*Bucket, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Bucket{b}, err
+	return &Bucket{
+		b: b,
+		r: c.backend,
+	}, err
 }
 
-// Delete removes an empty bucket.
+// Delete removes a bucket.  The bucket must be empty.
 func (b *Bucket) Delete(ctx context.Context) error {
 	return b.b.deleteBucket(ctx)
 }
 
-// NewWriter returns a new writer for the given file.
-func (b *Bucket) NewWriter(ctx context.Context, name string) *Writer {
+// Object represents a B2 object.
+type Object struct {
+	name string
+	f    beFileInterface
+	b    *Bucket
+}
+
+// Object returns a reference to the named object in the bucket.  Hidden
+// objects cannot be referenced in this manner; they can only be found by
+// finding the appropriate reference in ListObjects.
+func (b *Bucket) Object(name string) *Object {
+	return &Object{
+		name: name,
+		b:    b,
+	}
+}
+
+// NewWriter returns a new writer for the given object.  Objects that are
+// overwritten are not deleted, but are "hidden".
+func (o *Object) NewWriter(ctx context.Context) *Writer {
 	bw := &Writer{
-		bucket: b.b,
-		name:   name,
-		Info:   make(map[string]string),
-		chsh:   sha1.New(),
-		cbuf:   &bytes.Buffer{},
-		ctx:    ctx,
+		o:    o,
+		name: o.name,
+		Info: make(map[string]string),
+		chsh: sha1.New(),
+		cbuf: &bytes.Buffer{},
+		ctx:  ctx,
 	}
 	bw.w = io.MultiWriter(bw.chsh, bw.cbuf)
 	return bw
 }
 
-func (b *Bucket) getFile(ctx context.Context, name string) (beFileInterface, error) {
-	files, _, err := b.b.listFileNames(ctx, 1, name)
-	if err != nil {
-		return nil, err
-	}
-	if len(files) != 1 {
-		return nil, errors.New("no files found")
-	}
-	if files[0].name() != name {
-		return nil, fmt.Errorf("not found: %s", name)
-	}
-	return files[0], nil
-}
-
-// NewReader returns a reader for the given file.
-func (b *Bucket) NewReader(ctx context.Context, name string) (*Reader, error) {
-	file, err := b.getFile(ctx, name)
-	if err != nil {
-		return nil, err
-	}
+// NewReader returns a reader for the given object.
+func (o *Object) NewReader(ctx context.Context) *Reader {
 	ctx, cancel := context.WithCancel(ctx)
 	return &Reader{
 		ctx:    ctx,
 		cancel: cancel,
-		bucket: b.b,
-		name:   name,
-		size:   file.size(),
+		o:      o,
+		name:   o.name,
 		chunks: make(map[int]*bytes.Buffer),
-	}, nil
+	}
 }
 
-// DeleteFile removes the named file.  If there were other files of the same
-// name hidden by the named file, they will be revealed.
-func (b *Bucket) DeleteFile(ctx context.Context, name string) error {
-	file, err := b.getFile(ctx, name)
-	if err != nil {
+func (o *Object) ensure(ctx context.Context) error {
+	if o.f == nil {
+		f, err := o.b.getObject(ctx, o.name)
+		if err != nil {
+			return err
+		}
+		o.f = f.f
+	}
+	return nil
+}
+
+// Delete removes the given object.
+func (o *Object) Delete(ctx context.Context) error {
+	if err := o.ensure(ctx); err != nil {
 		return err
 	}
-	return file.deleteFileVersion(ctx)
+	return o.f.deleteFileVersion(ctx)
 }
 
-// Cursor is passed to ListFiles to return subsequent pages.
+// Cursor is passed to ListObjects to return subsequent pages.
 type Cursor struct {
 	name string
 	id   string
 }
 
-// File represents a file object in a B2 bucket.
-type File struct {
-	b beFileInterface
-}
-
-// Delete removes the given file.
-func (f *File) Delete(ctx context.Context) error {
-	return f.b.deleteFileVersion(ctx)
-}
-
-// ListFiles returns files in the bucket.  Cursor may be nil; when passed to a
-// subsequent query, it will continue the file listing.
-func (b *Bucket) ListFiles(ctx context.Context, count int, c *Cursor) ([]*File, *Cursor, error) {
+// ListObjects returns objects in the bucket.  Cursor may be nil; when passed
+// to a subsequent query, it will continue the listing.
+func (b *Bucket) ListObjects(ctx context.Context, count int, c *Cursor) ([]*Object, *Cursor, error) {
 	if c == nil {
 		c = &Cursor{}
 	}
@@ -161,11 +163,32 @@ func (b *Bucket) ListFiles(ctx context.Context, count int, c *Cursor) ([]*File, 
 		name: name,
 		id:   id,
 	}
-	var files []*File
+	var objects []*Object
 	for _, f := range fs {
-		files = append(files, &File{
-			b: f,
+		objects = append(objects, &Object{
+			name: f.name(),
+			f:    f,
+			b:    b,
 		})
 	}
-	return files, next, nil
+	return objects, next, nil
+}
+
+func (b *Bucket) getObject(ctx context.Context, name string) (*Object, error) {
+	fs, _, err := b.b.listFileNames(ctx, 1, name)
+	if err != nil {
+		return nil, err
+	}
+	if len(fs) < 1 {
+		return nil, fmt.Errorf("%s: not found", name)
+	}
+	f := fs[0]
+	if f.name() != name {
+		return nil, fmt.Errorf("%s: not found", name)
+	}
+	return &Object{
+		name: name,
+		f:    f,
+		b:    b,
+	}, nil
 }

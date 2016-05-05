@@ -56,35 +56,40 @@ func TestReadWriteLive(t *testing.T) {
 		}
 	}()
 
-	wsha, err := writeFile(ctx, bucket, smallFileName, 1e6+42, 1e8)
+	t.Logf("writing %q", smallFileName)
+	sobj, wsha, err := writeFile(ctx, bucket, smallFileName, 1e6+42, 1e8)
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
+	t.Logf("successfully wrote file %q", smallFileName)
 
-	if err := readFile(ctx, bucket, smallFileName, wsha, 1e5, 10); err != nil {
-		t.Error(err)
-	}
-
-	wshaL, err := writeFile(ctx, bucket, largeFileName, 5e8-5e7, 1e8)
+	t.Logf("writing %q", largeFileName)
+	lobj, wshaL, err := writeFile(ctx, bucket, largeFileName, 5e8-5e7, 1e8)
 	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("successfully wrote file %q", largeFileName)
+
+	time.Sleep(10 * time.Second) // give backblaze time to catch up
+
+	if err := readFile(ctx, lobj, wshaL, 1e7, 10); err != nil {
 		t.Error(err)
 	}
-
-	if err := readFile(ctx, bucket, largeFileName, wshaL, 1e7, 10); err != nil {
+	if err := readFile(ctx, sobj, wsha, 1e5, 10); err != nil {
 		t.Error(err)
 	}
 
 	var cur *Cursor
 	for {
-		files, c, err := bucket.ListFiles(ctx, 100, cur)
+		objs, c, err := bucket.ListObjects(ctx, 100, cur)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(files) == 0 {
+		if len(objs) == 0 {
 			break
 		}
-		for _, f := range files {
-			if err := f.Delete(ctx); err != nil {
+		for _, o := range objs {
+			if err := o.Delete(ctx); err != nil {
 				t.Error(err)
 			}
 		}

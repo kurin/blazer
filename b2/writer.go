@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"hash"
 	"io"
+	"log"
 	"sync"
 
 	"golang.org/x/net/context"
@@ -58,8 +59,8 @@ type Writer struct {
 	done  sync.Once
 	file  beLargeFileInterface
 
-	bucket beBucketInterface
-	name   string
+	o    *Object
+	name string
 
 	cbuf *bytes.Buffer
 	cidx int
@@ -98,7 +99,25 @@ func (w *Writer) thread() {
 			if !ok {
 				return
 			}
-			if _, err := fc.uploadPart(w.ctx, chunk.buf, chunk.sha1, chunk.size, chunk.id); err != nil {
+			r := bytes.NewReader(chunk.buf.Bytes())
+		redo:
+			if _, err := fc.uploadPart(w.ctx, r, chunk.sha1, chunk.size, chunk.id); err != nil {
+				if w.o.b.r.reupload(err) {
+					log.Printf("b2 writer: %v; retrying", err)
+					f, err := w.file.getUploadPartURL(w.ctx)
+					if err != nil {
+						w.setErr(err)
+						return
+					}
+					fc = f
+					uerr := err
+					if _, err := r.Seek(0, 0); err != nil {
+						log.Print(err)
+						w.setErr(uerr)
+						return
+					}
+					goto redo
+				}
 				w.setErr(err)
 				return
 			}
@@ -135,7 +154,7 @@ func (w *Writer) Write(p []byte) (int, error) {
 }
 
 func (w *Writer) simpleWriteFile() error {
-	ue, err := w.bucket.getUploadURL(w.ctx)
+	ue, err := w.o.b.b.getUploadURL(w.ctx)
 	if err != nil {
 		return err
 	}
@@ -144,9 +163,21 @@ func (w *Writer) simpleWriteFile() error {
 	if ctype == "" {
 		ctype = "application/octet-stream"
 	}
-	if _, err := ue.uploadFile(w.ctx, w.cbuf, w.cbuf.Len(), w.name, ctype, sha1, w.Info); err != nil {
+redo:
+	f, err := ue.uploadFile(w.ctx, w.cbuf, w.cbuf.Len(), w.name, ctype, sha1, w.Info)
+	if err != nil {
+		if w.o.b.r.reupload(err) {
+			log.Printf("b2 writer: %v; retrying", err)
+			u, err := w.o.b.b.getUploadURL(w.ctx)
+			if err != nil {
+				return err
+			}
+			ue = u
+			goto redo
+		}
 		return err
 	}
+	w.o.f = f
 	return nil
 }
 
@@ -157,7 +188,7 @@ func (w *Writer) sendChunk() error {
 		if ctype == "" {
 			ctype = "application/octet-stream"
 		}
-		lf, e := w.bucket.startLargeFile(w.ctx, w.name, ctype, w.Info)
+		lf, e := w.o.b.b.startLargeFile(w.ctx, w.name, ctype, w.Info)
 		if e != nil {
 			err = e
 			return
@@ -204,10 +235,12 @@ func (w *Writer) Close() error {
 		}
 		close(w.ready)
 		w.wg.Wait()
-		if _, err := w.file.finishLargeFile(w.ctx); err != nil {
+		f, err := w.file.finishLargeFile(w.ctx)
+		if err != nil {
 			oerr = err
 			return
 		}
+		w.o.f = f
 	})
 	return oerr
 }

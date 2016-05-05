@@ -20,7 +20,8 @@ func copyFile(ctx context.Context, bucket *b2.Bucket, src, dst, string) error {
 	}
 	defer f.Close()
 
-	w := bucket.NewWriter(ctx, dst)
+	obj := bucket.Object(dst)
+	w := obj.NewWriter(ctx)
 	if _, err := io.Copy(w, f); err != nil {
 		w.Close()
 		return err
@@ -46,7 +47,7 @@ func copyFile(ctx context.Context, bucket *b2.Bucket, writers int, src, dst, str
 	}
 	defer f.Close()
 
-	w := bucket.NewWriter(ctx, dst)
+	w := bucket.Object(dst).NewWriter(ctx)
 	w.ConcurrentUploads = writers
 	if _, err := io.Copy(w, f); err != nil {
 		w.Close()
@@ -65,7 +66,7 @@ Downloading is as simple as uploading:
 
 ```go
 func downloadFile(ctx context.Context, bucket *b2.Bucket, downloads int, src, dst string) error {
-	r, err := bucket.NewReader(ctx, src)
+	r, err := bucket.Object(src).NewReader(ctx)
 	if err != nil {
 		return err
 	}
@@ -81,6 +82,27 @@ func downloadFile(ctx context.Context, bucket *b2.Bucket, downloads int, src, ds
 		return err
 	}
 	return f.Close()
+}
+```
+
+### Listing all objects in a bucket
+
+```go
+func printObjects(ctx context.Context, bucket *b2.Bucket) error {
+	var cur *b2.Cursor
+	for {
+		objs, c, err := bucket.ListObjects(ctx, 1000, cur)
+		if err != nil {
+			return err
+		}
+		if len(objs) == 0 {
+			return nil
+		}
+		for _, obj := range objs {
+			fmt.Println(obj)
+		}
+		cur = c
+	}
 }
 ```
 ====

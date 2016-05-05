@@ -31,6 +31,7 @@ type b2RootInterface interface {
 	transient(error) bool
 	backoff(error) time.Duration
 	reauth(error) bool
+	reupload(error) bool
 	createBucket(context.Context, string, string) (b2BucketInterface, error)
 	listBuckets(context.Context) ([]b2BucketInterface, error)
 }
@@ -99,16 +100,16 @@ type b2FileReader struct {
 	b *base.FileReader
 }
 
-func (r *b2Root) authorizeAccount(ctx context.Context, account, key string) error {
-	b, err := base.AuthorizeAccount(ctx, account, key)
+func (b *b2Root) authorizeAccount(ctx context.Context, account, key string) error {
+	nb, err := base.AuthorizeAccount(ctx, account, key)
 	if err != nil {
 		return err
 	}
-	if r.b == nil {
-		r.b = b
+	if b.b == nil {
+		b.b = nb
 		return nil
 	}
-	r.b.Update(b)
+	b.b.Update(nb)
 	return nil
 }
 
@@ -121,6 +122,10 @@ func (*b2Root) backoff(err error) time.Duration {
 
 func (*b2Root) reauth(err error) bool {
 	return base.Action(err) == base.ReAuthenticate
+}
+
+func (*b2Root) reupload(err error) bool {
+	return base.Action(err) == base.AttemptNewUpload
 }
 
 func (*b2Root) transient(err error) bool {

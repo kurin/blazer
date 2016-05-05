@@ -443,6 +443,7 @@ func (url *URL) UploadFile(ctx context.Context, r io.Reader, size int, name, con
 	}
 	return &File{
 		Name: name,
+		Size: int64(size),
 		id:   b2resp.FileID,
 		b2:   url.b2,
 	}, nil
@@ -482,6 +483,7 @@ type LargeFile struct {
 	b2 *B2
 
 	mu     sync.Mutex
+	size   int64
 	hashes map[int]string
 }
 
@@ -584,6 +586,7 @@ func (fc *FileChunk) UploadPart(ctx context.Context, r io.Reader, sha1 string, s
 	}
 	fc.file.mu.Lock()
 	fc.file.hashes[index] = sha1
+	fc.file.size += int64(size)
 	fc.file.mu.Unlock()
 	return int(size), nil
 }
@@ -618,6 +621,7 @@ func (l *LargeFile) FinishLargeFile(ctx context.Context) (*File, error) {
 	}
 	return &File{
 		Name: b2resp.Name,
+		Size: l.size,
 		id:   b2resp.FileID,
 		b2:   l.b2,
 	}, nil

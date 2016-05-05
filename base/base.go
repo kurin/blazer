@@ -47,16 +47,15 @@ const (
 )
 
 type b2err struct {
-	msg       string
-	method    string
-	transient bool
-	retry     int
-	code      int
+	msg    string
+	method string
+	retry  int
+	code   int
 }
 
 func (e b2err) Error() string {
 	if e.method == "" {
-		return fmt.Sprintf("b2: %s", e.msg)
+		return fmt.Sprintf("b2 error: %s", e.msg)
 	}
 	return fmt.Sprintf("%s: %d: %s", e.method, e.code, e.msg)
 }
@@ -65,9 +64,6 @@ func (e b2err) Error() string {
 func Action(err error) ErrAction {
 	e, ok := err.(b2err)
 	if !ok {
-		return Punt
-	}
-	if !e.transient {
 		return Punt
 	}
 	if e.retry > 0 {
@@ -135,16 +131,11 @@ func mkErr(resp *http.Response) error {
 		}
 		retryAfter = int(r)
 	}
-	var transient bool
-	if retryAfter != 0 {
-		transient = true
-	}
 	return b2err{
-		msg:       msg.Msg,
-		transient: transient,
-		retry:     retryAfter,
-		code:      resp.StatusCode,
-		method:    resp.Request.Header.Get("X-Blazer-Method"),
+		msg:    msg.Msg,
+		retry:  retryAfter,
+		code:   resp.StatusCode,
+		method: resp.Request.Header.Get("X-Blazer-Method"),
 	}
 }
 
@@ -588,7 +579,7 @@ func (fc *FileChunk) UploadPart(ctx context.Context, r io.Reader, sha1 string, s
 	fc.file.hashes[index] = sha1
 	fc.file.size += int64(size)
 	fc.file.mu.Unlock()
-	return int(size), nil
+	return size, nil
 }
 
 type b2FinishLargeFileRequest struct {

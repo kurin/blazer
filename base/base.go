@@ -32,6 +32,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -151,6 +152,51 @@ func Backoff(err error) time.Duration {
 	return time.Duration(e.retry) * time.Second
 }
 
+var (
+	logger *log.Logger = nil
+)
+
+func SetTraceOutput(w io.Writer) {
+	logger = log.New(w, "b2_trace", log.Ldate|log.Ltime|log.Lshortfile)
+}
+
+func logRequest(req *http.Request, args []byte) {
+	if logger == nil {
+		return
+	}
+	var headers []string
+	for k, v := range req.Header {
+		if k == "Authorization" || k == "X-Blazer-Method" {
+			continue
+		}
+		headers = append(headers, fmt.Sprintf("%s: %s", k, strings.Join(v, ",")))
+	}
+	hstr := strings.Join(headers, ";")
+	method := req.Header.Get("X-Blazer-Method")
+	if args != nil {
+		logger.Printf(">> %s uri: %v headers: {%s} args: (%s)", method, req.URL, hstr, string(args))
+		return
+	}
+	logger.Printf(">> %s uri: %v {%s} (no args)", method, req.URL, hstr)
+}
+
+func logResponse(resp *http.Response, reply []byte) {
+	if logger == nil {
+		return
+	}
+	var headers []string
+	for k, v := range resp.Header {
+		headers = append(headers, fmt.Sprintf("%s: %s", k, strings.Join(v, ",")))
+	}
+	hstr := strings.Join(headers, ";")
+	method := resp.Request.Header.Get("X-Blazer-Method")
+	if reply != nil {
+		logger.Printf("<< %s %s {%s} (%s)", method, resp.Status, hstr, string(reply))
+		return
+	}
+	logger.Printf("<< %s %s {%s} (no reply)", method, resp.Status, hstr)
+}
+
 // B2 holds account information for Backblaze.
 type B2 struct {
 	accountID   string
@@ -197,11 +243,13 @@ func makeNetRequest(req *http.Request) <-chan httpReply {
 var FailSomeUploads = false
 
 func makeRequest(ctx context.Context, method, verb, url string, b2req, b2resp interface{}, headers map[string]string, body io.Reader) error {
+	var args []byte
 	if b2req != nil {
 		enc, err := json.Marshal(b2req)
 		if err != nil {
 			return err
 		}
+		args = enc
 		body = bytes.NewBuffer(enc)
 	}
 	req, err := http.NewRequest(verb, url, body)
@@ -217,6 +265,7 @@ func makeRequest(ctx context.Context, method, verb, url string, b2req, b2resp in
 	}
 	cancel := make(chan struct{})
 	req.Cancel = cancel
+	logRequest(req, args)
 	ch := makeNetRequest(req)
 	var reply httpReply
 	select {
@@ -233,12 +282,17 @@ func makeRequest(ctx context.Context, method, verb, url string, b2req, b2resp in
 	if resp.StatusCode != 200 {
 		return mkErr(resp)
 	}
+	var replyArgs []byte
 	if b2resp != nil {
-		decoder := json.NewDecoder(resp.Body)
+		rbuf := &bytes.Buffer{}
+		r := io.TeeReader(resp.Body, rbuf)
+		decoder := json.NewDecoder(r)
 		if err := decoder.Decode(b2resp); err != nil {
 			return err
 		}
+		replyArgs = rbuf.Bytes()
 	}
+	logResponse(resp, replyArgs)
 	return nil
 }
 
@@ -742,6 +796,7 @@ func (b *Bucket) DownloadFileByName(ctx context.Context, name string, offset, si
 	}
 	cancel := make(chan struct{})
 	req.Cancel = cancel
+	logRequest(req, nil)
 	ch := makeNetRequest(req)
 	var reply httpReply
 	select {
@@ -754,6 +809,7 @@ func (b *Bucket) DownloadFileByName(ctx context.Context, name string, offset, si
 		return nil, reply.err
 	}
 	resp := reply.resp
+	logResponse(resp, nil)
 	if resp.StatusCode != 200 && resp.StatusCode != 206 {
 		return nil, mkErr(resp)
 	}

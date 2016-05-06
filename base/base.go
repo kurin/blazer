@@ -37,6 +37,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/context"
@@ -190,11 +191,12 @@ func logResponse(resp *http.Response, reply []byte) {
 	}
 	hstr := strings.Join(headers, ";")
 	method := resp.Request.Header.Get("X-Blazer-Method")
+	id := resp.Request.Header.Get("X-Blazer-Request-ID")
 	if reply != nil {
-		logger.Printf("<< %s %s {%s} (%s)", method, resp.Status, hstr, string(reply))
+		logger.Printf("<< %s (%s) %s {%s} (%s)", method, id, resp.Status, hstr, string(reply))
 		return
 	}
-	logger.Printf("<< %s %s {%s} (no reply)", method, resp.Status, hstr)
+	logger.Printf("<< %s (%s) %s {%s} (no reply)", method, id, resp.Status, hstr)
 }
 
 // B2 holds account information for Backblaze.
@@ -242,6 +244,8 @@ func makeNetRequest(req *http.Request) <-chan httpReply {
 // intended to be used for integration testing.
 var FailSomeUploads = false
 
+var reqID int64
+
 func makeRequest(ctx context.Context, method, verb, url string, b2req, b2resp interface{}, headers map[string]string, body io.Reader) error {
 	var args []byte
 	if b2req != nil {
@@ -259,6 +263,7 @@ func makeRequest(ctx context.Context, method, verb, url string, b2req, b2resp in
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
+	req.Header.Set("X-Blazer-Request-ID", fmt.Sprintf("%d", atomic.AddInt64(&reqID, 1)))
 	req.Header.Set("X-Blazer-Method", method)
 	if FailSomeUploads {
 		req.Header.Set("X-Bz-Test-Mode", "fail_some_uploads")
@@ -280,6 +285,7 @@ func makeRequest(ctx context.Context, method, verb, url string, b2req, b2resp in
 	resp := reply.resp
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
+		logResponse(resp, nil)
 		return mkErr(resp)
 	}
 	var replyArgs []byte
@@ -789,6 +795,7 @@ func (b *Bucket) DownloadFileByName(ctx context.Context, name string, offset, si
 		return nil, err
 	}
 	req.Header.Set("Authorization", b.b2.authToken)
+	req.Header.Set("X-Blazer-Request-ID", fmt.Sprintf("%d", atomic.AddInt64(&reqID, 1)))
 	req.Header.Set("X-Blazer-Method", "b2_download_file_by_name")
 	rng := mkRange(offset, size)
 	if rng != "" {

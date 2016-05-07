@@ -17,8 +17,9 @@ package b2
 import (
 	"bytes"
 	"io"
-	"log"
 	"sync"
+
+	"github.com/golang/glog"
 
 	"golang.org/x/net/context"
 )
@@ -112,13 +113,13 @@ func (r *Reader) thread() {
 			if i < size || err == io.ErrUnexpectedEOF {
 				tries++
 				if tries > 15 {
-					log.Printf("b2 reader %d (%s: %d-%d of %d): giving up", chunkID, r.name, offset, offset+size, r.size)
+					glog.Warningf("b2 reader %d (%s: %d-%d of %d): giving up", chunkID, r.name, offset, offset+size, r.size)
 					r.setErr(io.ErrUnexpectedEOF)
 					r.rcond.Broadcast()
 					return
 				}
 				// Probably the network connection was closed early.  Retry.
-				log.Printf("b2 reader %d: got %dB of %dB; retrying", chunkID, i, size)
+				glog.Infof("b2 reader %d: got %dB of %dB; retrying", chunkID, i, size)
 				buf.Reset()
 				goto redo
 			}

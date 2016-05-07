@@ -32,13 +32,14 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/golang/glog"
 
 	"golang.org/x/net/context"
 )
@@ -153,16 +154,8 @@ func Backoff(err error) time.Duration {
 	return time.Duration(e.retry) * time.Second
 }
 
-var (
-	logger *log.Logger = nil
-)
-
-func SetTraceOutput(w io.Writer) {
-	logger = log.New(w, "b2_trace", log.Ldate|log.Ltime|log.Lshortfile)
-}
-
 func logRequest(req *http.Request, args []byte) {
-	if logger == nil {
+	if !glog.V(2) {
 		return
 	}
 	var headers []string
@@ -175,14 +168,14 @@ func logRequest(req *http.Request, args []byte) {
 	hstr := strings.Join(headers, ";")
 	method := req.Header.Get("X-Blazer-Method")
 	if args != nil {
-		logger.Printf(">> %s uri: %v headers: {%s} args: (%s)", method, req.URL, hstr, string(args))
+		glog.V(2).Infof(">> %s uri: %v headers: {%s} args: (%s)", method, req.URL, hstr, string(args))
 		return
 	}
-	logger.Printf(">> %s uri: %v {%s} (no args)", method, req.URL, hstr)
+	glog.V(2).Infof(">> %s uri: %v {%s} (no args)", method, req.URL, hstr)
 }
 
 func logResponse(resp *http.Response, reply []byte) {
-	if logger == nil {
+	if !glog.V(2) {
 		return
 	}
 	var headers []string
@@ -193,10 +186,10 @@ func logResponse(resp *http.Response, reply []byte) {
 	method := resp.Request.Header.Get("X-Blazer-Method")
 	id := resp.Request.Header.Get("X-Blazer-Request-ID")
 	if reply != nil {
-		logger.Printf("<< %s (%s) %s {%s} (%s)", method, id, resp.Status, hstr, string(reply))
+		glog.V(2).Infof("<< %s (%s) %s {%s} (%s)", method, id, resp.Status, hstr, string(reply))
 		return
 	}
-	logger.Printf("<< %s (%s) %s {%s} (no reply)", method, id, resp.Status, hstr)
+	glog.V(2).Infof("<< %s (%s) %s {%s} (no reply)", method, id, resp.Status, hstr)
 }
 
 // B2 holds account information for Backblaze.

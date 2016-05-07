@@ -20,8 +20,9 @@ import (
 	"fmt"
 	"hash"
 	"io"
-	"log"
 	"sync"
+
+	"github.com/golang/glog"
 
 	"golang.org/x/net/context"
 )
@@ -101,9 +102,10 @@ func (w *Writer) thread() {
 			}
 			r := bytes.NewReader(chunk.buf.Bytes())
 		redo:
-			if _, err := fc.uploadPart(w.ctx, r, chunk.sha1, chunk.size, chunk.id); err != nil {
+			n, err := fc.uploadPart(w.ctx, r, chunk.sha1, chunk.size, chunk.id)
+			if n != chunk.size || err != nil {
 				if w.o.b.r.reupload(err) {
-					log.Printf("b2 writer: %v; retrying", err)
+					glog.Infof("b2 writer: wrote %d of %d: error: %v; retrying", n, chunk.size, err)
 					f, err := w.file.getUploadPartURL(w.ctx)
 					if err != nil {
 						w.setErr(err)
@@ -162,7 +164,7 @@ redo:
 	f, err := ue.uploadFile(w.ctx, r, int(r.Size()), w.name, ctype, sha1, w.Info)
 	if err != nil {
 		if w.o.b.r.reupload(err) {
-			log.Printf("b2 writer: %v; retrying", err)
+			glog.Infof("b2 writer: %v; retrying", err)
 			u, err := w.o.b.b.getUploadURL(w.ctx)
 			if err != nil {
 				return err

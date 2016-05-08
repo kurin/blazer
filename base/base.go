@@ -514,7 +514,7 @@ type startLargeFileRequest struct {
 	BucketID    string            `json:"bucketId"`
 	Name        string            `json:"fileName"`
 	ContentType string            `json:"contentType"`
-	Info        map[string]string `json:"fileInfo"`
+	Info        map[string]string `json:"fileInfo,omitempty"`
 }
 
 type startLargeFileResponse struct {

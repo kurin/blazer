@@ -17,7 +17,6 @@ package b2
 import (
 	"bytes"
 	"crypto/sha1"
-	"errors"
 	"fmt"
 	"hash"
 	"io"
@@ -30,11 +29,10 @@ import (
 )
 
 type chunk struct {
-	id      int
-	attempt int
-	size    int
-	sha1    string
-	buf     *bytes.Buffer
+	id   int
+	size int
+	sha1 string
+	buf  *bytes.Buffer
 }
 
 // Writer writes data into Backblaze.  It automatically switches to the large
@@ -107,14 +105,7 @@ func (w *Writer) thread() {
 			}
 			glog.V(2).Infof("thread %d handling chunk %d", id, chunk.id)
 			r := bytes.NewReader(chunk.buf.Bytes())
-			var attempt int
 		redo:
-			attempt++
-			if attempt > 15 {
-				glog.Errorf("thread %d tried chunk %d %d times, failing", id, chunk.id, attempt)
-				w.setErr(errors.New("too many upload attempts"))
-				return
-			}
 			n, err := fc.uploadPart(w.ctx, r, chunk.sha1, chunk.size, chunk.id)
 			if n != chunk.size || err != nil {
 				if w.o.b.r.reupload(err) {

@@ -17,10 +17,12 @@ package b2
 import (
 	"bytes"
 	"crypto/sha1"
+	"errors"
 	"fmt"
 	"hash"
 	"io"
 	"sync"
+	"sync/atomic"
 
 	"github.com/golang/glog"
 
@@ -86,8 +88,11 @@ func (w *Writer) getErr() error {
 	return w.err
 }
 
+var gid int32
+
 func (w *Writer) thread() {
 	go func() {
+		id := atomic.AddInt32(&gid, 1)
 		fc, err := w.file.getUploadPartURL(w.ctx)
 		if err != nil {
 			w.setErr(err)
@@ -100,8 +105,16 @@ func (w *Writer) thread() {
 			if !ok {
 				return
 			}
+			glog.V(2).Infof("thread %d handling chunk %d", id, chunk.id)
 			r := bytes.NewReader(chunk.buf.Bytes())
+			var attempt int
 		redo:
+			attempt++
+			if attempt > 15 {
+				glog.Errorf("thread %d tried chunk %d %d times, failing", id, chunk.id, attempt)
+				w.setErr(errors.New("too many upload attempts"))
+				return
+			}
 			n, err := fc.uploadPart(w.ctx, r, chunk.sha1, chunk.size, chunk.id)
 			if n != chunk.size || err != nil {
 				if w.o.b.r.reupload(err) {

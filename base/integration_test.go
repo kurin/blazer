@@ -109,7 +109,7 @@ func TestStorage(t *testing.T) {
 	defer func() {
 		// b2_delete_file_version
 		if err := file.DeleteFileVersion(ctx); err != nil {
-			t.Fatal(err)
+			t.Error(err)
 		}
 	}()
 
@@ -185,5 +185,25 @@ func TestStorage(t *testing.T) {
 	}
 	if lbuf.Len() != fr.ContentLength {
 		t.Errorf("small file retreived lengths don't match: got %d, want %d", lbuf.Len(), fr.ContentLength)
+	}
+
+	// b2_hide_file
+	hf, err := bucket.HideFile(ctx, smallFileName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := hf.DeleteFileVersion(ctx); err != nil {
+			t.Error(err)
+		}
+	}()
+
+	// b2_list_file_versions
+	files, _, _, err = bucket.ListFileVersions(ctx, 100, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 3 {
+		t.Errorf("expected 3 files, got %d: %v", len(files), files)
 	}
 }

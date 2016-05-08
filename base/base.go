@@ -19,7 +19,6 @@
 //
 // b2_download_file_by_id
 // b2_get_file_info
-// b2_hide_file
 // b2_list_parts
 // b2_list_unfinished_large_files
 // b2_update_bucket
@@ -121,6 +120,7 @@ func mkErr(resp *http.Response) error {
 	if err != nil {
 		return err
 	}
+	logResponse(resp, data)
 	msg := &errMsg{}
 	if err := json.Unmarshal(data, msg); err != nil {
 		return err
@@ -278,7 +278,6 @@ func makeRequest(ctx context.Context, method, verb, url string, b2req, b2resp in
 	resp := reply.resp
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		logResponse(resp, nil)
 		return mkErr(resp)
 	}
 	var replyArgs []byte
@@ -831,5 +830,35 @@ func (b *Bucket) DownloadFileByName(ctx context.Context, name string, offset, si
 		ContentType:   reply.resp.Header.Get("Content-Type"),
 		ContentLength: int(clen),
 		Info:          info,
+	}, nil
+}
+
+type b2HideFileRequest struct {
+	BucketID string `json:"bucketId"`
+	File     string `json:"fileName"`
+}
+
+type b2HideFileResponse struct {
+	ID string `json:"fileId"`
+}
+
+// HideFile wraps b2_hide_file.
+func (b *Bucket) HideFile(ctx context.Context, name string) (*File, error) {
+	b2req := &b2HideFileRequest{
+		BucketID: b.id,
+		File:     name,
+	}
+	b2resp := &b2HideFileResponse{}
+	headers := map[string]string{
+		"Authorization": b.b2.authToken,
+	}
+	if err := makeRequest(ctx, "b2_hide_file", "POST", b.b2.apiURI+apiV1+"b2_hide_file", b2req, b2resp, headers, nil); err != nil {
+		return nil, err
+	}
+	return &File{
+		Status: "hide",
+		Name:   name,
+		b2:     b.b2,
+		id:     b2resp.ID,
 	}, nil
 }

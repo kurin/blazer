@@ -309,22 +309,19 @@ func (b *beBucket) downloadFileByName(ctx context.Context, name string, offset, 
 func (b *beURL) uploadFile(ctx context.Context, r io.ReadSeeker, size int, name, ct, sha1 string, info map[string]string) (beFileInterface, error) {
 	var file beFileInterface
 	f := func() error {
-		g := func() error {
-			if _, err := r.Seek(0, 0); err != nil {
-				return err
-			}
-			f, err := b.b2url.uploadFile(ctx, r, size, name, ct, sha1, info)
-			if err != nil {
-				return err
-			}
-			file = &beFile{
-				b2file: f,
-				url:    b,
-				ri:     b.ri,
-			}
-			return nil
+		if _, err := r.Seek(0, 0); err != nil {
+			return err
 		}
-		return withReauth(ctx, b.ri, g)
+		f, err := b.b2url.uploadFile(ctx, r, size, name, ct, sha1, info)
+		if err != nil {
+			return err
+		}
+		file = &beFile{
+			b2file: f,
+			url:    b,
+			ri:     b.ri,
+		}
+		return nil
 	}
 	if err := withBackoff(ctx, b.ri, f); err != nil {
 		return nil, err
@@ -405,20 +402,19 @@ func (b *beFileChunk) reload(ctx context.Context) error {
 }
 
 func (b *beFileChunk) uploadPart(ctx context.Context, r io.ReadSeeker, sha1 string, size, index int) (int, error) {
+	// no re-auth; pass it back up to the caller so they can get an new upload URI and token
+	// TODO: we should handle that here probably
 	var i int
 	f := func() error {
-		g := func() error {
-			if _, err := r.Seek(0, 0); err != nil {
-				return err
-			}
-			j, err := b.b2fileChunk.uploadPart(ctx, r, sha1, size, index)
-			if err != nil {
-				return err
-			}
-			i = j
-			return nil
+		if _, err := r.Seek(0, 0); err != nil {
+			return err
 		}
-		return withReauth(ctx, b.ri, g)
+		j, err := b.b2fileChunk.uploadPart(ctx, r, sha1, size, index)
+		if err != nil {
+			return err
+		}
+		i = j
+		return nil
 	}
 	if err := withBackoff(ctx, b.ri, f); err != nil {
 		return 0, err

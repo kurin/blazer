@@ -13,7 +13,7 @@ import "github.com/kurin/blazer/b2"
 ### Copying a file into B2
 
 ```go
-func copyFile(ctx context.Context, bucket *b2.Bucket, src, dst, string) error {
+func copyFile(ctx context.Context, bucket *b2.Bucket, src, dst string) error {
 	f, err := file.Open(src)
 	if err != nil {
 		return err

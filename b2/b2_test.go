@@ -156,6 +156,7 @@ func (t *testBucket) startLargeFile(_ context.Context, name, _ string, _ map[str
 		name:  name,
 		parts: make(map[int][]byte),
 		files: t.files,
+		errs:  t.errs,
 	}, nil
 }
 
@@ -219,6 +220,7 @@ type testLargeFile struct {
 	mux   sync.Mutex
 	parts map[int][]byte
 	files map[string]string
+	errs  *errCont
 }
 
 func (t *testLargeFile) finishLargeFile(context.Context) (b2FileInterface, error) {
@@ -238,25 +240,31 @@ func (t *testLargeFile) getUploadPartURL(context.Context) (b2FileChunkInterface,
 	return &testFileChunk{
 		parts: t.parts,
 		mux:   &t.mux,
+		errs:  t.errs,
 	}, nil
 }
 
 type testFileChunk struct {
 	mux   *sync.Mutex
 	parts map[int][]byte
+	errs  *errCont
 }
 
 func (t *testFileChunk) reload(context.Context) error { return nil }
 
 func (t *testFileChunk) uploadPart(_ context.Context, r io.Reader, _ string, _, index int) (int, error) {
+	if err := t.errs.getError("uploadPart"); err != nil {
+		return 0, err
+	}
 	buf := &bytes.Buffer{}
-	if i, err := io.Copy(buf, r); err != nil {
+	i, err := io.Copy(buf, r)
+	if err != nil {
 		return int(i), err
 	}
 	t.mux.Lock()
 	t.parts[index] = buf.Bytes()
 	t.mux.Unlock()
-	return 0, nil
+	return int(i), nil
 }
 
 type testFile struct {
@@ -476,6 +484,45 @@ func TestReadWrite(t *testing.T) {
 
 	if err := readFile(ctx, lobj, wshaL, 1e7, 10); err != nil {
 		t.Error(err)
+	}
+}
+
+func TestWriterReturnsError(t *testing.T) {
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	client := &Client{
+		backend: &beRoot{
+			b2i: &testRoot{
+				bucketMap: make(map[string]map[string]string),
+				errs: &errCont{
+					errMap: map[string]map[int]error{
+						"uploadPart": {
+							0: testError{},
+							1: testError{},
+							2: testError{},
+							3: testError{},
+							4: testError{},
+							5: testError{},
+							6: testError{},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	bucket, err := client.Bucket(ctx, bucketName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := bucket.Object("test").NewWriter(ctx)
+	r := io.LimitReader(zReader{}, 1e7)
+	w.csize = 1e4
+	w.ConcurrentUploads = 4
+	if _, err := io.Copy(w, r); err == nil {
+		t.Fatalf("io.Copy: should have returned an error")
 	}
 }
 

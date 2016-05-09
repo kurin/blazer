@@ -74,6 +74,9 @@ type Writer struct {
 }
 
 func (w *Writer) setErr(err error) {
+	if err == nil {
+		return
+	}
 	w.emux.Lock()
 	defer w.emux.Unlock()
 	if w.err == nil {

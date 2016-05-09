@@ -196,6 +196,8 @@ func (t *testBucket) downloadFileByName(_ context.Context, name string, offset, 
 	}, nil
 }
 
+func (t *testBucket) hideFile(context.Context, string) (b2FileInterface, error) { return nil, nil }
+
 type testURL struct {
 	files map[string]string
 }

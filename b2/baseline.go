@@ -44,6 +44,7 @@ type b2BucketInterface interface {
 	listFileNames(context.Context, int, string) ([]b2FileInterface, string, error)
 	listFileVersions(context.Context, int, string, string) ([]b2FileInterface, string, string, error)
 	downloadFileByName(context.Context, string, int64, int64) (b2FileReaderInterface, error)
+	hideFile(context.Context, string) (b2FileInterface, error)
 }
 
 type b2URLInterface interface {
@@ -206,6 +207,14 @@ func (b *b2Bucket) downloadFileByName(ctx context.Context, name string, offset, 
 		return nil, err
 	}
 	return &b2FileReader{fr}, nil
+}
+
+func (b *b2Bucket) hideFile(ctx context.Context, name string) (b2FileInterface, error) {
+	f, err := b.b.HideFile(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	return &b2File{f}, nil
 }
 
 func (b *b2URL) uploadFile(ctx context.Context, r io.Reader, size int, name, contentType, sha1 string, info map[string]string) (b2FileInterface, error) {

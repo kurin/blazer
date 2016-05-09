@@ -52,13 +52,14 @@ type Writer struct {
 	// Info is a map of up to ten key/value pairs that are stored with the file.
 	Info map[string]string
 
-	csize int
-	ctx   context.Context
-	ready chan chunk
-	wg    sync.WaitGroup
-	once  sync.Once
-	done  sync.Once
-	file  beLargeFileInterface
+	csize  int
+	ctx    context.Context
+	cancel context.CancelFunc
+	ready  chan chunk
+	wg     sync.WaitGroup
+	once   sync.Once
+	done   sync.Once
+	file   beLargeFileInterface
 
 	o    *Object
 	name string
@@ -76,7 +77,9 @@ func (w *Writer) setErr(err error) {
 	w.emux.Lock()
 	defer w.emux.Unlock()
 	if w.err == nil {
+		glog.Errorf("error writing %s: %v", w.name, err)
 		w.err = err
+		w.cancel()
 	}
 }
 
@@ -121,6 +124,7 @@ func (w *Writer) thread() {
 				w.setErr(err)
 				return
 			}
+			glog.V(2).Infof("chunk %d handled", chunk.id)
 		}
 	}()
 }
@@ -144,7 +148,7 @@ func (w *Writer) Write(p []byte) (int, error) {
 	}
 	if err := w.sendChunk(); err != nil {
 		w.setErr(err)
-		return i, err
+		return i, w.getErr()
 	}
 	k, err := w.Write(p[left:])
 	if err != nil {
@@ -206,11 +210,15 @@ func (w *Writer) sendChunk() error {
 	if err != nil {
 		return err
 	}
-	w.ready <- chunk{
+	select {
+	case w.ready <- chunk{
 		id:   w.cidx + 1,
 		size: w.cbuf.Len(),
 		sha1: fmt.Sprintf("%x", w.chsh.Sum(nil)),
 		buf:  w.cbuf,
+	}:
+	case <-w.ctx.Done():
+		return w.ctx.Err()
 	}
 	w.cidx++
 	w.chsh = sha1.New()
@@ -222,15 +230,14 @@ func (w *Writer) sendChunk() error {
 // Close satisfies the io.Closer interface.  It is critical to check the return
 // value of Close on all writers.
 func (w *Writer) Close() error {
-	var oerr error
 	w.done.Do(func() {
 		if w.cidx == 0 {
-			oerr = w.simpleWriteFile()
+			w.setErr(w.simpleWriteFile())
 			return
 		}
 		if w.cbuf.Len() > 0 {
 			if err := w.sendChunk(); err != nil {
-				oerr = err
+				w.setErr(err)
 				return
 			}
 		}
@@ -238,10 +245,10 @@ func (w *Writer) Close() error {
 		w.wg.Wait()
 		f, err := w.file.finishLargeFile(w.ctx)
 		if err != nil {
-			oerr = err
+			w.setErr(err)
 			return
 		}
 		w.o.f = f
 	})
-	return oerr
+	return w.getErr()
 }

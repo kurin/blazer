@@ -100,13 +100,15 @@ func (b *Bucket) Object(name string) *Object {
 // NewWriter returns a new writer for the given object.  Objects that are
 // overwritten are not deleted, but are "hidden".
 func (o *Object) NewWriter(ctx context.Context) *Writer {
+	ctx, cancel := context.WithCancel(ctx)
 	bw := &Writer{
-		o:    o,
-		name: o.name,
-		Info: make(map[string]string),
-		chsh: sha1.New(),
-		cbuf: &bytes.Buffer{},
-		ctx:  ctx,
+		o:      o,
+		name:   o.name,
+		Info:   make(map[string]string),
+		chsh:   sha1.New(),
+		cbuf:   &bytes.Buffer{},
+		ctx:    ctx,
+		cancel: cancel,
 	}
 	bw.w = io.MultiWriter(bw.chsh, bw.cbuf)
 	return bw

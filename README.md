@@ -40,7 +40,7 @@ chunks.
 Uploading a large file with multiple HTTP connections is simple:
 
 ```go
-func copyFile(ctx context.Context, bucket *b2.Bucket, writers int, src, dst, string) error {
+func copyFile(ctx context.Context, bucket *b2.Bucket, writers int, src, dst string) error {
 	f, err := file.Open(src)
 	if err != nil {
 		return err

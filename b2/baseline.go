@@ -129,7 +129,7 @@ func (*b2Root) reupload(err error) bool {
 }
 
 func (*b2Root) transient(err error) bool {
-	return base.Action(err) != base.Punt
+	return base.Action(err) != base.Punt && base.Action(err) != base.ReAuthenticate
 }
 
 func (b *b2Root) createBucket(ctx context.Context, name, btype string) (b2BucketInterface, error) {

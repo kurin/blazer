@@ -273,7 +273,11 @@ func makeRequest(ctx context.Context, method, verb, url string, b2req, b2resp in
 		return ctx.Err()
 	}
 	if reply.err != nil {
-		return reply.err
+		// Connection errors are retryable.
+		return b2err{
+			msg:   reply.err.Error(),
+			retry: 1,
+		}
 	}
 	resp := reply.resp
 	defer resp.Body.Close()

@@ -182,7 +182,7 @@ func logResponse(resp *http.Response, reply []byte) {
 	for k, v := range resp.Header {
 		headers = append(headers, fmt.Sprintf("%s: %s", k, strings.Join(v, ",")))
 	}
-	hstr := strings.Join(headers, ";")
+	hstr := strings.Join(headers, "; ")
 	method := resp.Request.Header.Get("X-Blazer-Method")
 	id := resp.Request.Header.Get("X-Blazer-Request-ID")
 	if reply != nil {
@@ -289,6 +289,11 @@ func makeRequest(ctx context.Context, method, verb, url string, b2req, b2resp in
 			return err
 		}
 		replyArgs = rbuf.Bytes()
+	} else {
+		replyArgs, err = ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return err
+		}
 	}
 	logResponse(resp, replyArgs)
 	return nil

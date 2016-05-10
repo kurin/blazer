@@ -192,6 +192,10 @@ func logResponse(resp *http.Response, reply []byte) {
 	glog.V(2).Infof("<< %s (%s) %s {%s} (no reply)", method, id, resp.Status, hstr)
 }
 
+func millitime(t int64) time.Time {
+	return time.Unix(t/1000, t%1000*1e6)
+}
+
 // B2 holds account information for Backblaze.
 type B2 struct {
 	accountID   string
@@ -466,15 +470,17 @@ func (b *Bucket) GetUploadURL(ctx context.Context) (*URL, error) {
 
 // File represents a B2 file.
 type File struct {
-	Name   string
-	Size   int64
-	Status string
-	id     string
-	b2     *B2
+	Name      string
+	Size      int64
+	Status    string
+	Timestamp time.Time
+	id        string
+	b2        *B2
 }
 
 type b2UploadFileResponse struct {
-	FileID string `json:"fileId"`
+	FileID    string `json:"fileId"`
+	Timestamp int64  `json:"uploadTimestamp"`
 }
 
 // UploadFile wraps b2_upload_file.
@@ -494,10 +500,11 @@ func (url *URL) UploadFile(ctx context.Context, r io.Reader, size int, name, con
 		return nil, err
 	}
 	return &File{
-		Name: name,
-		Size: int64(size),
-		id:   b2resp.FileID,
-		b2:   url.b2,
+		Name:      name,
+		Size:      int64(size),
+		Timestamp: millitime(b2resp.Timestamp),
+		id:        b2resp.FileID,
+		b2:        url.b2,
 	}, nil
 }
 
@@ -649,8 +656,9 @@ type b2FinishLargeFileRequest struct {
 }
 
 type b2FinishLargeFileResponse struct {
-	Name   string `json:"fileName"`
-	FileID string `json:"fileId"`
+	Name      string `json:"fileName"`
+	FileID    string `json:"fileId"`
+	Timestamp int64  `json:"uploadTimestamp"`
 }
 
 // FinishLargeFile wraps b2_finish_large_file.
@@ -672,10 +680,11 @@ func (l *LargeFile) FinishLargeFile(ctx context.Context) (*File, error) {
 		return nil, err
 	}
 	return &File{
-		Name: b2resp.Name,
-		Size: l.size,
-		id:   b2resp.FileID,
-		b2:   l.b2,
+		Name:      b2resp.Name,
+		Size:      l.size,
+		Timestamp: millitime(b2resp.Timestamp),
+		id:        b2resp.FileID,
+		b2:        l.b2,
 	}, nil
 }
 
@@ -688,10 +697,11 @@ type b2ListFileNamesRequest struct {
 type b2ListFileNamesResponse struct {
 	Continuation string `json:"nextFileName"`
 	Files        []struct {
-		FileID string `json:"fileId"`
-		Name   string `json:"fileName"`
-		Size   int64  `json:"size"`
-		Action string `json:"action"`
+		FileID    string `json:"fileId"`
+		Name      string `json:"fileName"`
+		Size      int64  `json:"size"`
+		Action    string `json:"action"`
+		Timestamp int64  `json:"uploadTimestamp"`
 	} `json:"files"`
 }
 
@@ -713,11 +723,12 @@ func (b *Bucket) ListFileNames(ctx context.Context, count int, continuation stri
 	var files []*File
 	for _, f := range b2resp.Files {
 		files = append(files, &File{
-			Name:   f.Name,
-			Size:   f.Size,
-			Status: f.Action,
-			id:     f.FileID,
-			b2:     b.b2,
+			Name:      f.Name,
+			Size:      f.Size,
+			Status:    f.Action,
+			Timestamp: millitime(f.Timestamp),
+			id:        f.FileID,
+			b2:        b.b2,
 		})
 	}
 	return files, cont, nil
@@ -734,10 +745,11 @@ type b2ListFileVersionsResponse struct {
 	NextName string `json:"nextFileName"`
 	NextID   string `json:"nextFileId"`
 	Files    []struct {
-		FileID string `json:"fileId"`
-		Name   string `json:"fileName"`
-		Size   int64  `json:"size"`
-		Action string `json:"action"`
+		FileID    string `json:"fileId"`
+		Name      string `json:"fileName"`
+		Size      int64  `json:"size"`
+		Action    string `json:"action"`
+		Timestamp int64  `json:"uploadTimestamp"`
 	} `json:"files"`
 }
 
@@ -759,11 +771,12 @@ func (b *Bucket) ListFileVersions(ctx context.Context, count int, startName, sta
 	var files []*File
 	for _, f := range b2resp.Files {
 		files = append(files, &File{
-			Name:   f.Name,
-			Size:   f.Size,
-			Status: f.Action,
-			id:     f.FileID,
-			b2:     b.b2,
+			Name:      f.Name,
+			Size:      f.Size,
+			Status:    f.Action,
+			Timestamp: millitime(f.Timestamp),
+			id:        f.FileID,
+			b2:        b.b2,
 		})
 	}
 	return files, b2resp.NextName, b2resp.NextID, nil
@@ -848,7 +861,8 @@ type b2HideFileRequest struct {
 }
 
 type b2HideFileResponse struct {
-	ID string `json:"fileId"`
+	ID        string `json:"fileId"`
+	Timestamp int64  `json:"uploadTimestamp"`
 }
 
 // HideFile wraps b2_hide_file.
@@ -865,9 +879,10 @@ func (b *Bucket) HideFile(ctx context.Context, name string) (*File, error) {
 		return nil, err
 	}
 	return &File{
-		Status: "hide",
-		Name:   name,
-		b2:     b.b2,
-		id:     b2resp.ID,
+		Status:    "hide",
+		Name:      name,
+		Timestamp: millitime(b2resp.Timestamp),
+		b2:        b.b2,
+		id:        b2resp.ID,
 	}, nil
 }

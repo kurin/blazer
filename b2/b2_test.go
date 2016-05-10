@@ -272,11 +272,16 @@ func (t *testFileChunk) uploadPart(_ context.Context, r io.Reader, _ string, _, 
 type testFile struct {
 	n     string
 	s     int64
+	t     time.Time
+	a     string
 	files map[string]string
 }
 
-func (t *testFile) name() string { return t.n }
-func (t *testFile) size() int64  { return t.s }
+func (t *testFile) name() string         { return t.n }
+func (t *testFile) size() int64          { return t.s }
+func (t *testFile) timestamp() time.Time { return t.t }
+func (t *testFile) status() string       { return t.a }
+
 func (t *testFile) deleteFileVersion(context.Context) error {
 	delete(t.files, t.n)
 	return nil

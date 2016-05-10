@@ -67,6 +67,8 @@ type beURL struct {
 type beFileInterface interface {
 	name() string
 	size() int64
+	timestamp() time.Time
+	status() string
 	deleteFileVersion(context.Context) error
 }
 
@@ -345,6 +347,14 @@ func (b *beFile) size() int64 {
 
 func (b *beFile) name() string {
 	return b.b2file.name()
+}
+
+func (b *beFile) timestamp() time.Time {
+	return b.b2file.timestamp()
+}
+
+func (b *beFile) status() string {
+	return b.b2file.status()
 }
 
 func (b *beLargeFile) getUploadPartURL(ctx context.Context) (beFileChunkInterface, error) {

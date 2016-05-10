@@ -55,6 +55,8 @@ type b2URLInterface interface {
 type b2FileInterface interface {
 	name() string
 	size() int64
+	timestamp() time.Time
+	status() string
 	deleteFileVersion(context.Context) error
 }
 
@@ -239,6 +241,14 @@ func (b *b2File) name() string {
 
 func (b *b2File) size() int64 {
 	return b.b.Size
+}
+
+func (b *b2File) timestamp() time.Time {
+	return b.b.Timestamp
+}
+
+func (b *b2File) status() string {
+	return b.b.Status
 }
 
 func (b *b2LargeFile) finishLargeFile(ctx context.Context) (b2FileInterface, error) {

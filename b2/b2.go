@@ -151,8 +151,12 @@ type Cursor struct {
 	id   string
 }
 
-// ListObjects returns objects in the bucket.  Cursor may be nil; when passed
-// to a subsequent query, it will continue the listing.
+// ListObjects returns all objects in the bucket, including multiple versions
+// of the same object.  Cursor may be nil; when passed to a subsequent query,
+// it will continue the listing.
+//
+// ListObjects will return io.EOF when there are no objects left in the bucket,
+// however it may do so concurrently with the last objects.
 func (b *Bucket) ListObjects(ctx context.Context, count int, c *Cursor) ([]*Object, *Cursor, error) {
 	if c == nil {
 		c = &Cursor{}
@@ -161,9 +165,12 @@ func (b *Bucket) ListObjects(ctx context.Context, count int, c *Cursor) ([]*Obje
 	if err != nil {
 		return nil, nil, err
 	}
-	next := &Cursor{
-		name: name,
-		id:   id,
+	var next *Cursor
+	if name != "" && id != "" {
+		next = &Cursor{
+			name: name,
+			id:   id,
+		}
 	}
 	var objects []*Object
 	for _, f := range fs {
@@ -173,7 +180,71 @@ func (b *Bucket) ListObjects(ctx context.Context, count int, c *Cursor) ([]*Obje
 			b:    b,
 		})
 	}
-	return objects, next, nil
+	var rtnErr error
+	if len(objects) == 0 || next == nil {
+		rtnErr = io.EOF
+	}
+	return objects, next, rtnErr
+}
+
+// ListCurrentObjects is similar to ListObjects, except that it returns only
+// current, unhidden objects in the bucket.
+func (b *Bucket) ListCurrentObjects(ctx context.Context, count int, c *Cursor) ([]*Object, *Cursor, error) {
+	if c == nil {
+		c = &Cursor{}
+	}
+	fs, name, err := b.b.listFileNames(ctx, count, c.name)
+	if err != nil {
+		return nil, nil, err
+	}
+	var next *Cursor
+	if name != "" {
+		next = &Cursor{
+			name: name,
+		}
+	}
+	var objects []*Object
+	for _, f := range fs {
+		objects = append(objects, &Object{
+			name: f.name(),
+			f:    f,
+			b:    b,
+		})
+	}
+	var rtnErr error
+	if len(objects) == 0 || next == nil {
+		rtnErr = io.EOF
+	}
+	return objects, next, rtnErr
+}
+
+// Hide hides the object from name-based listing.
+func (o *Object) Hide(ctx context.Context) error {
+	if err := o.ensure(ctx); err != nil {
+		return err
+	}
+	_, err := o.b.b.hideFile(ctx, o.name)
+	return err
+}
+
+// Reveal unhides (if hidden) the named object.  If there are multiple objects
+// of a given name, it will reveal the most recent.
+func (b *Bucket) Reveal(ctx context.Context, name string) error {
+	cur := &Cursor{
+		name: name,
+	}
+	objs, _, err := b.ListObjects(ctx, 1, cur)
+	if err != nil && err != io.EOF {
+		return err
+	}
+	if len(objs) < 1 || objs[0].name != name {
+		return fmt.Errorf("%s: not found", name)
+	}
+	obj := objs[0]
+	if obj.f.status() != "hide" {
+		return nil
+	}
+	return obj.Delete(ctx)
 }
 
 func (b *Bucket) getObject(ctx context.Context, name string) (*Object, error) {

@@ -48,6 +48,7 @@ type beBucketInterface interface {
 	listFileNames(context.Context, int, string) ([]beFileInterface, string, error)
 	listFileVersions(context.Context, int, string, string) ([]beFileInterface, string, string, error)
 	downloadFileByName(context.Context, string, int64, int64) (beFileReaderInterface, error)
+	hideFile(context.Context, string) (beFileInterface, error)
 }
 
 type beBucket struct {
@@ -306,6 +307,28 @@ func (b *beBucket) downloadFileByName(ctx context.Context, name string, offset, 
 		return nil, err
 	}
 	return reader, nil
+}
+
+func (b *beBucket) hideFile(ctx context.Context, name string) (beFileInterface, error) {
+	var file beFileInterface
+	f := func() error {
+		g := func() error {
+			f, err := b.b2bucket.hideFile(ctx, name)
+			if err != nil {
+				return err
+			}
+			file = &beFile{
+				b2file: f,
+				ri:     b.ri,
+			}
+			return nil
+		}
+		return withReauth(ctx, b.ri, g)
+	}
+	if err := withBackoff(ctx, b.ri, f); err != nil {
+		return nil, err
+	}
+	return file, nil
 }
 
 func (b *beURL) uploadFile(ctx context.Context, r io.ReadSeeker, size int, name, ct, sha1 string, info map[string]string) (beFileInterface, error) {

@@ -15,6 +15,7 @@
 package b2
 
 import (
+	"io"
 	"os"
 	"testing"
 	"time"
@@ -93,4 +94,120 @@ func TestReadWriteLive(t *testing.T) {
 		}
 		cur = c
 	}
+}
+
+func TestHideShowLive(t *testing.T) {
+	id := os.Getenv(apiID)
+	key := os.Getenv(apiKey)
+	if id == "" || key == "" {
+		t.Logf("B2_ACCOUNT_ID or B2_SECRET_KEY unset; skipping integration tests")
+		return
+	}
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+
+	client, err := NewClient(ctx, id, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bucket, err := client.Bucket(ctx, bucketName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		for c := range listObjects(ctx, bucket.ListObjects) {
+			if c.err != nil {
+				t.Error(err)
+				continue
+			}
+			if err := c.o.Delete(ctx); err != nil {
+				t.Error(err)
+			}
+		}
+		if err := bucket.Delete(ctx); err != nil {
+			t.Error(err)
+		}
+	}()
+
+	// write a file
+	obj, _, err := writeFile(ctx, bucket, smallFileName, 1e6+42, 1e8)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := countObjects(ctx, bucket.ListCurrentObjects)
+	if err != nil {
+		t.Error(err)
+	}
+	if got != 1 {
+		t.Fatalf("got %d objects, wanted 1", got)
+	}
+
+	// hide the file
+	if err := obj.Hide(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err = countObjects(ctx, bucket.ListCurrentObjects)
+	if err != nil {
+		t.Error(err)
+	}
+	if got != 0 {
+		t.Fatalf("got %d objects, wanted 0", got)
+	}
+
+	// unhide the file
+	if err := bucket.Reveal(ctx, smallFileName); err != nil {
+		t.Fatal(err)
+	}
+
+	// count see the object again
+	got, err = countObjects(ctx, bucket.ListCurrentObjects)
+	if err != nil {
+		t.Error(err)
+	}
+	if got != 1 {
+		t.Fatalf("got %d objects, wanted 1", got)
+	}
+}
+
+type object struct {
+	o   *Object
+	err error
+}
+
+func countObjects(ctx context.Context, f func(context.Context, int, *Cursor) ([]*Object, *Cursor, error)) (int, error) {
+	var got int
+	ch := listObjects(ctx, f)
+	for c := range ch {
+		if c.err != nil {
+			return 0, c.err
+		}
+		got++
+	}
+	return got, nil
+}
+
+func listObjects(ctx context.Context, f func(context.Context, int, *Cursor) ([]*Object, *Cursor, error)) <-chan object {
+	ch := make(chan object)
+	go func() {
+		defer close(ch)
+		var cur *Cursor
+		for {
+			objs, c, err := f(ctx, 100, cur)
+			if err != nil && err != io.EOF {
+				ch <- object{err: err}
+				return
+			}
+			for _, o := range objs {
+				ch <- object{o: o}
+			}
+			if err == io.EOF {
+				return
+			}
+			cur = c
+		}
+	}()
+	return ch
 }

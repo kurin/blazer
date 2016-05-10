@@ -99,14 +99,14 @@ func printObjects(ctx context.Context, bucket *b2.Bucket) error {
 	var cur *b2.Cursor
 	for {
 		objs, c, err := bucket.ListObjects(ctx, 1000, cur)
-		if err != nil {
+		if err != nil && err != io.EOF {
 			return err
-		}
-		if len(objs) == 0 {
-			return nil
 		}
 		for _, obj := range objs {
 			fmt.Println(obj)
+		}
+		if err == io.EOF {
+			return
 		}
 		cur = c
 	}

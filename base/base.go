@@ -481,6 +481,7 @@ type File struct {
 type b2UploadFileResponse struct {
 	FileID    string `json:"fileId"`
 	Timestamp int64  `json:"uploadTimestamp"`
+	Action    string `json:"action"`
 }
 
 // UploadFile wraps b2_upload_file.
@@ -503,6 +504,7 @@ func (url *URL) UploadFile(ctx context.Context, r io.Reader, size int, name, con
 		Name:      name,
 		Size:      int64(size),
 		Timestamp: millitime(b2resp.Timestamp),
+		Status:    b2resp.Action,
 		id:        b2resp.FileID,
 		b2:        url.b2,
 	}, nil
@@ -659,6 +661,7 @@ type b2FinishLargeFileResponse struct {
 	Name      string `json:"fileName"`
 	FileID    string `json:"fileId"`
 	Timestamp int64  `json:"uploadTimestamp"`
+	Action    string `json:"action"`
 }
 
 // FinishLargeFile wraps b2_finish_large_file.
@@ -683,6 +686,7 @@ func (l *LargeFile) FinishLargeFile(ctx context.Context) (*File, error) {
 		Name:      b2resp.Name,
 		Size:      l.size,
 		Timestamp: millitime(b2resp.Timestamp),
+		Status:    b2resp.Action,
 		id:        b2resp.FileID,
 		b2:        l.b2,
 	}, nil
@@ -863,6 +867,7 @@ type b2HideFileRequest struct {
 type b2HideFileResponse struct {
 	ID        string `json:"fileId"`
 	Timestamp int64  `json:"uploadTimestamp"`
+	Action    string `json:"action"`
 }
 
 // HideFile wraps b2_hide_file.
@@ -879,7 +884,7 @@ func (b *Bucket) HideFile(ctx context.Context, name string) (*File, error) {
 		return nil, err
 	}
 	return &File{
-		Status:    "hide",
+		Status:    b2resp.Action,
 		Name:      name,
 		Timestamp: millitime(b2resp.Timestamp),
 		b2:        b.b2,

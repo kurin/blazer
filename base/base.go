@@ -18,7 +18,6 @@
 // It currently lacks support for the following APIs:
 //
 // b2_download_file_by_id
-// b2_get_file_info
 // b2_list_parts
 // b2_list_unfinished_large_files
 // b2_update_bucket
@@ -889,5 +888,56 @@ func (b *Bucket) HideFile(ctx context.Context, name string) (*File, error) {
 		Timestamp: millitime(b2resp.Timestamp),
 		b2:        b.b2,
 		id:        b2resp.ID,
+	}, nil
+}
+
+// FileInfo holds information about a specific file.
+type FileInfo struct {
+	Name        string
+	SHA1        string
+	Size        int64
+	ContentType string
+	Info        map[string]string
+	Status      string
+	Timestamp   time.Time
+}
+
+type b2GetFileInfoRequest struct {
+	ID string `json:"fileId"`
+}
+
+type b2GetFileInfoResponse struct {
+	Name        string            `json:"fileName"`
+	SHA1        string            `json:"contentSha1"`
+	Size        int64             `json:"contentLength"`
+	ContentType string            `json:"contentType"`
+	Info        map[string]string `json:"fileInfo"`
+	Action      string            `json:"action"`
+	Timestamp   int64             `json:"uploadTimestamp"`
+}
+
+// GetFileInfo wraps b2_get_file_info.
+func (f *File) GetFileInfo(ctx context.Context) (*FileInfo, error) {
+	b2req := &b2GetFileInfoRequest{
+		ID: f.id,
+	}
+	b2resp := &b2GetFileInfoResponse{}
+	headers := map[string]string{
+		"Authorization": f.b2.authToken,
+	}
+	if err := makeRequest(ctx, "b2_get_file_info", "POST", f.b2.apiURI+apiV1+"b2_get_file_info", b2req, b2resp, headers, nil); err != nil {
+		return nil, err
+	}
+	f.Status = b2resp.Action
+	f.Name = b2resp.Name
+	f.Timestamp = millitime(b2resp.Timestamp)
+	return &FileInfo{
+		Name:        b2resp.Name,
+		SHA1:        b2resp.SHA1,
+		Size:        b2resp.Size,
+		ContentType: b2resp.ContentType,
+		Info:        b2resp.Info,
+		Status:      b2resp.Action,
+		Timestamp:   millitime(b2resp.Timestamp),
 	}, nil
 }

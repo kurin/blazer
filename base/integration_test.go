@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"reflect"
 	"testing"
 
 	"golang.org/x/net/context"
@@ -101,7 +102,11 @@ func TestStorage(t *testing.T) {
 		t.Error(err)
 	}
 	smallSHA1 := fmt.Sprintf("%x", hash.Sum(nil))
-	file, err := ue.UploadFile(ctx, buf, buf.Len(), smallFileName, "application/octet-stream", smallSHA1, nil)
+	smallInfoMap := map[string]string{
+		"one": "1",
+		"two": "2",
+	}
+	file, err := ue.UploadFile(ctx, buf, buf.Len(), smallFileName, "application/octet-stream", smallSHA1, smallInfoMap)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +119,11 @@ func TestStorage(t *testing.T) {
 	}()
 
 	// b2_start_large_file
-	lf, err := bucket.StartLargeFile(ctx, largeFileName, "application/octet-stream", nil)
+	largeInfoMap := map[string]string{
+		"one_BILLION":  "1e9",
+		"two_TRILLION": "2eSomething, I guess 2e12",
+	}
+	lf, err := bucket.StartLargeFile(ctx, largeFileName, "application/octet-stream", largeInfoMap)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,6 +154,18 @@ func TestStorage(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
+
+	// b2_get_file_info
+	smallInfo, err := file.GetFileInfo(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	compareFileAndInfo(t, smallInfo, smallFileName, smallSHA1, smallInfoMap)
+	largeInfo, err := lfile.GetFileInfo(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	compareFileAndInfo(t, largeInfo, largeFileName, "none", largeInfoMap)
 
 	defer func() {
 		if err := lfile.DeleteFileVersion(ctx); err != nil {
@@ -205,5 +226,17 @@ func TestStorage(t *testing.T) {
 	}
 	if len(files) != 3 {
 		t.Errorf("expected 3 files, got %d: %v", len(files), files)
+	}
+}
+
+func compareFileAndInfo(t *testing.T, info *FileInfo, name, sha1 string, imap map[string]string) {
+	if info.Name != name {
+		t.Errorf("got %q, want %q", info.Name, name)
+	}
+	if info.SHA1 != sha1 {
+		t.Errorf("got %q, want %q", info.SHA1, sha1)
+	}
+	if !reflect.DeepEqual(info.Info, imap) {
+		t.Errorf("got %v, want %v", info.Info, imap)
 	}
 }

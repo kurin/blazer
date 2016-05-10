@@ -81,16 +81,16 @@ func TestReadWriteLive(t *testing.T) {
 	var cur *Cursor
 	for {
 		objs, c, err := bucket.ListObjects(ctx, 100, cur)
-		if err != nil {
+		if err != nil && err != io.EOF {
 			t.Fatal(err)
-		}
-		if len(objs) == 0 {
-			break
 		}
 		for _, o := range objs {
 			if err := o.Delete(ctx); err != nil {
 				t.Error(err)
 			}
+		}
+		if err == io.EOF {
+			break
 		}
 		cur = c
 	}

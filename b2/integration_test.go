@@ -15,6 +15,9 @@
 package b2
 
 import (
+	"crypto/sha1"
+	"errors"
+	"fmt"
 	"io"
 	"os"
 	"testing"
@@ -106,7 +109,6 @@ func TestHideShowLive(t *testing.T) {
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
-
 	client, err := NewClient(ctx, id, key)
 	if err != nil {
 		t.Fatal(err)
@@ -172,6 +174,67 @@ func TestHideShowLive(t *testing.T) {
 	}
 }
 
+func TestResumeWriter(t *testing.T) {
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	bucket, _, err := startLiveTest(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	w := bucket.Object("foo").NewWriter(ctx)
+	r := io.LimitReader(zReader{}, 3e8)
+	go func() {
+		// Cancel the context after the first chunk has been written.
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		defer cancel()
+		for range ticker.C {
+			if w.cidx > 1 {
+				return
+			}
+		}
+	}()
+	if _, err := io.Copy(w, r); err != context.Canceled {
+		t.Fatalf("io.Copy should have resulted in a canceled context")
+	}
+
+	ctx2 := context.Background()
+	ctx2, cancel2 := context.WithTimeout(ctx2, 10*time.Minute)
+	bucket2, _, err := startLiveTest(ctx2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cancel2()
+	w2 := bucket2.Object("foo").NewWriter(ctx2)
+	r2 := io.LimitReader(zReader{}, 3e8)
+	h1 := sha1.New()
+	tr := io.TeeReader(r2, h1)
+	w2.Resume = true
+	w2.ConcurrentUploads = 2
+	if _, err := io.Copy(w2, tr); err != nil {
+		t.Fatal(err)
+	}
+	if err := w2.Close(); err != nil {
+		t.Fatal(err)
+	}
+	begSHA := fmt.Sprintf("%x", h1.Sum(nil))
+
+	objR := bucket2.Object("foo").NewReader(ctx2)
+	objR.ConcurrentDownloads = 3
+	h2 := sha1.New()
+	if _, err := io.Copy(h2, objR); err != nil {
+		t.Fatal(err)
+	}
+	if err := objR.Close(); err != nil {
+		t.Error(err)
+	}
+	endSHA := fmt.Sprintf("%x", h2.Sum(nil))
+	if endSHA != begSHA {
+		t.Errorf("got conflicting hashes: got %q, want %q", endSHA, begSHA)
+	}
+}
+
 type object struct {
 	o   *Object
 	err error
@@ -210,4 +273,32 @@ func listObjects(ctx context.Context, f func(context.Context, int, *Cursor) ([]*
 		}
 	}()
 	return ch
+}
+
+func startLiveTest(ctx context.Context) (*Bucket, func(), error) {
+	id := os.Getenv(apiID)
+	key := os.Getenv(apiKey)
+	if id == "" || key == "" {
+		return nil, nil, errors.New("B2_ACCOUNT_ID or B2_SECRET_KEY unset; skipping integration tests")
+	}
+	client, err := NewClient(ctx, id, key)
+	if err != nil {
+		return nil, nil, err
+	}
+	bucket, err := client.Bucket(ctx, bucketName)
+	if err != nil {
+		return nil, nil, err
+	}
+	f := func() {
+		for c := range listObjects(ctx, bucket.ListObjects) {
+			if c.err != nil {
+				continue
+			}
+			if err := c.o.Delete(ctx); err != nil {
+			}
+		}
+		if err := bucket.Delete(ctx); err != nil {
+		}
+	}
+	return bucket, f, nil
 }

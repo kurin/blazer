@@ -71,6 +71,8 @@ type beFileInterface interface {
 	timestamp() time.Time
 	status() string
 	deleteFileVersion(context.Context) error
+	listParts(context.Context, int, int) ([]beFilePartInterface, int, error)
+	compileParts(int64, map[int]string) beLargeFileInterface
 }
 
 type beFile struct {
@@ -107,6 +109,16 @@ type beFileReaderInterface interface {
 type beFileReader struct {
 	b2fileReader b2FileReaderInterface
 	ri           beRootInterface
+}
+
+type beFilePartInterface interface {
+	number() int
+	sha1() string
+}
+
+type beFilePart struct {
+	b2filePart b2FilePartInterface
+	ri         beRootInterface
 }
 
 func (r *beRoot) backoff(err error) time.Duration { return r.b2i.backoff(err) }
@@ -380,6 +392,39 @@ func (b *beFile) status() string {
 	return b.b2file.status()
 }
 
+func (b *beFile) listParts(ctx context.Context, next, count int) ([]beFilePartInterface, int, error) {
+	var fpi []beFilePartInterface
+	var rnxt int
+	f := func() error {
+		g := func() error {
+			ps, n, err := b.b2file.listParts(ctx, next, count)
+			if err != nil {
+				return err
+			}
+			rnxt = n
+			for _, p := range ps {
+				fpi = append(fpi, &beFilePart{
+					b2filePart: p,
+					ri:         b.ri,
+				})
+			}
+			return nil
+		}
+		return withReauth(ctx, b.ri, g)
+	}
+	if err := withBackoff(ctx, b.ri, f); err != nil {
+		return nil, 0, err
+	}
+	return fpi, rnxt, nil
+}
+
+func (b *beFile) compileParts(size int64, seen map[int]string) beLargeFileInterface {
+	return &beLargeFile{
+		b2largeFile: b.b2file.compileParts(size, seen),
+		ri:          b.ri,
+	}
+}
+
 func (b *beLargeFile) getUploadPartURL(ctx context.Context) (beFileChunkInterface, error) {
 	var chunk beFileChunkInterface
 	f := func() error {
@@ -465,6 +510,14 @@ func (b *beFileReader) Close() error {
 
 func (b *beFileReader) stats() (int, string, string, map[string]string) {
 	return b.b2fileReader.stats()
+}
+
+func (b *beFilePart) number() int {
+	return b.b2filePart.number()
+}
+
+func (b *beFilePart) sha1() string {
+	return b.b2filePart.sha1()
 }
 
 func jitter(d time.Duration) time.Duration {

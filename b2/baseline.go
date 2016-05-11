@@ -58,6 +58,8 @@ type b2FileInterface interface {
 	timestamp() time.Time
 	status() string
 	deleteFileVersion(context.Context) error
+	listParts(context.Context, int, int) ([]b2FilePartInterface, int, error)
+	compileParts(int64, map[int]string) b2LargeFileInterface
 }
 
 type b2LargeFileInterface interface {
@@ -73,6 +75,11 @@ type b2FileChunkInterface interface {
 type b2FileReaderInterface interface {
 	io.ReadCloser
 	stats() (int, string, string, map[string]string)
+}
+
+type b2FilePartInterface interface {
+	number() int
+	sha1() string
 }
 
 type b2Root struct {
@@ -101,6 +108,10 @@ type b2FileChunk struct {
 
 type b2FileReader struct {
 	b *base.FileReader
+}
+
+type b2FilePart struct {
+	b *base.FilePart
 }
 
 func (b *b2Root) authorizeAccount(ctx context.Context, account, key string) error {
@@ -251,6 +262,22 @@ func (b *b2File) status() string {
 	return b.b.Status
 }
 
+func (b *b2File) listParts(ctx context.Context, next, count int) ([]b2FilePartInterface, int, error) {
+	parts, n, err := b.b.ListParts(ctx, next, count)
+	if err != nil {
+		return nil, 0, err
+	}
+	var rtn []b2FilePartInterface
+	for _, part := range parts {
+		rtn = append(rtn, &b2FilePart{part})
+	}
+	return rtn, n, nil
+}
+
+func (b *b2File) compileParts(size int64, seen map[int]string) b2LargeFileInterface {
+	return &b2LargeFile{b.b.CompileParts(size, seen)}
+}
+
 func (b *b2LargeFile) finishLargeFile(ctx context.Context) (b2FileInterface, error) {
 	f, err := b.b.FinishLargeFile(ctx)
 	if err != nil {
@@ -285,4 +312,12 @@ func (b *b2FileReader) Close() error {
 
 func (b *b2FileReader) stats() (int, string, string, map[string]string) {
 	return b.b.ContentLength, b.b.ContentType, b.b.SHA1, b.b.Info
+}
+
+func (b *b2FilePart) number() int {
+	return b.b.Number
+}
+
+func (b *b2FilePart) sha1() string {
+	return b.b.SHA1
 }

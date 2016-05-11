@@ -17,6 +17,7 @@ package b2
 import (
 	"bytes"
 	"crypto/sha1"
+	"errors"
 	"fmt"
 	"hash"
 	"io"
@@ -45,6 +46,11 @@ type Writer struct {
 	// buffer for each thread.  Values less than 1 are equivalent to 1.
 	ConcurrentUploads int
 
+	// Resume an upload.  If true, and the upload is a large file, and a file of
+	// the same name was started but not finished, then assume that we are
+	// resuming that file, and don't upload duplicate chunks.
+	Resume bool
+
 	// ContentType sets the content type of the file to be uploaded.  If unset,
 	// "application/octet-stream" is used.
 	ContentType string
@@ -60,6 +66,7 @@ type Writer struct {
 	once   sync.Once
 	done   sync.Once
 	file   beLargeFileInterface
+	seen   map[int]string
 
 	o    *Object
 	name string
@@ -108,6 +115,14 @@ func (w *Writer) thread() {
 			chunk, ok := <-w.ready
 			if !ok {
 				return
+			}
+			if sha, ok := w.seen[chunk.id]; ok {
+				if sha != chunk.sha1 {
+					w.setErr(errors.New("resumable upload was requested, but chunks don't match!"))
+					return
+				}
+				glog.V(2).Infof("skipping chunk %d", chunk.id)
+				continue
 			}
 			glog.V(2).Infof("thread %d handling chunk %d", id, chunk.id)
 			r := bytes.NewReader(chunk.buf.Bytes())
@@ -189,14 +204,54 @@ redo:
 	return nil
 }
 
-func (w *Writer) sendChunk() error {
-	var err error
-	w.once.Do(func() {
+func (w *Writer) getLargeFile() (beLargeFileInterface, error) {
+	if !w.Resume {
 		ctype := w.ContentType
 		if ctype == "" {
 			ctype = "application/octet-stream"
 		}
-		lf, e := w.o.b.b.startLargeFile(w.ctx, w.name, ctype, w.Info)
+		return w.o.b.b.startLargeFile(w.ctx, w.name, ctype, w.Info)
+	}
+	next := 1
+	seen := make(map[int]string)
+	var fi beFileInterface
+	for {
+		cur := &Cursor{name: w.name}
+		objs, _, err := w.o.b.ListObjects(w.ctx, 1, cur)
+		if err != nil {
+			return nil, err
+		}
+		if len(objs) < 1 || objs[0].name != w.name {
+			w.Resume = false
+			return w.getLargeFile()
+		}
+		fi = objs[0].f
+		parts, n, err := fi.listParts(w.ctx, next, 100)
+		if err != nil {
+			return nil, err
+		}
+		next = n
+		for _, p := range parts {
+			seen[p.number()] = p.sha1()
+		}
+		if len(parts) == 0 {
+			break
+		}
+		if next == 0 {
+			break
+		}
+	}
+	w.seen = make(map[int]string) // copy the map
+	for id, sha := range seen {
+		w.seen[id] = sha
+	}
+	return fi.compileParts(int64(w.csize), seen), nil
+}
+
+func (w *Writer) sendChunk() error {
+	var err error
+	w.once.Do(func() {
+		lf, e := w.getLargeFile()
 		if e != nil {
 			err = e
 			return

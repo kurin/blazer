@@ -71,6 +71,7 @@ type beFileInterface interface {
 	timestamp() time.Time
 	status() string
 	deleteFileVersion(context.Context) error
+	getFileInfo(context.Context) (beFileInfoInterface, error)
 	listParts(context.Context, int, int) ([]beFilePartInterface, int, error)
 	compileParts(int64, map[int]string) beLargeFileInterface
 }
@@ -111,6 +112,10 @@ type beFileReader struct {
 	ri           beRootInterface
 }
 
+type beFileInfoInterface interface {
+	stats() (string, string, int64, string, map[string]string, string, time.Time)
+}
+
 type beFilePartInterface interface {
 	number() int
 	sha1() string
@@ -119,6 +124,16 @@ type beFilePartInterface interface {
 type beFilePart struct {
 	b2filePart b2FilePartInterface
 	ri         beRootInterface
+}
+
+type beFileInfo struct {
+	name   string
+	sha    string
+	size   int64
+	ct     string
+	info   map[string]string
+	status string
+	stamp  time.Time
 }
 
 func (r *beRoot) backoff(err error) time.Duration { return r.b2i.backoff(err) }
@@ -392,6 +407,34 @@ func (b *beFile) status() string {
 	return b.b2file.status()
 }
 
+func (b *beFile) getFileInfo(ctx context.Context) (beFileInfoInterface, error) {
+	var fileInfo beFileInfoInterface
+	f := func() error {
+		g := func() error {
+			fi, err := b.b2file.getFileInfo(ctx)
+			if err != nil {
+				return err
+			}
+			name, sha, size, ct, info, status, stamp := fi.stats()
+			fileInfo = &beFileInfo{
+				name:   name,
+				sha:    sha,
+				size:   size,
+				ct:     ct,
+				info:   info,
+				status: status,
+				stamp:  stamp,
+			}
+			return nil
+		}
+		return withReauth(ctx, b.ri, g)
+	}
+	if err := withBackoff(ctx, b.ri, f); err != nil {
+		return nil, err
+	}
+	return fileInfo, nil
+}
+
 func (b *beFile) listParts(ctx context.Context, next, count int) ([]beFilePartInterface, int, error) {
 	var fpi []beFilePartInterface
 	var rnxt int
@@ -510,6 +553,10 @@ func (b *beFileReader) Close() error {
 
 func (b *beFileReader) stats() (int, string, string, map[string]string) {
 	return b.b2fileReader.stats()
+}
+
+func (b *beFileInfo) stats() (string, string, int64, string, map[string]string, string, time.Time) {
+	return b.name, b.sha, b.size, b.ct, b.info, b.status, b.stamp
 }
 
 func (b *beFilePart) number() int {

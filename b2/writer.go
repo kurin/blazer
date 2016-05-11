@@ -51,12 +51,8 @@ type Writer struct {
 	// resuming that file, and don't upload duplicate chunks.
 	Resume bool
 
-	// ContentType sets the content type of the file to be uploaded.  If unset,
-	// "application/octet-stream" is used.
-	ContentType string
-
-	// Info is a map of up to ten key/value pairs that are stored with the file.
-	Info map[string]string
+	contentType string
+	info        map[string]string
 
 	csize  int
 	ctx    context.Context
@@ -181,13 +177,13 @@ func (w *Writer) simpleWriteFile() error {
 		return err
 	}
 	sha1 := fmt.Sprintf("%x", w.chsh.Sum(nil))
-	ctype := w.ContentType
+	ctype := w.contentType
 	if ctype == "" {
 		ctype = "application/octet-stream"
 	}
 	r := bytes.NewReader(w.cbuf.Bytes())
 redo:
-	f, err := ue.uploadFile(w.ctx, r, int(r.Size()), w.name, ctype, sha1, w.Info)
+	f, err := ue.uploadFile(w.ctx, r, int(r.Size()), w.name, ctype, sha1, w.info)
 	if err != nil {
 		if w.o.b.r.reupload(err) {
 			glog.Infof("b2 writer: %v; retrying", err)
@@ -206,11 +202,11 @@ redo:
 
 func (w *Writer) getLargeFile() (beLargeFileInterface, error) {
 	if !w.Resume {
-		ctype := w.ContentType
+		ctype := w.contentType
 		if ctype == "" {
 			ctype = "application/octet-stream"
 		}
-		return w.o.b.b.startLargeFile(w.ctx, w.name, ctype, w.Info)
+		return w.o.b.b.startLargeFile(w.ctx, w.name, ctype, w.info)
 	}
 	next := 1
 	seen := make(map[int]string)
@@ -309,4 +305,12 @@ func (w *Writer) Close() error {
 		w.o.f = f
 	})
 	return w.getErr()
+}
+
+// WithAttrs sets the writable attributes of the resulting file to given
+// values.  WithAttrs must be called before the first call to Write.
+func (w *Writer) WithAttrs(attrs *Attrs) *Writer {
+	w.contentType = attrs.ContentType
+	w.info = attrs.Info
+	return w
 }

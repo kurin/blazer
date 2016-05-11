@@ -21,6 +21,7 @@ import (
 	"crypto/sha1"
 	"fmt"
 	"io"
+	"time"
 
 	"golang.org/x/net/context"
 )
@@ -82,10 +83,67 @@ func (b *Bucket) Delete(ctx context.Context) error {
 
 // Object represents a B2 object.
 type Object struct {
-	name string
-	f    beFileInterface
-	b    *Bucket
+	attrs *Attrs
+	name  string
+	f     beFileInterface
+	b     *Bucket
 }
+
+// Attrs holds an object's metadata.
+type Attrs struct {
+	Name            string            // Not used on upload.
+	Size            int64             // Not used on upload.
+	ContentType     string            // Used on upload, default is "application/octet-stream".
+	Status          ObjectState       // Not used on upload.
+	UploadTimestamp time.Time         // Not used on upload.
+	SHA1            string            // Not used on upload. Can be "none" for large files.
+	Info            map[string]string // Limited to 10 keys.
+}
+
+// Attrs returns an object's attributes.
+func (o *Object) Attrs(ctx context.Context) (*Attrs, error) {
+	if err := o.ensure(ctx); err != nil {
+		return nil, err
+	}
+	fi, err := o.f.getFileInfo(ctx)
+	if err != nil {
+		return nil, err
+	}
+	name, sha, size, ct, info, st, stamp := fi.stats()
+	var state ObjectState
+	switch st {
+	case "upload":
+		state = Uploaded
+	case "start":
+		state = Started
+	case "hide":
+		state = Hider
+	}
+	return &Attrs{
+		Name:            name,
+		Size:            size,
+		ContentType:     ct,
+		UploadTimestamp: stamp,
+		SHA1:            sha,
+		Info:            info,
+		Status:          state,
+	}, nil
+}
+
+// ObjectState represents the various states an object can be in.
+type ObjectState int
+
+const (
+	Unknown ObjectState = iota
+	// Started represents a large upload that has been started but not finished
+	// or canceled.
+	Started
+	// Uploaded represents an object that has finished uploading and is complete.
+	Uploaded
+	// Hider represents an object that exists only to hide another object.  It
+	// cannot in itself be downloaded and, in particular, is not a hidden object.
+	Hider
+)
 
 // Object returns a reference to the named object in the bucket.  Hidden
 // objects cannot be referenced in this manner; they can only be found by
@@ -104,7 +162,6 @@ func (o *Object) NewWriter(ctx context.Context) *Writer {
 	bw := &Writer{
 		o:      o,
 		name:   o.name,
-		Info:   make(map[string]string),
 		chsh:   sha1.New(),
 		cbuf:   &bytes.Buffer{},
 		ctx:    ctx,

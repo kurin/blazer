@@ -58,6 +58,7 @@ type b2FileInterface interface {
 	timestamp() time.Time
 	status() string
 	deleteFileVersion(context.Context) error
+	getFileInfo(context.Context) (b2FileInfoInterface, error)
 	listParts(context.Context, int, int) ([]b2FilePartInterface, int, error)
 	compileParts(int64, map[int]string) b2LargeFileInterface
 }
@@ -75,6 +76,10 @@ type b2FileChunkInterface interface {
 type b2FileReaderInterface interface {
 	io.ReadCloser
 	stats() (int, string, string, map[string]string)
+}
+
+type b2FileInfoInterface interface {
+	stats() (string, string, int64, string, map[string]string, string, time.Time) // bleck
 }
 
 type b2FilePartInterface interface {
@@ -108,6 +113,10 @@ type b2FileChunk struct {
 
 type b2FileReader struct {
 	b *base.FileReader
+}
+
+type b2FileInfo struct {
+	b *base.FileInfo
 }
 
 type b2FilePart struct {
@@ -262,6 +271,14 @@ func (b *b2File) status() string {
 	return b.b.Status
 }
 
+func (b *b2File) getFileInfo(ctx context.Context) (b2FileInfoInterface, error) {
+	fi, err := b.b.GetFileInfo(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &b2FileInfo{fi}, nil
+}
+
 func (b *b2File) listParts(ctx context.Context, next, count int) ([]b2FilePartInterface, int, error) {
 	parts, n, err := b.b.ListParts(ctx, next, count)
 	if err != nil {
@@ -312,6 +329,10 @@ func (b *b2FileReader) Close() error {
 
 func (b *b2FileReader) stats() (int, string, string, map[string]string) {
 	return b.b.ContentLength, b.b.ContentType, b.b.SHA1, b.b.Info
+}
+
+func (b *b2FileInfo) stats() (string, string, int64, string, map[string]string, string, time.Time) {
+	return b.b.Name, b.b.SHA1, b.b.Size, b.b.ContentType, b.b.Info, b.b.Status, b.b.Timestamp
 }
 
 func (b *b2FilePart) number() int {

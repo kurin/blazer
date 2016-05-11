@@ -18,7 +18,6 @@
 // It currently lacks support for the following APIs:
 //
 // b2_download_file_by_id
-// b2_list_parts
 // b2_list_unfinished_large_files
 // b2_update_bucket
 package base
@@ -584,10 +583,64 @@ func (l *LargeFile) CancelLargeFile(ctx context.Context) error {
 	headers := map[string]string{
 		"Authorization": l.b2.authToken,
 	}
-	if err := makeRequest(ctx, "b2_cancel_large_file", "POST", l.b2.apiURI+apiV1+"b2_cancel_large_file", b2req, nil, headers, nil); err != nil {
-		return err
+	return makeRequest(ctx, "b2_cancel_large_file", "POST", l.b2.apiURI+apiV1+"b2_cancel_large_file", b2req, nil, headers, nil)
+}
+
+type b2ListPartsRequest struct {
+	ID    string `json:"fileId"`
+	Start int    `json:"startPartNumber"`
+	Count int    `json:"maxPartCount"`
+}
+
+type b2ListPartsResponse struct {
+	Next  int `json:"nextPartNumber"`
+	Parts []struct {
+		ID     string `json:"fileId"`
+		Number int    `json:"partNumber"`
+		SHA1   string `json:"contentSha1"`
+		Size   int64  `json:"contentLength"`
+	} `json:"parts"`
+}
+
+type FilePart struct {
+	Number int
+	SHA1   string
+}
+
+// ListParts wraps b2_list_parts.
+func (f *File) ListParts(ctx context.Context, next, count int) ([]*FilePart, int, error) {
+	b2req := &b2ListPartsRequest{
+		ID:    f.id,
+		Start: next,
+		Count: count,
 	}
-	return nil
+	b2resp := &b2ListPartsResponse{}
+	headers := map[string]string{
+		"Authorization": f.b2.authToken,
+	}
+	if err := makeRequest(ctx, "b2_list_parts", "POST", f.b2.apiURI+apiV1+"b2_list_parts", b2req, b2resp, headers, nil); err != nil {
+		return nil, 0, err
+	}
+	var parts []*FilePart
+	for _, part := range b2resp.Parts {
+		parts = append(parts, &FilePart{
+			Number: part.Number,
+			SHA1:   part.SHA1,
+		})
+	}
+	return parts, b2resp.Next, nil
+}
+
+// CompileParts returns a LargeFile that can accept new data.  Seen is a
+// mapping of completed part numbers to SHA1 strings; size is the size of each
+// completed part.
+func (f *File) CompileParts(size int64, seen map[int]string) *LargeFile {
+	return &LargeFile{
+		id:     f.id,
+		b2:     f.b2,
+		size:   int64(len(seen)) * size,
+		hashes: seen,
+	}
 }
 
 // FileChunk holds information necessary for uploading file chunks.

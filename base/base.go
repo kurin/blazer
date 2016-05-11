@@ -80,6 +80,9 @@ func Action(err error) ErrAction {
 		if e.method == "b2_authorize_account" {
 			return Punt
 		}
+		if e.method == "b2_upload_file" || e.method == "b2_upload_part" {
+			return AttemptNewUpload
+		}
 		return ReAuthenticate
 	case 429, 500, 503:
 		return Retry

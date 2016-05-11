@@ -282,6 +282,18 @@ func (t *testFile) size() int64          { return t.s }
 func (t *testFile) timestamp() time.Time { return t.t }
 func (t *testFile) status() string       { return t.a }
 
+func (t *testFile) compileParts(int64, map[int]string) b2LargeFileInterface {
+	panic("not implemented")
+}
+
+func (t *testFile) getFileInfo(context.Context) (b2FileInfoInterface, error) {
+	return nil, nil
+}
+
+func (t *testFile) listParts(context.Context, int, int) ([]b2FilePartInterface, int, error) {
+	return nil, 0, nil
+}
+
 func (t *testFile) deleteFileVersion(context.Context) error {
 	delete(t.files, t.n)
 	return nil

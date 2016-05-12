@@ -602,9 +602,11 @@ type b2ListPartsResponse struct {
 	} `json:"parts"`
 }
 
+// FilePart is a piece of a started, but not finished, large file upload.
 type FilePart struct {
 	Number int
 	SHA1   string
+	Size   int64
 }
 
 // ListParts wraps b2_list_parts.
@@ -626,20 +628,25 @@ func (f *File) ListParts(ctx context.Context, next, count int) ([]*FilePart, int
 		parts = append(parts, &FilePart{
 			Number: part.Number,
 			SHA1:   part.SHA1,
+			Size:   part.Size,
 		})
 	}
 	return parts, b2resp.Next, nil
 }
 
 // CompileParts returns a LargeFile that can accept new data.  Seen is a
-// mapping of completed part numbers to SHA1 strings; size is the size of each
-// completed part.
+// mapping of completed part numbers to SHA1 strings; size is the total size of
+// all the completed parts to this point.
 func (f *File) CompileParts(size int64, seen map[int]string) *LargeFile {
+	s := make(map[int]string)
+	for k, v := range seen {
+		s[k] = v
+	}
 	return &LargeFile{
 		id:     f.id,
 		b2:     f.b2,
-		size:   int64(len(seen)) * size,
-		hashes: seen,
+		size:   size,
+		hashes: s,
 	}
 }
 

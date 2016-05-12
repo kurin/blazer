@@ -119,6 +119,7 @@ type beFileInfoInterface interface {
 type beFilePartInterface interface {
 	number() int
 	sha1() string
+	size() int64
 }
 
 type beFilePart struct {
@@ -559,13 +560,9 @@ func (b *beFileInfo) stats() (string, string, int64, string, map[string]string, 
 	return b.name, b.sha, b.size, b.ct, b.info, b.status, b.stamp
 }
 
-func (b *beFilePart) number() int {
-	return b.b2filePart.number()
-}
-
-func (b *beFilePart) sha1() string {
-	return b.b2filePart.sha1()
-}
+func (b *beFilePart) number() int  { return b.b2filePart.number() }
+func (b *beFilePart) sha1() string { return b.b2filePart.sha1() }
+func (b *beFilePart) size() int64  { return b.b2filePart.size() }
 
 func jitter(d time.Duration) time.Duration {
 	f := float64(d)

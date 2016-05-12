@@ -210,6 +210,7 @@ func (w *Writer) getLargeFile() (beLargeFileInterface, error) {
 	}
 	next := 1
 	seen := make(map[int]string)
+	var size int64
 	var fi beFileInterface
 	for {
 		cur := &Cursor{name: w.name}
@@ -229,6 +230,7 @@ func (w *Writer) getLargeFile() (beLargeFileInterface, error) {
 		next = n
 		for _, p := range parts {
 			seen[p.number()] = p.sha1()
+			size += p.size()
 		}
 		if len(parts) == 0 {
 			break
@@ -241,7 +243,7 @@ func (w *Writer) getLargeFile() (beLargeFileInterface, error) {
 	for id, sha := range seen {
 		w.seen[id] = sha
 	}
-	return fi.compileParts(int64(w.csize), seen), nil
+	return fi.compileParts(size, seen), nil
 }
 
 func (w *Writer) sendChunk() error {

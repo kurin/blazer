@@ -85,6 +85,7 @@ type b2FileInfoInterface interface {
 type b2FilePartInterface interface {
 	number() int
 	sha1() string
+	size() int64
 }
 
 type b2Root struct {
@@ -335,10 +336,6 @@ func (b *b2FileInfo) stats() (string, string, int64, string, map[string]string, 
 	return b.b.Name, b.b.SHA1, b.b.Size, b.b.ContentType, b.b.Info, b.b.Status, b.b.Timestamp
 }
 
-func (b *b2FilePart) number() int {
-	return b.b.Number
-}
-
-func (b *b2FilePart) sha1() string {
-	return b.b.SHA1
-}
+func (b *b2FilePart) number() int  { return b.b.Number }
+func (b *b2FilePart) sha1() string { return b.b.SHA1 }
+func (b *b2FilePart) size() string { return b.b.Size }

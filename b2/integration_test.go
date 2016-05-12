@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"reflect"
 	"testing"
 	"time"
 
@@ -201,11 +202,12 @@ func TestResumeWriter(t *testing.T) {
 
 	ctx2 := context.Background()
 	ctx2, cancel2 := context.WithTimeout(ctx2, 10*time.Minute)
-	bucket2, _, err := startLiveTest(ctx2)
+	defer cancel2()
+	bucket2, done, err := startLiveTest(ctx2)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cancel2()
+	defer done()
 	w2 := bucket2.Object("foo").NewWriter(ctx2)
 	r2 := io.LimitReader(zReader{}, 3e8)
 	h1 := sha1.New()
@@ -232,6 +234,62 @@ func TestResumeWriter(t *testing.T) {
 	endSHA := fmt.Sprintf("%x", h2.Sum(nil))
 	if endSHA != begSHA {
 		t.Errorf("got conflicting hashes: got %q, want %q", endSHA, begSHA)
+	}
+}
+
+func TestAttrs(t *testing.T) {
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+	bucket, done, err := startLiveTest(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer done()
+
+	attrs := &Attrs{
+		ContentType: "jpeg/stream",
+		Info: map[string]string{
+			"one": "a",
+			"two": "b",
+		},
+	}
+
+	table := []struct {
+		name string
+		size int64
+	}{
+		{
+			name: "small",
+			size: 1e3,
+		},
+		{
+			name: "large",
+			size: 1e8 + 4,
+		},
+	}
+
+	for _, e := range table {
+		w := bucket.Object(e.name).NewWriter(ctx).WithAttrs(attrs)
+		if _, err := io.Copy(w, io.LimitReader(zReader{}, e.size)); err != nil {
+			t.Error(err)
+			continue
+		}
+		if err := w.Close(); err != nil {
+			t.Error(err)
+			continue
+		}
+		gotAttrs, err := bucket.Object(e.name).Attrs(ctx)
+		if err != nil {
+			t.Error(err)
+			continue
+		}
+		if gotAttrs.ContentType != attrs.ContentType {
+			t.Errorf("bad content-type for %s: got %q, want %q", e.name, gotAttrs.ContentType, attrs.ContentType)
+		}
+		if !reflect.DeepEqual(gotAttrs.Info, attrs.Info) {
+			t.Errorf("bad info for %s: got %v, want %v", e.name, gotAttrs.Info, attrs.Info)
+		}
 	}
 }
 

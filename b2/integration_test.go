@@ -24,8 +24,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kurin/blazer/base"
-
 	"golang.org/x/net/context"
 )
 
@@ -35,31 +33,14 @@ const (
 )
 
 func TestReadWriteLive(t *testing.T) {
-	id := os.Getenv(apiID)
-	key := os.Getenv(apiKey)
-	if id == "" || key == "" {
-		t.Logf("B2_ACCOUNT_ID or B2_SECRET_KEY unset; skipping integration tests")
-		return
-	}
 	ctx := context.Background()
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
-	base.FailSomeUploads = true
-
-	client, err := NewClient(ctx, id, key)
+	bucket, done, err := startLiveTest(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	bucket, err := client.Bucket(ctx, bucketName)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if err := bucket.Delete(ctx); err != nil {
-			t.Error(err)
-		}
-	}()
+	defer done()
 
 	t.Logf("writing %q", smallFileName)
 	sobj, wsha, err := writeFile(ctx, bucket, smallFileName, 1e6+42, 1e8)
@@ -101,37 +82,14 @@ func TestReadWriteLive(t *testing.T) {
 }
 
 func TestHideShowLive(t *testing.T) {
-	id := os.Getenv(apiID)
-	key := os.Getenv(apiKey)
-	if id == "" || key == "" {
-		t.Logf("B2_ACCOUNT_ID or B2_SECRET_KEY unset; skipping integration tests")
-		return
-	}
 	ctx := context.Background()
-	ctx, cancel := context.WithTimeout(ctx, time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
-	client, err := NewClient(ctx, id, key)
+	bucket, done, err := startLiveTest(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	bucket, err := client.Bucket(ctx, bucketName)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		for c := range listObjects(ctx, bucket.ListObjects) {
-			if c.err != nil {
-				t.Error(err)
-				continue
-			}
-			if err := c.o.Delete(ctx); err != nil {
-				t.Error(err)
-			}
-		}
-		if err := bucket.Delete(ctx); err != nil {
-			t.Error(err)
-		}
-	}()
+	defer done()
 
 	// write a file
 	obj, _, err := writeFile(ctx, bucket, smallFileName, 1e6+42, 1e8)
@@ -177,7 +135,7 @@ func TestHideShowLive(t *testing.T) {
 
 func TestResumeWriter(t *testing.T) {
 	ctx := context.Background()
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	bucket, _, err := startLiveTest(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -239,7 +197,7 @@ func TestResumeWriter(t *testing.T) {
 
 func TestAttrs(t *testing.T) {
 	ctx := context.Background()
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 	bucket, done, err := startLiveTest(ctx)
 	if err != nil {
@@ -343,7 +301,7 @@ func startLiveTest(ctx context.Context) (*Bucket, func(), error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	bucket, err := client.Bucket(ctx, bucketName)
+	bucket, err := client.Bucket(ctx, id+bucketName)
 	if err != nil {
 		return nil, nil, err
 	}

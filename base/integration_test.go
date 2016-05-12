@@ -59,7 +59,7 @@ func TestStorage(t *testing.T) {
 	}
 
 	// b2_create_bucket
-	bucket, err := b2.CreateBucket(ctx, bucketName, "")
+	bucket, err := b2.CreateBucket(ctx, id+bucketName, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,13 +78,13 @@ func TestStorage(t *testing.T) {
 	}
 	var found bool
 	for _, bucket := range buckets {
-		if bucket.Name == bucketName {
+		if bucket.Name == id+bucketName {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Errorf("%s: new bucket not found", bucketName)
+		t.Errorf("%s: new bucket not found", id+bucketName)
 	}
 
 	// b2_get_upload_url

@@ -37,12 +37,15 @@ type chunk struct {
 }
 
 // Writer writes data into Backblaze.  It automatically switches to the large
-// file API if the file exceeds 100MB (that is, 1e8 bytes).  Due to that and
-// other Backblaze API details, there is a large (100MB) buffer.
+// file API if the file exceeds ChunkSize bytes.  Due to that and other
+// Backblaze API details, there is a large buffer.
+//
+// Changes to public Writer attributes must be made before the first call to
+// Write.
 type Writer struct {
 	// ConcurrentUploads is number of different threads sending data concurrently
 	// to Backblaze for large files.  This can increase performance greatly, as
-	// each thread will hit a different endpoint.  However, there is a 100MB
+	// each thread will hit a different endpoint.  However, there is a ChunkSize
 	// buffer for each thread.  Values less than 1 are equivalent to 1.
 	ConcurrentUploads int
 
@@ -50,6 +53,13 @@ type Writer struct {
 	// the same name was started but not finished, then assume that we are
 	// resuming that file, and don't upload duplicate chunks.
 	Resume bool
+
+	// ChunkSize is the size, in bytes, of each individual part, when writing
+	// large files, and also when determining whether to upload a file normally
+	// or when to split it into parts.  The default is 100M (1e8) (which is also
+	// the minimum).  Values less than 100M are not an error, but will fail.  The
+	// maximum is 5GB (5e9).
+	ChunkSize int
 
 	contentType string
 	info        map[string]string
@@ -148,6 +158,7 @@ func (w *Writer) Write(p []byte) (int, error) {
 	if err := w.getErr(); err != nil {
 		return 0, err
 	}
+	w.csize = w.ChunkSize
 	if w.csize == 0 {
 		w.csize = 1e8
 	}

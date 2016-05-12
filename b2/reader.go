@@ -101,7 +101,6 @@ func (r *Reader) thread() {
 			if offset+size > r.size {
 				size = r.size - offset
 			}
-			var tries int
 		redo:
 			fr, err := r.o.b.b.downloadFileByName(r.ctx, r.name, offset, size)
 			if err != nil {
@@ -111,13 +110,6 @@ func (r *Reader) thread() {
 			}
 			i, err := copyContext(r.ctx, buf, fr)
 			if i < size || err == io.ErrUnexpectedEOF {
-				tries++
-				if tries > 15 {
-					glog.Warningf("b2 reader %d (%s: %d-%d of %d): giving up", chunkID, r.name, offset, offset+size, r.size)
-					r.setErr(io.ErrUnexpectedEOF)
-					r.rcond.Broadcast()
-					return
-				}
 				// Probably the network connection was closed early.  Retry.
 				glog.Infof("b2 reader %d: got %dB of %dB; retrying", chunkID, i, size)
 				buf.Reset()

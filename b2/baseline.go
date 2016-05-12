@@ -338,4 +338,4 @@ func (b *b2FileInfo) stats() (string, string, int64, string, map[string]string, 
 
 func (b *b2FilePart) number() int  { return b.b.Number }
 func (b *b2FilePart) sha1() string { return b.b.SHA1 }
-func (b *b2FilePart) size() string { return b.b.Size }
+func (b *b2FilePart) size() int64  { return b.b.Size }

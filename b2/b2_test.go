@@ -538,7 +538,7 @@ func TestWriterReturnsError(t *testing.T) {
 	}
 	w := bucket.Object("test").NewWriter(ctx)
 	r := io.LimitReader(zReader{}, 1e7)
-	w.csize = 1e4
+	w.ChunkSize = 1e4
 	w.ConcurrentUploads = 4
 	if _, err := io.Copy(w, r); err == nil {
 		t.Fatalf("io.Copy: should have returned an error")

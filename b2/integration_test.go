@@ -16,7 +16,6 @@ package b2
 
 import (
 	"crypto/sha1"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -36,10 +35,7 @@ func TestReadWriteLive(t *testing.T) {
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
-	bucket, done, err := startLiveTest(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
+	bucket, done := startLiveTest(ctx, t)
 	defer done()
 
 	t.Logf("writing %q", smallFileName)
@@ -85,10 +81,7 @@ func TestHideShowLive(t *testing.T) {
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
-	bucket, done, err := startLiveTest(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
+	bucket, done := startLiveTest(ctx, t)
 	defer done()
 
 	// write a file
@@ -136,10 +129,7 @@ func TestHideShowLive(t *testing.T) {
 func TestResumeWriter(t *testing.T) {
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
-	bucket, _, err := startLiveTest(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
+	bucket, _ := startLiveTest(ctx, t)
 
 	w := bucket.Object("foo").NewWriter(ctx)
 	r := io.LimitReader(zReader{}, 3e8)
@@ -161,10 +151,7 @@ func TestResumeWriter(t *testing.T) {
 	ctx2 := context.Background()
 	ctx2, cancel2 := context.WithTimeout(ctx2, 10*time.Minute)
 	defer cancel2()
-	bucket2, done, err := startLiveTest(ctx2)
-	if err != nil {
-		t.Fatal(err)
-	}
+	bucket2, done := startLiveTest(ctx2, t)
 	defer done()
 	w2 := bucket2.Object("foo").NewWriter(ctx2)
 	r2 := io.LimitReader(zReader{}, 3e8)
@@ -199,10 +186,7 @@ func TestAttrs(t *testing.T) {
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
-	bucket, done, err := startLiveTest(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
+	bucket, done := startLiveTest(ctx, t)
 	defer done()
 
 	attrs := &Attrs{
@@ -291,19 +275,22 @@ func listObjects(ctx context.Context, f func(context.Context, int, *Cursor) ([]*
 	return ch
 }
 
-func startLiveTest(ctx context.Context) (*Bucket, func(), error) {
+func startLiveTest(ctx context.Context, t *testing.T) (*Bucket, func()) {
 	id := os.Getenv(apiID)
 	key := os.Getenv(apiKey)
 	if id == "" || key == "" {
-		return nil, nil, errors.New("B2_ACCOUNT_ID or B2_SECRET_KEY unset; skipping integration tests")
+		t.Skipf("B2_ACCOUNT_ID or B2_SECRET_KEY unset; skipping integration tests")
+		return nil, nil
 	}
 	client, err := NewClient(ctx, id, key)
 	if err != nil {
-		return nil, nil, err
+		t.Fatal(err)
+		return nil, nil
 	}
 	bucket, err := client.Bucket(ctx, id+bucketName)
 	if err != nil {
-		return nil, nil, err
+		t.Fatal(err)
+		return nil, nil
 	}
 	f := func() {
 		for c := range listObjects(ctx, bucket.ListObjects) {
@@ -311,10 +298,12 @@ func startLiveTest(ctx context.Context) (*Bucket, func(), error) {
 				continue
 			}
 			if err := c.o.Delete(ctx); err != nil {
+				t.Error(err)
 			}
 		}
 		if err := bucket.Delete(ctx); err != nil {
+			t.Error(err)
 		}
 	}
-	return bucket, f, nil
+	return bucket, f
 }

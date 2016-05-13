@@ -76,9 +76,30 @@ func (c *Client) Bucket(ctx context.Context, name string) (*Bucket, error) {
 	}, err
 }
 
+// ListBucket returns all the available buckets.
+func (c *Client) ListBuckets(ctx context.Context) ([]*Bucket, error) {
+	bs, err := c.backend.listBuckets(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var buckets []*Bucket
+	for _, b := range bs {
+		buckets = append(buckets, &Bucket{
+			b: b,
+			r: c.backend,
+		})
+	}
+	return buckets, nil
+}
+
 // Delete removes a bucket.  The bucket must be empty.
 func (b *Bucket) Delete(ctx context.Context) error {
 	return b.b.deleteBucket(ctx)
+}
+
+// Name returns the bucket's name.
+func (b *Bucket) Name() string {
+	return b.b.name()
 }
 
 // Object represents a B2 object.

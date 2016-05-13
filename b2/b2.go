@@ -14,6 +14,17 @@
 
 // Package b2 provides a high-level interface to Backblaze's B2 cloud storage
 // service.
+//
+// It is specifically designed to abstract away the Backblaze API details by
+// providing familiar Go interfaces, specifically an io.Writer for object
+// storage, and an io.Reader for object download.  Handling of transient
+// errors, including network and authentication timeouts, is transparent.
+//
+// Methods that perform network requests accept a context.Context argument.
+// Callers should use the context's cancellation abilities to end requests
+// early, or to provide timeout or deadline guarantees.
+//
+// This package is in development and may make API changes.
 package b2
 
 import (
@@ -178,6 +189,8 @@ func (b *Bucket) Object(name string) *Object {
 
 // NewWriter returns a new writer for the given object.  Objects that are
 // overwritten are not deleted, but are "hidden".
+//
+// Callers must close the writer when finished and check the error status.
 func (o *Object) NewWriter(ctx context.Context) *Writer {
 	ctx, cancel := context.WithCancel(ctx)
 	bw := &Writer{

@@ -47,8 +47,7 @@ func TestStorage(t *testing.T) {
 	id := os.Getenv(apiID)
 	key := os.Getenv(apiKey)
 	if id == "" || key == "" {
-		t.Logf("B2_ACCOUNT_ID or B2_SECRET_KEY unset; skipping integration tests")
-		return
+		t.Skipf("B2_ACCOUNT_ID or B2_SECRET_KEY unset; skipping integration tests")
 	}
 	ctx := context.Background()
 

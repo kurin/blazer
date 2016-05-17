@@ -235,6 +235,42 @@ func TestAttrs(t *testing.T) {
 	}
 }
 
+func TestRangeReaderLive(t *testing.T) {
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+	bucket, done := startLiveTest(ctx, t)
+	defer done()
+
+	w := bucket.Object("foobar").NewWriter(ctx)
+	if _, err := io.Copy(w, io.LimitReader(zReader{}, 1e6-47)); err != nil {
+		t.Fatal(err)
+	}
+	hw := sha1.New()
+	tr := io.TeeReader(io.LimitReader(zReader{}, 41+1e6), hw)
+	if _, err := io.Copy(w, tr); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.Copy(w, io.LimitReader(zReader{}, 6+1e6)); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	r := bucket.Object("foobar").NewRangeReader(ctx, 1e6-47, 1e6+41)
+	defer r.Close()
+	hr := sha1.New()
+	if _, err := io.Copy(hr, r); err != nil {
+		t.Error(err)
+	}
+	got := fmt.Sprintf("%x", hr.Sum(nil))
+	want := fmt.Sprintf("%x", hw.Sum(nil))
+	if got != want {
+		t.Errorf("bad hash, got %q, want %q", got, want)
+	}
+}
+
 type object struct {
 	o   *Object
 	err error

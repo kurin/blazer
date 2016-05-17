@@ -37,21 +37,23 @@ type Reader struct {
 	ChunkSize int
 
 	ctx    context.Context
-	cancel context.CancelFunc
+	cancel context.CancelFunc // cancels ctx
 	o      *Object
 	name   string
-	size   int64
-	csize  int
-	read   int
-	chwid  int
-	chrid  int
+	offset int64 // the start of the file
+	length int64 // the length to read, or -1
+	size   int64 // the end of the file, in absolute terms
+	csize  int   // chunk size
+	read   int   // amount read
+	chwid  int   // chunks written
+	chrid  int   // chunks read
 	chbuf  chan *bytes.Buffer
 	init   sync.Once
-	rmux   sync.Mutex
+	rmux   sync.Mutex // guards rcond
 	rcond  *sync.Cond
 	chunks map[int]*bytes.Buffer
 
-	emux sync.RWMutex
+	emux sync.RWMutex // guards err, believe it or not
 	err  error
 }
 
@@ -93,7 +95,7 @@ func (r *Reader) thread() {
 			chunkID := r.chwid
 			r.chwid++
 			r.rmux.Unlock()
-			offset := int64(chunkID * r.csize)
+			offset := int64(chunkID*r.csize) + r.offset
 			size := int64(r.csize)
 			if offset >= r.size {
 				return
@@ -159,6 +161,12 @@ func (r *Reader) initFunc() {
 		return
 	}
 	r.size = r.o.f.size()
+	if r.length >= 0 && r.offset+r.length < r.size {
+		r.size = r.offset + r.length
+	}
+	if r.offset > r.size {
+		r.offset = r.size
+	}
 	r.rcond = sync.NewCond(&r.rmux)
 	cr := r.ConcurrentDownloads
 	if cr < 1 {
@@ -185,7 +193,7 @@ func (r *Reader) Read(p []byte) (int, error) {
 	n, err := chunk.Read(p)
 	r.read += n
 	if err == io.EOF {
-		if int64(r.read) >= r.size {
+		if int64(r.read) >= r.size-r.offset {
 			close(r.chbuf)
 			return n, err
 		}

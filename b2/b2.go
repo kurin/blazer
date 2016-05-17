@@ -205,8 +205,9 @@ func (o *Object) NewWriter(ctx context.Context) *Writer {
 	return bw
 }
 
-// NewReader returns a reader for the given object.
-func (o *Object) NewReader(ctx context.Context) *Reader {
+// NewRangeReader returns a reader for the given object, reading up to length
+// bytes.  If length is negative, the rest of the object is read.
+func (o *Object) NewRangeReader(ctx context.Context, offset, length int64) *Reader {
 	ctx, cancel := context.WithCancel(ctx)
 	return &Reader{
 		ctx:    ctx,
@@ -214,7 +215,14 @@ func (o *Object) NewReader(ctx context.Context) *Reader {
 		o:      o,
 		name:   o.name,
 		chunks: make(map[int]*bytes.Buffer),
+		length: length,
+		offset: offset,
 	}
+}
+
+// NewReader returns a reader for the given object.
+func (o *Object) NewReader(ctx context.Context) *Reader {
+	return o.NewRangeReader(ctx, 0, -1)
 }
 
 func (o *Object) ensure(ctx context.Context) error {

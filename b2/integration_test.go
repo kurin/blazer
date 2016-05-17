@@ -15,6 +15,7 @@
 package b2
 
 import (
+	"bytes"
 	"crypto/sha1"
 	"fmt"
 	"io"
@@ -242,32 +243,75 @@ func TestRangeReaderLive(t *testing.T) {
 	bucket, done := startLiveTest(ctx, t)
 	defer done()
 
+	buf := &bytes.Buffer{}
+	io.Copy(buf, io.LimitReader(zReader{}, 3e6))
+	rs := bytes.NewReader(buf.Bytes())
+
 	w := bucket.Object("foobar").NewWriter(ctx)
-	if _, err := io.Copy(w, io.LimitReader(zReader{}, 1e6-47)); err != nil {
-		t.Fatal(err)
-	}
-	hw := sha1.New()
-	tr := io.TeeReader(io.LimitReader(zReader{}, 41+1e6), hw)
-	if _, err := io.Copy(w, tr); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := io.Copy(w, io.LimitReader(zReader{}, 6+1e6)); err != nil {
+	if _, err := io.Copy(w, rs); err != nil {
 		t.Fatal(err)
 	}
 	if err := w.Close(); err != nil {
 		t.Fatal(err)
 	}
 
-	r := bucket.Object("foobar").NewRangeReader(ctx, 1e6-47, 1e6+41)
-	defer r.Close()
-	hr := sha1.New()
-	if _, err := io.Copy(hr, r); err != nil {
-		t.Error(err)
+	table := []struct {
+		offset, length int64
+		size           int64 // expected actual size
+	}{
+		{
+			offset: 1e6 - 50,
+			length: 1e6 + 50,
+			size:   1e6 + 50,
+		},
+		{
+			offset: 0,
+			length: -1,
+			size:   3e6,
+		},
+		{
+			offset: 2e6,
+			length: -1,
+			size:   1e6,
+		},
+		{
+			offset: 2e6,
+			length: 2e6,
+			size:   1e6,
+		},
 	}
-	got := fmt.Sprintf("%x", hr.Sum(nil))
-	want := fmt.Sprintf("%x", hw.Sum(nil))
-	if got != want {
-		t.Errorf("bad hash, got %q, want %q", got, want)
+
+	for _, e := range table {
+		if _, err := rs.Seek(e.offset, 0); err != nil {
+			t.Error(err)
+			continue
+		}
+		hw := sha1.New()
+		var lr io.Reader
+		lr = rs
+		if e.length >= 0 {
+			lr = io.LimitReader(rs, e.length)
+		}
+		if _, err := io.Copy(hw, lr); err != nil {
+			t.Error(err)
+			continue
+		}
+		r := bucket.Object("foobar").NewRangeReader(ctx, e.offset, e.length)
+		defer r.Close()
+		hr := sha1.New()
+		read, err := io.Copy(hr, r)
+		if err != nil {
+			t.Error(err)
+			continue
+		}
+		if read != e.size {
+			t.Errorf("read %d bytes, wanted %d bytes", read, e.size)
+		}
+		got := fmt.Sprintf("%x", hr.Sum(nil))
+		want := fmt.Sprintf("%x", hw.Sum(nil))
+		if got != want {
+			t.Errorf("bad hash, got %q, want %q", got, want)
+		}
 	}
 }
 

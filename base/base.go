@@ -42,8 +42,8 @@ import (
 	"golang.org/x/net/context"
 )
 
-const (
-	apiBase = "https://api.backblaze.com"
+var (
+	APIBase = "https://api.backblaze.com"
 )
 
 type b2err struct {
@@ -303,7 +303,7 @@ func AuthorizeAccount(ctx context.Context, account, key string) (*B2, error) {
 	headers := map[string]string{
 		"Authorization": fmt.Sprintf("Basic %s", auth),
 	}
-	if err := makeRequest(ctx, "b2_authorize_account", "GET", apiBase+b2types.V1api+"b2_authorize_account", nil, b2resp, headers, nil); err != nil {
+	if err := makeRequest(ctx, "b2_authorize_account", "GET", APIBase+b2types.V1api+"b2_authorize_account", nil, b2resp, headers, nil); err != nil {
 		return nil, err
 	}
 	return &B2{

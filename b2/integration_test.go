@@ -39,23 +39,20 @@ func TestReadWriteLive(t *testing.T) {
 	bucket, done := startLiveTest(ctx, t)
 	defer done()
 
-	t.Logf("writing %q", smallFileName)
 	sobj, wsha, err := writeFile(ctx, bucket, smallFileName, 1e6-42, 1e8)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("successfully wrote file %q", smallFileName)
 
-	t.Logf("writing %q", largeFileName)
 	lobj, wshaL, err := writeFile(ctx, bucket, largeFileName, 1e8+5e7, 1e8)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("successfully wrote file %q", largeFileName)
 
 	if err := readFile(ctx, lobj, wshaL, 1e7, 10); err != nil {
 		t.Error(err)
 	}
+
 	if err := readFile(ctx, sobj, wsha, 1e5, 10); err != nil {
 		t.Error(err)
 	}

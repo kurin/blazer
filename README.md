@@ -1,9 +1,10 @@
 Blazer [![GoDoc](https://godoc.org/github.com/kurin/blazer/b2?status.svg)](https://godoc.org/github.com/kurin/blazer/b2)
 ====
 
-Blazer is a Golang library for Backblaze's B2 object storage service.  It is
-designed for simple integration with existing applications that may already be
-using S3 and Google Cloud Storage, by exporting only a few standard Go types.
+Blazer is a Golang client library for Backblaze's B2 object storage service.
+It is designed for simple integration with existing applications that may
+already be using S3 and Google Cloud Storage, by exporting only a few standard
+Go types.
 
 It implements and satisfies the [B2 integration
 checklist](https://www.backblaze.com/b2/docs/integration_checklist.html),

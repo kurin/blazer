@@ -32,6 +32,7 @@ import (
 	"crypto/sha1"
 	"fmt"
 	"io"
+	"strconv"
 	"time"
 
 	"golang.org/x/net/context"
@@ -129,7 +130,8 @@ type Attrs struct {
 	Status          ObjectState       // Not used on upload.
 	UploadTimestamp time.Time         // Not used on upload.
 	SHA1            string            // Not used on upload. Can be "none" for large files.
-	Info            map[string]string // Limited to 10 keys.
+	LastModified    time.Time         // If present, and there are fewer than 10 keys in the Info field, this is saved on upload.
+	Info            map[string]string // Save arbitrary metadata on upload, but limited to 10 keys.
 }
 
 // Attrs returns an object's attributes.
@@ -151,6 +153,15 @@ func (o *Object) Attrs(ctx context.Context) (*Attrs, error) {
 	case "hide":
 		state = Hider
 	}
+	var mtime time.Time
+	if v, ok := info["src_last_modified_millis"]; ok {
+		ms, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			return nil, err
+		}
+		mtime = time.Unix(ms/1e3, (ms%1e3)*1e6)
+		delete(info, "src_last_modified_millis")
+	}
 	return &Attrs{
 		Name:            name,
 		Size:            size,
@@ -159,6 +170,7 @@ func (o *Object) Attrs(ctx context.Context) (*Attrs, error) {
 		SHA1:            sha,
 		Info:            info,
 		Status:          state,
+		LastModified:    mtime,
 	}, nil
 }
 

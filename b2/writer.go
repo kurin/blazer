@@ -324,6 +324,12 @@ func (w *Writer) Close() error {
 // values.  WithAttrs must be called before the first call to Write.
 func (w *Writer) WithAttrs(attrs *Attrs) *Writer {
 	w.contentType = attrs.ContentType
-	w.info = attrs.Info
+	w.info = make(map[string]string)
+	for k, v := range attrs.Info {
+		w.info[k] = v
+	}
+	if len(w.info) < 10 && !attrs.LastModified.IsZero() {
+		w.info["src_last_modified_millis"] = fmt.Sprintf("%d", attrs.LastModified.UnixNano()/1e6)
+	}
 	return w
 }

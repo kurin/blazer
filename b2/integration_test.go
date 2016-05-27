@@ -187,11 +187,18 @@ func TestAttrs(t *testing.T) {
 	bucket, done := startLiveTest(ctx, t)
 	defer done()
 
-	attrs := &Attrs{
-		ContentType: "jpeg/stream",
-		Info: map[string]string{
-			"one": "a",
-			"two": "b",
+	attrlist := []*Attrs{
+		&Attrs{
+			ContentType: "jpeg/stream",
+			Info: map[string]string{
+				"one": "a",
+				"two": "b",
+			},
+		},
+		&Attrs{
+			ContentType:  "application/MAGICFACE",
+			LastModified: time.Unix(1464370149, 142000000),
+			Info:         map[string]string{}, // can't be nil
 		},
 	}
 
@@ -210,25 +217,30 @@ func TestAttrs(t *testing.T) {
 	}
 
 	for _, e := range table {
-		w := bucket.Object(e.name).NewWriter(ctx).WithAttrs(attrs)
-		if _, err := io.Copy(w, io.LimitReader(zReader{}, e.size)); err != nil {
-			t.Error(err)
-			continue
-		}
-		if err := w.Close(); err != nil {
-			t.Error(err)
-			continue
-		}
-		gotAttrs, err := bucket.Object(e.name).Attrs(ctx)
-		if err != nil {
-			t.Error(err)
-			continue
-		}
-		if gotAttrs.ContentType != attrs.ContentType {
-			t.Errorf("bad content-type for %s: got %q, want %q", e.name, gotAttrs.ContentType, attrs.ContentType)
-		}
-		if !reflect.DeepEqual(gotAttrs.Info, attrs.Info) {
-			t.Errorf("bad info for %s: got %v, want %v", e.name, gotAttrs.Info, attrs.Info)
+		for _, attrs := range attrlist {
+			w := bucket.Object(e.name).NewWriter(ctx).WithAttrs(attrs)
+			if _, err := io.Copy(w, io.LimitReader(zReader{}, e.size)); err != nil {
+				t.Error(err)
+				continue
+			}
+			if err := w.Close(); err != nil {
+				t.Error(err)
+				continue
+			}
+			gotAttrs, err := bucket.Object(e.name).Attrs(ctx)
+			if err != nil {
+				t.Error(err)
+				continue
+			}
+			if gotAttrs.ContentType != attrs.ContentType {
+				t.Errorf("bad content-type for %s: got %q, want %q", e.name, gotAttrs.ContentType, attrs.ContentType)
+			}
+			if !reflect.DeepEqual(gotAttrs.Info, attrs.Info) {
+				t.Errorf("bad info for %s: got %#v, want %#v", e.name, gotAttrs.Info, attrs.Info)
+			}
+			if !gotAttrs.LastModified.Equal(attrs.LastModified) {
+				t.Errorf("bad lastmodified time for %s: got %v, want %v", e.name, gotAttrs.LastModified, attrs.LastModified)
+			}
 		}
 	}
 }

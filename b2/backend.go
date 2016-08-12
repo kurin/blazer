@@ -49,6 +49,7 @@ type beBucketInterface interface {
 	listFileVersions(context.Context, int, string, string) ([]beFileInterface, string, string, error)
 	downloadFileByName(context.Context, string, int64, int64) (beFileReaderInterface, error)
 	hideFile(context.Context, string) (beFileInterface, error)
+	getDownloadAuthorization(context.Context, string, time.Duration) (string, error)
 }
 
 type beBucket struct {
@@ -357,6 +358,25 @@ func (b *beBucket) hideFile(ctx context.Context, name string) (beFileInterface, 
 		return nil, err
 	}
 	return file, nil
+}
+
+func (b *beBucket) getDownloadAuthorization(ctx context.Context, p string, v time.Duration) (string, error) {
+	var tok string
+	f := func() error {
+		g := func() error {
+			t, err := b.b2bucket.getDownloadAuthorization(ctx, p, v)
+			if err != nil {
+				return err
+			}
+			tok = t
+			return nil
+		}
+		return withReauth(ctx, b.ri, g)
+	}
+	if err := withBackoff(ctx, b.ri, f); err != nil {
+		return "", err
+	}
+	return tok, nil
 }
 
 func (b *beURL) uploadFile(ctx context.Context, r io.ReadSeeker, size int, name, ct, sha1 string, info map[string]string) (beFileInterface, error) {

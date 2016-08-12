@@ -18,7 +18,7 @@ import "github.com/kurin/blazer/b2"
 
 ## Examples
 
-### Copying a file into B2
+### Copy a file into B2
 
 ```go
 func copyFile(ctx context.Context, bucket *b2.Bucket, src, dst string) error {
@@ -43,7 +43,7 @@ If the file is less than 100MB, Blazer will simply buffer the file and use the
 than 100MB, Blazer will use B2's large file support to upload the file in 100MB
 chunks.
 
-### Copying a file into B2, with multiple concurrent uploads
+### Copy a file into B2, with multiple concurrent uploads
 
 Uploading a large file with multiple HTTP connections is simple:
 
@@ -68,7 +68,7 @@ func copyFile(ctx context.Context, bucket *b2.Bucket, writers int, src, dst stri
 This will automatically split the file into `writers` chunks of 100MB uploads.
 Note that 100MB is the smallest chunk size that B2 supports.
 
-### Downloading a file from B2
+### Download a file from B2
 
 Downloading is as simple as uploading:
 
@@ -93,7 +93,7 @@ func downloadFile(ctx context.Context, bucket *b2.Bucket, downloads int, src, ds
 }
 ```
 
-### Listing all objects in a bucket
+### List all objects in a bucket
 
 ```go
 func printObjects(ctx context.Context, bucket *b2.Bucket) error {
@@ -113,5 +113,26 @@ func printObjects(ctx context.Context, bucket *b2.Bucket) error {
 	}
 }
 ```
+
+### Grant temporary auth to a file
+
+Say you have a number of files in a private bucket, and you want to allow other
+people to download some files.  This is possible to do by issuing a temporary
+authorization token for the prefix of the files you want to share.
+
+```go
+token, err := bucket.AuthToken(ctx, "photos", time.Hour)
+```
+
+If successful, `token` is then an authorization token valid for one hour, which
+can be set in HTTP GET requests.
+
+The hostname to use when downloading files via HTTP is account-specific and can
+be found via the BaseURL method:
+
+```go
+base := bucket.BaseURL()
+```
+
 ====
 This is not an official Google product.

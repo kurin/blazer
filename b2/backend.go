@@ -50,6 +50,7 @@ type beBucketInterface interface {
 	downloadFileByName(context.Context, string, int64, int64) (beFileReaderInterface, error)
 	hideFile(context.Context, string) (beFileInterface, error)
 	getDownloadAuthorization(context.Context, string, time.Duration) (string, error)
+	baseURL() string
 }
 
 type beBucket struct {
@@ -377,6 +378,10 @@ func (b *beBucket) getDownloadAuthorization(ctx context.Context, p string, v tim
 		return "", err
 	}
 	return tok, nil
+}
+
+func (b *beBucket) baseURL() string {
+	return b.b2bucket.baseURL()
 }
 
 func (b *beURL) uploadFile(ctx context.Context, r io.ReadSeeker, size int, name, ct, sha1 string, info map[string]string) (beFileInterface, error) {

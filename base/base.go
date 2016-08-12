@@ -358,6 +358,11 @@ type Bucket struct {
 	b2   *B2
 }
 
+// BaseURL returns the base part of the download URLs.
+func (b *Bucket) BaseURL() string {
+	return b.b2.downloadURI
+}
+
 // ListBuckets wraps b2_list_buckets.
 func (b *B2) ListBuckets(ctx context.Context) ([]*Bucket, error) {
 	b2req := &b2types.ListBucketsRequest{

@@ -710,6 +710,23 @@ func (b *Bucket) ListFileVersions(ctx context.Context, count int, startName, sta
 	return files, b2resp.NextName, b2resp.NextID, nil
 }
 
+// GetDownloadAuthorization wraps b2_get_download_authorization.
+func (b *Bucket) GetDownloadAuthorization(ctx context.Context, prefix string, valid time.Duration) (string, error) {
+	b2req := &b2types.GetDownloadAuthorizationRequest{
+		BucketID: b.id,
+		Prefix:   prefix,
+		Valid:    int(valid.Seconds()),
+	}
+	b2resp := &b2types.GetDownloadAuthorizationResponse{}
+	headers := map[string]string{
+		"Authorization": b.b2.authToken,
+	}
+	if err := makeRequest(ctx, "b2_get_download_authorization", "POST", b.b2.apiURI+b2types.V1api+"b2_get_download_authorization", b2req, b2resp, headers, nil); err != nil {
+		return "", err
+	}
+	return b2resp.Token, nil
+}
+
 // FileReader is an io.ReadCloser that downloads a file from B2.
 type FileReader struct {
 	io.ReadCloser

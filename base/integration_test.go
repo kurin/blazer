@@ -22,6 +22,7 @@ import (
 	"os"
 	"reflect"
 	"testing"
+	"time"
 
 	"golang.org/x/net/context"
 )
@@ -225,6 +226,11 @@ func TestStorage(t *testing.T) {
 	}
 	if len(files) != 3 {
 		t.Errorf("expected 3 files, got %d: %v", len(files), files)
+	}
+
+	// b2_get_download_authorization
+	if _, err := bucket.GetDownloadAuthorization(ctx, "foo/", 24*time.Hour); err != nil {
+		t.Errorf("failed to get download auth token: %v", err)
 	}
 }
 

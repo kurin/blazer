@@ -192,3 +192,15 @@ type GetFileInfoResponse struct {
 	Action      string            `json:"action"`
 	Timestamp   int64             `json:"uploadTimestamp"`
 }
+
+type GetDownloadAuthorizationRequest struct {
+	BucketID string `json:"bucketId"`
+	Prefix   string `json:"fileNamePrefix"`
+	Valid    int    `json:"validDurationInSeconds"`
+}
+
+type GetDownloadAuthorizationResponse struct {
+	BucketID string `json:"bucketId"`
+	Prefix   string `json:"fileNamePrefix"`
+	Token    string `json:"authorizationToken"`
+}

@@ -43,7 +43,7 @@ import (
 )
 
 var (
-	APIBase = "https://api.backblaze.com"
+	APIBase = "https://api.backblazeb2.com"
 )
 
 type b2err struct {

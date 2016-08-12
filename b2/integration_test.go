@@ -19,6 +19,7 @@ import (
 	"crypto/sha1"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"reflect"
 	"testing"
@@ -242,6 +243,51 @@ func TestAttrs(t *testing.T) {
 				t.Errorf("bad lastmodified time for %s: got %v, want %v", e.name, gotAttrs.LastModified, attrs.LastModified)
 			}
 		}
+	}
+}
+
+func TestAuthTokLive(t *testing.T) {
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+	bucket, done := startLiveTest(ctx, t)
+	defer done()
+
+	foo := "foo/bar"
+	baz := "baz/bar"
+
+	fw := bucket.Object(foo).NewWriter(ctx)
+	io.Copy(fw, io.LimitReader(zReader{}, 1e5))
+	if err := fw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	bw := bucket.Object(baz).NewWriter(ctx)
+	io.Copy(bw, io.LimitReader(zReader{}, 1e5))
+	if err := bw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	tok, err := bucket.AuthToken(ctx, "foo", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	furl := fmt.Sprintf("%s?Authorization=%s", bucket.Object(foo).URL(), tok)
+	frsp, err := http.Get(furl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if frsp.StatusCode != 200 {
+		t.Fatalf("%s: got %s, want 200", furl, frsp.Status)
+	}
+	burl := fmt.Sprintf("%s?Authorization=%s", bucket.Object(baz).URL(), tok)
+	brsp, err := http.Get(burl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if brsp.StatusCode != 401 {
+		t.Fatalf("%s: got %s, want 401", burl, brsp.Status)
 	}
 }
 

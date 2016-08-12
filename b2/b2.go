@@ -109,6 +109,11 @@ func (b *Bucket) Delete(ctx context.Context) error {
 	return b.b.deleteBucket(ctx)
 }
 
+// BaseURL returns the base URL to use for all files uploaded to this bucket.
+func (b *Bucket) BaseURL() string {
+	return b.b.baseURL()
+}
+
 // Name returns the bucket's name.
 func (b *Bucket) Name() string {
 	return b.b.name()
@@ -197,6 +202,11 @@ func (b *Bucket) Object(name string) *Object {
 		name: name,
 		b:    b,
 	}
+}
+
+// URL returns the full URL to the given object.
+func (o *Object) URL() string {
+	return fmt.Sprintf("%s/file/%s/%s", o.b.BaseURL(), o.b.Name(), o.name)
 }
 
 // NewWriter returns a new writer for the given object.  Objects that are
@@ -375,4 +385,11 @@ func (b *Bucket) getObject(ctx context.Context, name string) (*Object, error) {
 		f:    f,
 		b:    b,
 	}, nil
+}
+
+// AuthToken returns an authorization token that can be used to access objects
+// in a private bucket.  Only objects that begin with prefix can be accessed.
+// The token expires after the given duration.
+func (b *Bucket) AuthToken(ctx context.Context, prefix string, valid time.Duration) (string, error) {
+	return b.b.getDownloadAuthorization(ctx, prefix, valid)
 }

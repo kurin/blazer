@@ -1,5 +1,7 @@
-Blazer [![GoDoc](https://godoc.org/github.com/kurin/blazer/b2?status.svg)](https://godoc.org/github.com/kurin/blazer/b2)
+Blazer
 ====
+
+[![GoDoc](https://godoc.org/github.com/kurin/blazer/b2?status.svg)](https://godoc.org/github.com/kurin/blazer/b2)[![Build Status](https://travis-ci.org/kurin/blazer.svg?branch=master)](https://travis-ci.org/kurin/blazer)
 
 Blazer is a Golang client library for Backblaze's B2 object storage service.
 It is designed for simple integration with existing applications that may

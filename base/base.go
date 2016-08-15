@@ -354,6 +354,7 @@ func (b *Bucket) DeleteBucket(ctx context.Context) error {
 // Bucket holds B2 bucket details.
 type Bucket struct {
 	Name string
+	Type string
 	id   string
 	b2   *B2
 }
@@ -379,6 +380,7 @@ func (b *B2) ListBuckets(ctx context.Context) ([]*Bucket, error) {
 	for _, bucket := range b2resp.Buckets {
 		buckets = append(buckets, &Bucket{
 			Name: bucket.BucketName,
+			Type: bucket.BucketType,
 			id:   bucket.BucketID,
 			b2:   b,
 		})

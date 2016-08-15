@@ -182,6 +182,7 @@ func TestResumeWriter(t *testing.T) {
 }
 
 func TestAttrs(t *testing.T) {
+	// TODO: test is flaky
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
@@ -422,7 +423,7 @@ func startLiveTest(ctx context.Context, t *testing.T) (*Bucket, func()) {
 		t.Fatal(err)
 		return nil, nil
 	}
-	bucket, err := client.Bucket(ctx, id+bucketName)
+	bucket, err := client.NewBucket(ctx, id+bucketName, Private)
 	if err != nil {
 		t.Fatal(err)
 		return nil, nil

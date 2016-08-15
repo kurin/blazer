@@ -38,6 +38,7 @@ type b2RootInterface interface {
 
 type b2BucketInterface interface {
 	name() string
+	btype() string
 	deleteBucket(context.Context) error
 	getUploadURL(context.Context) (b2URLInterface, error)
 	startLargeFile(ctx context.Context, name, contentType string, info map[string]string) (b2LargeFileInterface, error)
@@ -184,6 +185,10 @@ func (b *b2Bucket) deleteBucket(ctx context.Context) error {
 
 func (b *b2Bucket) name() string {
 	return b.b.Name
+}
+
+func (b *b2Bucket) btype() string {
+	return b.b.Type
 }
 
 func (b *b2Bucket) getUploadURL(ctx context.Context) (b2URLInterface, error) {

@@ -140,6 +140,7 @@ type testBucket struct {
 }
 
 func (t *testBucket) name() string                       { return t.n }
+func (t *testBucket) btype() string                      { return "allPrivate" }
 func (t *testBucket) deleteBucket(context.Context) error { return nil }
 
 func (t *testBucket) getUploadURL(context.Context) (b2URLInterface, error) {
@@ -339,7 +340,7 @@ func TestReauth(t *testing.T) {
 		},
 	}
 	auths := root.auths
-	if _, err := client.Bucket(ctx, "fun"); err != nil {
+	if _, err := client.NewBucket(ctx, "fun", Private); err != nil {
 		t.Errorf("bucket should not err, got %v", err)
 	}
 	if root.auths != auths+1 {
@@ -400,7 +401,7 @@ func TestBackoff(t *testing.T) {
 				b2i: ent.root,
 			},
 		}
-		b, err := client.Bucket(ctx, "fun")
+		b, err := client.NewBucket(ctx, "fun", Private)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -448,7 +449,7 @@ func TestBackoffWithoutRetryAfter(t *testing.T) {
 			b2i: root,
 		},
 	}
-	if _, err := client.Bucket(ctx, "fun"); err != nil {
+	if _, err := client.NewBucket(ctx, "fun", Private); err != nil {
 		t.Errorf("bucket should not err, got %v", err)
 	}
 	if len(calls) != 2 {
@@ -470,7 +471,7 @@ func TestReadWrite(t *testing.T) {
 		},
 	}
 
-	bucket, err := client.Bucket(ctx, bucketName)
+	bucket, err := client.NewBucket(ctx, bucketName, Private)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -536,7 +537,7 @@ func TestWriterReturnsError(t *testing.T) {
 		},
 	}
 
-	bucket, err := client.Bucket(ctx, bucketName)
+	bucket, err := client.NewBucket(ctx, bucketName, Private)
 	if err != nil {
 		t.Fatal(err)
 	}

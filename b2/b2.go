@@ -63,22 +63,38 @@ type Bucket struct {
 	r beRootInterface
 }
 
+type BucketType string
+
+const (
+	UnknownType BucketType = ""
+	Private                = "allPrivate"
+	Public                 = "allPublic"
+)
+
 // Bucket returns the named bucket.  If the bucket already exists (and belongs
-// to this account), it is reused.  Otherwise a new bucket is created.
+// to this account), it is reused.  Otherwise a new private bucket is created.
+//
+// Deprecated; use NewBucket instead.
 func (c *Client) Bucket(ctx context.Context, name string) (*Bucket, error) {
+	return c.NewBucket(ctx, name, Private)
+}
+
+// NewBucket returns a bucket.  The bucket is created if it does not already
+// exist.
+func (c *Client) NewBucket(ctx context.Context, name string, btype BucketType) (*Bucket, error) {
 	buckets, err := c.backend.listBuckets(ctx)
 	if err != nil {
 		return nil, err
 	}
 	for _, bucket := range buckets {
-		if bucket.name() == name {
+		if bucket.name() == name && bucket.btype() == btype {
 			return &Bucket{
 				b: bucket,
 				r: c.backend,
 			}, nil
 		}
 	}
-	b, err := c.backend.createBucket(ctx, name, "")
+	b, err := c.backend.createBucket(ctx, name, string(btype))
 	if err != nil {
 		return nil, err
 	}

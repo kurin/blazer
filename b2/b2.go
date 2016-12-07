@@ -284,7 +284,7 @@ func (o *Object) Delete(ctx context.Context) error {
 
 // Cursor is passed to ListObjects to return subsequent pages.
 type Cursor struct {
-	name string
+	Name string
 	id   string
 }
 
@@ -298,14 +298,14 @@ func (b *Bucket) ListObjects(ctx context.Context, count int, c *Cursor) ([]*Obje
 	if c == nil {
 		c = &Cursor{}
 	}
-	fs, name, id, err := b.b.listFileVersions(ctx, count, c.name, c.id)
+	fs, name, id, err := b.b.listFileVersions(ctx, count, c.Name, c.id)
 	if err != nil {
 		return nil, nil, err
 	}
 	var next *Cursor
 	if name != "" && id != "" {
 		next = &Cursor{
-			name: name,
+			Name: name,
 			id:   id,
 		}
 	}
@@ -330,14 +330,14 @@ func (b *Bucket) ListCurrentObjects(ctx context.Context, count int, c *Cursor) (
 	if c == nil {
 		c = &Cursor{}
 	}
-	fs, name, err := b.b.listFileNames(ctx, count, c.name)
+	fs, name, err := b.b.listFileNames(ctx, count, c.Name)
 	if err != nil {
 		return nil, nil, err
 	}
 	var next *Cursor
 	if name != "" {
 		next = &Cursor{
-			name: name,
+			Name: name,
 		}
 	}
 	var objects []*Object
@@ -368,7 +368,7 @@ func (o *Object) Hide(ctx context.Context) error {
 // of a given name, it will reveal the most recent.
 func (b *Bucket) Reveal(ctx context.Context, name string) error {
 	cur := &Cursor{
-		name: name,
+		Name: name,
 	}
 	objs, _, err := b.ListObjects(ctx, 1, cur)
 	if err != nil && err != io.EOF {

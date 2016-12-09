@@ -371,6 +371,62 @@ func TestRangeReaderLive(t *testing.T) {
 	}
 }
 
+func TestListObjectsWithPrefix(t *testing.T) {
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+	bucket, done := startLiveTest(ctx, t)
+	defer done()
+
+	foo := "foo/bar"
+	baz := "baz/bar"
+
+	fw := bucket.Object(foo).NewWriter(ctx)
+	io.Copy(fw, io.LimitReader(zReader{}, 1e5))
+	if err := fw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	bw := bucket.Object(baz).NewWriter(ctx)
+	io.Copy(bw, io.LimitReader(zReader{}, 1e5))
+	if err := bw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// This is kind of a hack, but
+	type lfun func(context.Context, int, *Cursor) ([]*Object, *Cursor, error)
+
+	for _, f := range []lfun{bucket.ListObjects, bucket.ListCurrentObjects} {
+		c := &Cursor{
+			Name: "foo/",
+		}
+		var res []string
+		for {
+			objs, cur, err := f(ctx, 10, c)
+			if err != nil && err != io.EOF {
+				t.Fatalf("bucket.ListObjects: %v", err)
+			}
+			for _, o := range objs {
+				attrs, err := o.Attrs(ctx)
+				if err != nil {
+					t.Errorf("(%v).Attrs: %v", o, err)
+					continue
+				}
+				res = append(res, attrs.Name)
+			}
+			if err == io.EOF {
+				break
+			}
+			c = cur
+		}
+
+		want := []string{"foo/bar"}
+		if !reflect.DeepEqual(res, want) {
+			t.Errorf("got %v, want %v", res, want)
+		}
+	}
+}
+
 type object struct {
 	o   *Object
 	err error

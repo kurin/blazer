@@ -160,7 +160,7 @@ func (*b2Root) transient(err error) bool {
 }
 
 func (b *b2Root) createBucket(ctx context.Context, name, btype string) (b2BucketInterface, error) {
-	bucket, err := b.b.CreateBucket(ctx, name, btype)
+	bucket, err := b.b.CreateBucket(ctx, name, btype, nil, nil)
 	if err != nil {
 		return nil, err
 	}

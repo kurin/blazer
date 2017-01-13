@@ -52,9 +52,11 @@ type CreateBucketRequest struct {
 
 type CreateBucketResponse struct {
 	BucketID       string            `json:"bucketId"`
+	Name           string            `json:"bucketName"`
 	Type           string            `json:"bucketType"`
 	Info           map[string]string `json:"bucketInfo"`
 	LifecycleRules []LifecycleRule   `json:"lifecycleRules"`
+	Revision       int               `json:"revision"`
 }
 
 type DeleteBucketRequest struct {
@@ -67,15 +69,20 @@ type ListBucketsRequest struct {
 }
 
 type ListBucketsResponse struct {
-	Buckets []struct {
-		BucketID       string            `json:"bucketId"`
-		BucketName     string            `json:"bucketName"`
-		BucketType     string            `json:"bucketType"`
-		Info           map[string]string `json:"bucketInfo"`
-		LifecycleRules []LifecycleRule   `json:"lifecycleRules"`
-		Revision       int               `json:"revision"`
-	} `json:"buckets"`
+	Buckets []CreateBucketResponse `json:"buckets"`
 }
+
+type UpdateBucketRequest struct {
+	AccountID      string            `json:"accountId"`
+	BucketID       string            `json:"bucketId"`
+	Name           string            `json:"bucketName"`
+	Type           string            `json:"bucketType,omitempty"`
+	Info           map[string]string `json:"bucketInfo,omitempty"`
+	LifecycleRules []LifecycleRule   `json:"lifecycleRules,omitempty"`
+	IfRevisionIs   int               `json:"ifRevisionIs,omitempty"`
+}
+
+type UpdateBucketResponse CreateBucketResponse
 
 type GetUploadURLRequest struct {
 	BucketID string `json:"bucketId"`

@@ -15,6 +15,9 @@
 // Package b2types implements internal types common to the B2 API.
 package b2types
 
+// You know what would be amazing?  If I could autogen this from like a JSON
+// file.  Wouldn't that be amazing?  That would be amazing.
+
 const (
 	V1api = "/b2api/v1/"
 )
@@ -33,14 +36,25 @@ type AuthorizeAccountResponse struct {
 	MinPartSize int    `json:"minimumPartSize"`
 }
 
+type LifecycleRule struct {
+	DaysHiddenUntilDeleted int    `json:"daysFromHidingToDeleting,omitempty"`
+	DaysNewUntilHidden     int    `json:"daysFromUploadingToHiding,omitempty"`
+	Prefix                 string `json:"fileNamePrefix"`
+}
+
 type CreateBucketRequest struct {
-	AccountID string `json:"accountId"`
-	Name      string `json:"bucketName"`
-	Type      string `json:"bucketType"`
+	AccountID      string            `json:"accountId"`
+	Name           string            `json:"bucketName"`
+	Type           string            `json:"bucketType"`
+	Info           map[string]string `json:"bucketInfo"`
+	LifecycleRules []LifecycleRule   `json:"lifecycleRules"`
 }
 
 type CreateBucketResponse struct {
-	BucketID string `json:"bucketId"`
+	BucketID       string            `json:"bucketId"`
+	Type           string            `json:"bucketType"`
+	Info           map[string]string `json:"bucketInfo"`
+	LifecycleRules []LifecycleRule   `json:"lifecycleRules"`
 }
 
 type DeleteBucketRequest struct {
@@ -54,9 +68,12 @@ type ListBucketsRequest struct {
 
 type ListBucketsResponse struct {
 	Buckets []struct {
-		BucketID   string `json:"bucketId"`
-		BucketName string `json:"bucketName"`
-		BucketType string `json:"bucketType"`
+		BucketID       string            `json:"bucketId"`
+		BucketName     string            `json:"bucketName"`
+		BucketType     string            `json:"bucketType"`
+		Info           map[string]string `json:"bucketInfo"`
+		LifecycleRules []LifecycleRule   `json:"lifecycleRules"`
+		Revision       int               `json:"revision"`
 	} `json:"buckets"`
 }
 

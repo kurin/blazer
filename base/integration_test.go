@@ -86,6 +86,22 @@ func TestStorage(t *testing.T) {
 		}
 	}()
 
+	// b2_update_bucket
+	bucket.Info["new"] = "yay"
+	bucket.LifecycleRules = nil // Unset options should be a noop.
+	newBucket, err := bucket.Update(ctx)
+	if err != nil {
+		t.Errorf("%s: update bucket: %v", bucket.Name, err)
+		return
+	}
+	bucket = newBucket
+	if bucket.Info["new"] != "yay" {
+		t.Errorf("%s: info key \"new\": got %s, want \"yay\"", bucket.Name, bucket.Info["new"])
+	}
+	if len(bucket.LifecycleRules) != 1 {
+		t.Errorf("%s: lifecycle rules: got %d rules, wanted 1", bucket.Name, len(bucket.LifecycleRules))
+	}
+
 	// b2_list_buckets
 	buckets, err := b2.ListBuckets(ctx)
 	if err != nil {

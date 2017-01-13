@@ -73,9 +73,15 @@ type ListBucketsResponse struct {
 }
 
 type UpdateBucketRequest struct {
-	AccountID      string            `json:"accountId"`
-	BucketID       string            `json:"bucketId"`
-	Name           string            `json:"bucketName"`
+	AccountID string `json:"accountId"`
+	BucketID  string `json:"bucketId"`
+	// bucketName is a required field according to
+	// https://www.backblaze.com/b2/docs/b2_update_bucket.html.
+	//
+	// However, actually setting it returns 400: unknown field in
+	// com.backblaze.modules.b2.data.UpdateBucketRequest: bucketName
+	//
+	//Name           string            `json:"bucketName"`
 	Type           string            `json:"bucketType,omitempty"`
 	Info           map[string]string `json:"bucketInfo,omitempty"`
 	LifecycleRules []LifecycleRule   `json:"lifecycleRules,omitempty"`

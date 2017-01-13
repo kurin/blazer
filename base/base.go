@@ -19,7 +19,6 @@
 //
 // b2_download_file_by_id
 // b2_list_unfinished_large_files
-// b2_update_bucket
 package base
 
 import (
@@ -387,6 +386,49 @@ type Bucket struct {
 	b2             *B2
 }
 
+// Update wraps b2_update_bucket.
+func (b *Bucket) Update(ctx context.Context) (*Bucket, error) {
+	var rules []b2types.LifecycleRule
+	for _, rule := range b.LifecycleRules {
+		rules = append(rules, b2types.LifecycleRule{
+			DaysNewUntilHidden:     rule.DaysNewUntilHidden,
+			DaysHiddenUntilDeleted: rule.DaysHiddenUntilDeleted,
+			Prefix:                 rule.Prefix,
+		})
+	}
+	b2req := &b2types.UpdateBucketRequest{
+		AccountID: b.b2.accountID,
+		BucketID:  b.id,
+		// Name:           b.Name,
+		Type:           b.Type,
+		Info:           b.Info,
+		LifecycleRules: rules,
+	}
+	headers := map[string]string{
+		"Authorization": b.b2.authToken,
+	}
+	b2resp := &b2types.UpdateBucketResponse{}
+	if err := makeRequest(ctx, "b2_update_bucket", "POST", b.b2.apiURI+b2types.V1api+"b2_update_bucket", b2req, b2resp, headers, nil); err != nil {
+		return nil, err
+	}
+	var respRules []LifecycleRule
+	for _, rule := range b2resp.LifecycleRules {
+		respRules = append(respRules, LifecycleRule{
+			Prefix:                 rule.Prefix,
+			DaysNewUntilHidden:     rule.DaysNewUntilHidden,
+			DaysHiddenUntilDeleted: rule.DaysHiddenUntilDeleted,
+		})
+	}
+	return &Bucket{
+		Name:           b.Name,
+		Type:           b2resp.Type,
+		Info:           b2resp.Info,
+		LifecycleRules: respRules,
+		id:             b2resp.BucketID,
+		b2:             b.b2,
+	}, nil
+}
+
 // BaseURL returns the base part of the download URLs.
 func (b *Bucket) BaseURL() string {
 	return b.b2.downloadURI
@@ -415,8 +457,8 @@ func (b *B2) ListBuckets(ctx context.Context) ([]*Bucket, error) {
 			})
 		}
 		buckets = append(buckets, &Bucket{
-			Name:           bucket.BucketName,
-			Type:           bucket.BucketType,
+			Name:           bucket.Name,
+			Type:           bucket.Type,
 			Info:           bucket.Info,
 			LifecycleRules: rules,
 			id:             bucket.BucketID,

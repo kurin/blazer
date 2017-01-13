@@ -59,9 +59,24 @@ func TestStorage(t *testing.T) {
 	}
 
 	// b2_create_bucket
-	bucket, err := b2.CreateBucket(ctx, id+bucketName, "")
+	infoKey := "key"
+	infoVal := "val"
+	m := map[string]string{infoKey: infoVal}
+	rules := []LifecycleRule{
+		{
+			Prefix:             "what/",
+			DaysNewUntilHidden: 5,
+		},
+	}
+	bucket, err := b2.CreateBucket(ctx, id+bucketName, "", m, rules)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if bucket.Info[infoKey] != infoVal {
+		t.Errorf("%s: bucketInfo[%q] got %q, want %q", bucket.Name, infoKey, bucket.Info[infoKey], infoVal)
+	}
+	if len(bucket.LifecycleRules) != 1 {
+		t.Errorf("%s: lifecycle rules: got %d rules, wanted 1", bucket.Name, len(bucket.LifecycleRules))
 	}
 
 	defer func() {

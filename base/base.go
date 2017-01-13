@@ -315,15 +315,31 @@ func AuthorizeAccount(ctx context.Context, account, key string) (*B2, error) {
 	}, nil
 }
 
+type LifecycleRule struct {
+	Prefix                 string
+	DaysNewUntilHidden     int
+	DaysHiddenUntilDeleted int
+}
+
 // CreateBucket wraps b2_create_bucket.
-func (b *B2) CreateBucket(ctx context.Context, name, btype string) (*Bucket, error) {
+func (b *B2) CreateBucket(ctx context.Context, name, btype string, info map[string]string, rules []LifecycleRule) (*Bucket, error) {
 	if btype != "allPublic" {
 		btype = "allPrivate"
 	}
+	var b2rules []b2types.LifecycleRule
+	for _, rule := range rules {
+		b2rules = append(b2rules, b2types.LifecycleRule{
+			Prefix:                 rule.Prefix,
+			DaysNewUntilHidden:     rule.DaysNewUntilHidden,
+			DaysHiddenUntilDeleted: rule.DaysHiddenUntilDeleted,
+		})
+	}
 	b2req := &b2types.CreateBucketRequest{
-		AccountID: b.accountID,
-		Name:      name,
-		Type:      btype,
+		AccountID:      b.accountID,
+		Name:           name,
+		Type:           btype,
+		Info:           info,
+		LifecycleRules: b2rules,
 	}
 	b2resp := &b2types.CreateBucketResponse{}
 	headers := map[string]string{
@@ -332,10 +348,20 @@ func (b *B2) CreateBucket(ctx context.Context, name, btype string) (*Bucket, err
 	if err := makeRequest(ctx, "b2_create_bucket", "POST", b.apiURI+b2types.V1api+"b2_create_bucket", b2req, b2resp, headers, nil); err != nil {
 		return nil, err
 	}
+	var respRules []LifecycleRule
+	for _, rule := range b2resp.LifecycleRules {
+		respRules = append(respRules, LifecycleRule{
+			Prefix:                 rule.Prefix,
+			DaysNewUntilHidden:     rule.DaysNewUntilHidden,
+			DaysHiddenUntilDeleted: rule.DaysHiddenUntilDeleted,
+		})
+	}
 	return &Bucket{
-		Name: name,
-		id:   b2resp.BucketID,
-		b2:   b,
+		Name:           name,
+		Info:           b2resp.Info,
+		LifecycleRules: respRules,
+		id:             b2resp.BucketID,
+		b2:             b,
 	}, nil
 }
 
@@ -353,10 +379,12 @@ func (b *Bucket) DeleteBucket(ctx context.Context) error {
 
 // Bucket holds B2 bucket details.
 type Bucket struct {
-	Name string
-	Type string
-	id   string
-	b2   *B2
+	Name           string
+	Type           string
+	Info           map[string]string
+	LifecycleRules []LifecycleRule
+	id             string
+	b2             *B2
 }
 
 // BaseURL returns the base part of the download URLs.
@@ -378,11 +406,21 @@ func (b *B2) ListBuckets(ctx context.Context) ([]*Bucket, error) {
 	}
 	var buckets []*Bucket
 	for _, bucket := range b2resp.Buckets {
+		var rules []LifecycleRule
+		for _, rule := range bucket.LifecycleRules {
+			rules = append(rules, LifecycleRule{
+				Prefix:                 rule.Prefix,
+				DaysNewUntilHidden:     rule.DaysNewUntilHidden,
+				DaysHiddenUntilDeleted: rule.DaysHiddenUntilDeleted,
+			})
+		}
 		buckets = append(buckets, &Bucket{
-			Name: bucket.BucketName,
-			Type: bucket.BucketType,
-			id:   bucket.BucketID,
-			b2:   b,
+			Name:           bucket.BucketName,
+			Type:           bucket.BucketType,
+			Info:           bucket.Info,
+			LifecycleRules: rules,
+			id:             bucket.BucketID,
+			b2:             b,
 		})
 	}
 	return buckets, nil

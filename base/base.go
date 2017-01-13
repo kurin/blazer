@@ -360,6 +360,7 @@ func (b *B2) CreateBucket(ctx context.Context, name, btype string, info map[stri
 		Info:           b2resp.Info,
 		LifecycleRules: respRules,
 		id:             b2resp.BucketID,
+		rev:            b2resp.Revision,
 		b2:             b,
 	}, nil
 }
@@ -383,6 +384,7 @@ type Bucket struct {
 	Info           map[string]string
 	LifecycleRules []LifecycleRule
 	id             string
+	rev            int
 	b2             *B2
 }
 
@@ -403,6 +405,7 @@ func (b *Bucket) Update(ctx context.Context) (*Bucket, error) {
 		Type:           b.Type,
 		Info:           b.Info,
 		LifecycleRules: rules,
+		IfRevisionIs:   b.rev,
 	}
 	headers := map[string]string{
 		"Authorization": b.b2.authToken,
@@ -462,6 +465,7 @@ func (b *B2) ListBuckets(ctx context.Context) ([]*Bucket, error) {
 			Info:           bucket.Info,
 			LifecycleRules: rules,
 			id:             bucket.BucketID,
+			rev:            bucket.Revision,
 			b2:             b,
 		})
 	}

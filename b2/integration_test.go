@@ -97,6 +97,11 @@ func TestHideShowLive(t *testing.T) {
 		t.Fatalf("got %d objects, wanted 1", got)
 	}
 
+	// When the hide marker and the object it's hiding were created within the
+	// same second, they can be sorted in the wrong order, causing the object to
+	// fail to be hidden.
+	time.Sleep(1500 * time.Millisecond)
+
 	// hide the file
 	if err := obj.Hide(ctx); err != nil {
 		t.Fatal(err)

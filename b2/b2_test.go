@@ -105,7 +105,7 @@ func (t *testRoot) transient(err error) bool {
 	return e.retry || e.reupload || e.backoff > 0
 }
 
-func (t *testRoot) createBucket(_ context.Context, name, _ string) (b2BucketInterface, error) {
+func (t *testRoot) createBucket(_ context.Context, name, _ string, _ map[string]string, _ []LifecycleRule) (b2BucketInterface, error) {
 	if err := t.errs.getError("createBucket"); err != nil {
 		return nil, err
 	}
@@ -340,7 +340,7 @@ func TestReauth(t *testing.T) {
 		},
 	}
 	auths := root.auths
-	if _, err := client.NewBucket(ctx, "fun", Private); err != nil {
+	if _, err := client.NewBucket(ctx, "fun", &BucketAttrs{Type: Private}); err != nil {
 		t.Errorf("bucket should not err, got %v", err)
 	}
 	if root.auths != auths+1 {
@@ -401,7 +401,7 @@ func TestBackoff(t *testing.T) {
 				b2i: ent.root,
 			},
 		}
-		b, err := client.NewBucket(ctx, "fun", Private)
+		b, err := client.NewBucket(ctx, "fun", &BucketAttrs{Type: Private})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -449,7 +449,7 @@ func TestBackoffWithoutRetryAfter(t *testing.T) {
 			b2i: root,
 		},
 	}
-	if _, err := client.NewBucket(ctx, "fun", Private); err != nil {
+	if _, err := client.NewBucket(ctx, "fun", &BucketAttrs{Type: Private}); err != nil {
 		t.Errorf("bucket should not err, got %v", err)
 	}
 	if len(calls) != 2 {
@@ -471,7 +471,7 @@ func TestReadWrite(t *testing.T) {
 		},
 	}
 
-	bucket, err := client.NewBucket(ctx, bucketName, Private)
+	bucket, err := client.NewBucket(ctx, bucketName, &BucketAttrs{Type: Private})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -537,7 +537,7 @@ func TestWriterReturnsError(t *testing.T) {
 		},
 	}
 
-	bucket, err := client.NewBucket(ctx, bucketName, Private)
+	bucket, err := client.NewBucket(ctx, bucketName, &BucketAttrs{Type: Private})
 	if err != nil {
 		t.Fatal(err)
 	}

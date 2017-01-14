@@ -71,30 +71,52 @@ const (
 	Public                 = "allPublic"
 )
 
-// Bucket returns the named bucket.  If the bucket already exists (and belongs
-// to this account), it is reused.  Otherwise a new private bucket is created.
-//
-// Deprecated; use NewBucket instead.
-func (c *Client) Bucket(ctx context.Context, name string) (*Bucket, error) {
-	return c.NewBucket(ctx, name, Private)
+// BucketAttrs holds a bucket's metadata attributes.
+type BucketAttrs struct {
+	Type           BucketType
+	Info           map[string]string
+	LifecycleRules []LifecycleRule
 }
 
-// NewBucket returns a bucket.  The bucket is created if it does not already
-// exist.
-func (c *Client) NewBucket(ctx context.Context, name string, btype BucketType) (*Bucket, error) {
+// A LifecycleRule describes an object's life cycle, namely how many days after
+// uploading an object should be hidden, and after how many days hidden an
+// object should be deleted.  Multiple rules may not apply to the same file or
+// set of files.  Be careful when using this feature; it can (is designed to)
+// delete your data.
+type LifecycleRule struct {
+	// Prefix specifies all the files in the bucket to which this rule applies.
+	Prefix string
+
+	// DaysUploadedUntilHidden specifies the number of days after which a file
+	// will automatically be hidden.  0 means "do not automatically hide new
+	// files".
+	DaysNewUntilHidden int
+
+	// DaysHiddenUntilDeleted specifies the number of days after which a hidden
+	// file is deleted.  0 means "do not automatically delete hidden files".
+	DaysHiddenUntilDeleted int
+}
+
+// NewBucket returns a bucket.  The bucket is created with the given attributes
+// if it does not already exist.  If attrs is nil, it is created as a private
+// bucket with no info metadata and no lifecycle rules.
+func (c *Client) NewBucket(ctx context.Context, name string, attrs *BucketAttrs) (*Bucket, error) {
 	buckets, err := c.backend.listBuckets(ctx)
 	if err != nil {
 		return nil, err
 	}
 	for _, bucket := range buckets {
-		if bucket.name() == name && bucket.btype() == btype {
+		if bucket.name() == name {
 			return &Bucket{
 				b: bucket,
 				r: c.backend,
 			}, nil
 		}
 	}
-	b, err := c.backend.createBucket(ctx, name, string(btype))
+	if attrs == nil {
+		attrs = &BucketAttrs{Type: Private}
+	}
+	b, err := c.backend.createBucket(ctx, name, string(attrs.Type), attrs.Info, attrs.LifecycleRules)
 	if err != nil {
 		return nil, err
 	}

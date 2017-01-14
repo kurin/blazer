@@ -32,7 +32,7 @@ type b2RootInterface interface {
 	backoff(error) time.Duration
 	reauth(error) bool
 	reupload(error) bool
-	createBucket(context.Context, string, string) (b2BucketInterface, error)
+	createBucket(context.Context, string, string, map[string]string, []LifecycleRule) (b2BucketInterface, error)
 	listBuckets(context.Context) ([]b2BucketInterface, error)
 }
 
@@ -159,8 +159,16 @@ func (*b2Root) transient(err error) bool {
 	return base.Action(err) == base.Retry
 }
 
-func (b *b2Root) createBucket(ctx context.Context, name, btype string) (b2BucketInterface, error) {
-	bucket, err := b.b.CreateBucket(ctx, name, btype, nil, nil)
+func (b *b2Root) createBucket(ctx context.Context, name, btype string, info map[string]string, rules []LifecycleRule) (b2BucketInterface, error) {
+	var baseRules []base.LifecycleRule
+	for _, rule := range rules {
+		baseRules = append(baseRules, base.LifecycleRule{
+			DaysNewUntilHidden:     rule.DaysNewUntilHidden,
+			DaysHiddenUntilDeleted: rule.DaysHiddenUntilDeleted,
+			Prefix:                 rule.Prefix,
+		})
+	}
+	bucket, err := b.b.CreateBucket(ctx, name, btype, info, baseRules)
 	if err != nil {
 		return nil, err
 	}

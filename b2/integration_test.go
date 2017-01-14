@@ -427,6 +427,56 @@ func TestListObjectsWithPrefix(t *testing.T) {
 	}
 }
 
+func TestNewBucket(t *testing.T) {
+	id := os.Getenv(apiID)
+	key := os.Getenv(apiKey)
+	if id == "" || key == "" {
+		t.Skipf("B2_ACCOUNT_ID or B2_SECRET_KEY unset; skipping integration tests")
+	}
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+
+	client, err := NewClient(ctx, id, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	table := []struct {
+		name  string
+		attrs *BucketAttrs
+	}{
+		{
+			name: "no-attrs",
+		},
+		{
+			name: "only-rules",
+			attrs: &BucketAttrs{
+				LifecycleRules: []LifecycleRule{
+					{
+						Prefix:                 "whee/",
+						DaysHiddenUntilDeleted: 30,
+					},
+					{
+						Prefix:             "whoa/",
+						DaysNewUntilHidden: 1,
+					},
+				},
+			},
+		},
+	}
+
+	for _, ent := range table {
+		bucket, err := client.NewBucket(ctx, id+ent.name, ent.attrs)
+		if err != nil {
+			t.Errorf("%s: NewBucket(%v): %v", ent.name, ent.attrs, err)
+			continue
+		}
+		defer bucket.Delete(ctx)
+		// TODO: get attrs and compare
+	}
+}
+
 type object struct {
 	o   *Object
 	err error
@@ -479,7 +529,7 @@ func startLiveTest(ctx context.Context, t *testing.T) (*Bucket, func()) {
 		t.Fatal(err)
 		return nil, nil
 	}
-	bucket, err := client.NewBucket(ctx, id+bucketName, Private)
+	bucket, err := client.NewBucket(ctx, id+bucketName, nil)
 	if err != nil {
 		t.Fatal(err)
 		return nil, nil

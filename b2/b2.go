@@ -73,8 +73,18 @@ const (
 
 // BucketAttrs holds a bucket's metadata attributes.
 type BucketAttrs struct {
-	Type           BucketType
-	Info           map[string]string
+	// Type lists or sets the new bucket type.  If Type is UnknownType during a
+	// bucket.Update, the type is not changed.
+	Type BucketType
+
+	// Info records user data, limited to ten keys.  If nil during a
+	// bucket.Update, the existing bucket info is not modified.  A bucket's
+	// metadata can be removed by updating with an empty map.
+	Info map[string]string
+
+	// Reports or sets bucket lifecycle rules.  If nil during a bucket.Update,
+	// the rules are not modified.  A bucket's rules can be removed by updating
+	// with an empty slice.
 	LifecycleRules []LifecycleRule
 }
 
@@ -140,6 +150,18 @@ func (c *Client) ListBuckets(ctx context.Context) ([]*Bucket, error) {
 		})
 	}
 	return buckets, nil
+}
+
+// Update modifies the given bucket with new attributes.
+func (b *Bucket) Update(ctx context.Context, attrs *BucketAttrs) error {
+	return b.b.updateBucket(ctx, attrs)
+}
+
+// Attrs returns the current bucket's attributes.
+func (b *Bucket) Attrs(ctx context.Context) (*BucketAttrs, error) {
+	// I don't *think* we need to do a round-trip here, but I'm leaving the
+	// function sig open to that just in case.
+	return b.b.attrs(), nil
 }
 
 // Delete removes a bucket.  The bucket must be empty.

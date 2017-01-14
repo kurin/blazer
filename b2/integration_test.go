@@ -225,7 +225,8 @@ func TestAttrs(t *testing.T) {
 
 	for _, e := range table {
 		for _, attrs := range attrlist {
-			w := bucket.Object(e.name).NewWriter(ctx).WithAttrs(attrs)
+			o := bucket.Object(e.name)
+			w := o.NewWriter(ctx).WithAttrs(attrs)
 			if _, err := io.Copy(w, io.LimitReader(zReader{}, e.size)); err != nil {
 				t.Error(err)
 				continue
@@ -247,6 +248,9 @@ func TestAttrs(t *testing.T) {
 			}
 			if !gotAttrs.LastModified.Equal(attrs.LastModified) {
 				t.Errorf("bad lastmodified time for %s: got %v, want %v", e.name, gotAttrs.LastModified, attrs.LastModified)
+			}
+			if err := o.Delete(ctx); err != nil {
+				t.Errorf("Object(%q).Delete: %v", e.name, err)
 			}
 		}
 	}
@@ -432,6 +436,25 @@ func TestListObjectsWithPrefix(t *testing.T) {
 	}
 }
 
+func compare(a, b *BucketAttrs) bool {
+	if a == nil {
+		a = &BucketAttrs{}
+	}
+	if b == nil {
+		b = &BucketAttrs{}
+	}
+
+	if a.Type != b.Type && !((a.Type == "" && b.Type == Private) || (a.Type == Private && b.Type == "")) {
+		return false
+	}
+
+	if !reflect.DeepEqual(a.Info, b.Info) && (len(a.Info) > 0 || len(b.Info) > 0) {
+		return false
+	}
+
+	return reflect.DeepEqual(a.LifecycleRules, b.LifecycleRules)
+}
+
 func TestNewBucket(t *testing.T) {
 	id := os.Getenv(apiID)
 	key := os.Getenv(apiKey)
@@ -469,16 +492,36 @@ func TestNewBucket(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "only-info",
+			attrs: &BucketAttrs{
+				Info: map[string]string{
+					"this":  "that",
+					"other": "thing",
+				},
+			},
+		},
 	}
 
 	for _, ent := range table {
-		bucket, err := client.NewBucket(ctx, id+ent.name, ent.attrs)
+		bucket, err := client.NewBucket(ctx, id+"-"+ent.name, ent.attrs)
 		if err != nil {
 			t.Errorf("%s: NewBucket(%v): %v", ent.name, ent.attrs, err)
 			continue
 		}
 		defer bucket.Delete(ctx)
-		// TODO: get attrs and compare
+		if err := bucket.Update(ctx, nil); err != nil {
+			t.Errorf("%s: Update(ctx, nil): %v", ent.name, err)
+			continue
+		}
+		attrs, err := bucket.Attrs(ctx)
+		if err != nil {
+			t.Errorf("%s: Attrs(ctx): %v", err)
+			continue
+		}
+		if !compare(attrs, ent.attrs) {
+			t.Errorf("%s: attrs disagree: got %v, want %v", ent.name, attrs, ent.attrs)
+		}
 	}
 }
 
@@ -534,7 +577,7 @@ func startLiveTest(ctx context.Context, t *testing.T) (*Bucket, func()) {
 		t.Fatal(err)
 		return nil, nil
 	}
-	bucket, err := client.NewBucket(ctx, id+bucketName, nil)
+	bucket, err := client.NewBucket(ctx, id+"-"+bucketName, nil)
 	if err != nil {
 		t.Fatal(err)
 		return nil, nil

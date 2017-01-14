@@ -139,9 +139,11 @@ type testBucket struct {
 	files map[string]string
 }
 
-func (t *testBucket) name() string                       { return t.n }
-func (t *testBucket) btype() string                      { return "allPrivate" }
-func (t *testBucket) deleteBucket(context.Context) error { return nil }
+func (t *testBucket) name() string                                     { return t.n }
+func (t *testBucket) btype() string                                    { return "allPrivate" }
+func (t *testBucket) attrs() *BucketAttrs                              { return nil }
+func (t *testBucket) deleteBucket(context.Context) error               { return nil }
+func (t *testBucket) updateBucket(context.Context, *BucketAttrs) error { return nil }
 
 func (t *testBucket) getUploadURL(context.Context) (b2URLInterface, error) {
 	if err := t.errs.getError("getUploadURL"); err != nil {

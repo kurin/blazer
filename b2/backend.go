@@ -43,6 +43,8 @@ type beRoot struct {
 type beBucketInterface interface {
 	name() string
 	btype() BucketType
+	attrs() *BucketAttrs
+	updateBucket(context.Context, *BucketAttrs) error
 	deleteBucket(context.Context) error
 	getUploadURL(context.Context) (beURLInterface, error)
 	startLargeFile(ctx context.Context, name, contentType string, info map[string]string) (beLargeFileInterface, error)
@@ -213,6 +215,20 @@ func (b *beBucket) name() string {
 
 func (b *beBucket) btype() BucketType {
 	return BucketType(b.b2bucket.btype())
+}
+
+func (b *beBucket) attrs() *BucketAttrs {
+	return b.b2bucket.attrs()
+}
+
+func (b *beBucket) updateBucket(ctx context.Context, attrs *BucketAttrs) error {
+	f := func() error {
+		g := func() error {
+			return b.b2bucket.updateBucket(ctx, attrs)
+		}
+		return withReauth(ctx, b.ri, g)
+	}
+	return withBackoff(ctx, b.ri, f)
 }
 
 func (b *beBucket) deleteBucket(ctx context.Context) error {

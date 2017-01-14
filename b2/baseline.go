@@ -39,6 +39,8 @@ type b2RootInterface interface {
 type b2BucketInterface interface {
 	name() string
 	btype() string
+	attrs() *BucketAttrs
+	updateBucket(context.Context, *BucketAttrs) error
 	deleteBucket(context.Context) error
 	getUploadURL(context.Context) (b2URLInterface, error)
 	startLargeFile(ctx context.Context, name, contentType string, info map[string]string) (b2LargeFileInterface, error)
@@ -187,6 +189,35 @@ func (b *b2Root) listBuckets(ctx context.Context) ([]b2BucketInterface, error) {
 	return rtn, err
 }
 
+func (b *b2Bucket) updateBucket(ctx context.Context, attrs *BucketAttrs) error {
+	if attrs == nil {
+		// Force an update anyway.
+		newBucket, err := b.b.Update(ctx)
+		b.b = newBucket
+		return err
+	}
+	if attrs.Type != UnknownType {
+		b.b.Type = string(attrs.Type)
+	}
+	if attrs.Info != nil {
+		b.b.Info = attrs.Info
+	}
+	if attrs.LifecycleRules != nil {
+		rules := []base.LifecycleRule{}
+		for _, rule := range attrs.LifecycleRules {
+			rules = append(rules, base.LifecycleRule{
+				DaysNewUntilHidden:     rule.DaysNewUntilHidden,
+				DaysHiddenUntilDeleted: rule.DaysHiddenUntilDeleted,
+				Prefix:                 rule.Prefix,
+			})
+		}
+		b.b.LifecycleRules = rules
+	}
+	newBucket, err := b.b.Update(ctx)
+	b.b = newBucket
+	return err
+}
+
 func (b *b2Bucket) deleteBucket(ctx context.Context) error {
 	return b.b.DeleteBucket(ctx)
 }
@@ -197,6 +228,22 @@ func (b *b2Bucket) name() string {
 
 func (b *b2Bucket) btype() string {
 	return b.b.Type
+}
+
+func (b *b2Bucket) attrs() *BucketAttrs {
+	var rules []LifecycleRule
+	for _, rule := range b.b.LifecycleRules {
+		rules = append(rules, LifecycleRule{
+			DaysNewUntilHidden:     rule.DaysNewUntilHidden,
+			DaysHiddenUntilDeleted: rule.DaysHiddenUntilDeleted,
+			Prefix:                 rule.Prefix,
+		})
+	}
+	return &BucketAttrs{
+		LifecycleRules: rules,
+		Info:           b.b.Info,
+		Type:           BucketType(b.b.Type),
+	}
 }
 
 func (b *b2Bucket) getUploadURL(ctx context.Context) (b2URLInterface, error) {

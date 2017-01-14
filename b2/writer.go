@@ -69,6 +69,7 @@ type Writer struct {
 	cancel context.CancelFunc
 	ready  chan chunk
 	wg     sync.WaitGroup
+	start  sync.Once
 	once   sync.Once
 	done   sync.Once
 	file   beLargeFileInterface
@@ -158,10 +159,15 @@ func (w *Writer) Write(p []byte) (int, error) {
 	if err := w.getErr(); err != nil {
 		return 0, err
 	}
-	w.csize = w.ChunkSize
-	if w.csize == 0 {
-		w.csize = 1e8
-	}
+	w.start.Do(func() {
+		w.csize = w.ChunkSize
+		if w.csize == 0 {
+			w.csize = 1e8
+		}
+		w.chsh = sha1.New()
+		w.cbuf = &bytes.Buffer{}
+		w.w = io.MultiWriter(w.chsh, w.cbuf)
+	})
 	left := w.csize - w.cbuf.Len()
 	if len(p) < left {
 		return w.w.Write(p)

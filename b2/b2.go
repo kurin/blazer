@@ -29,7 +29,6 @@ package b2
 
 import (
 	"bytes"
-	"crypto/sha1"
 	"fmt"
 	"io"
 	"strconv"
@@ -280,16 +279,12 @@ func (o *Object) URL() string {
 // Callers must close the writer when finished and check the error status.
 func (o *Object) NewWriter(ctx context.Context) *Writer {
 	ctx, cancel := context.WithCancel(ctx)
-	bw := &Writer{
+	return &Writer{
 		o:      o,
 		name:   o.name,
-		chsh:   sha1.New(),
-		cbuf:   &bytes.Buffer{},
 		ctx:    ctx,
 		cancel: cancel,
 	}
-	bw.w = io.MultiWriter(bw.chsh, bw.cbuf)
-	return bw
 }
 
 // NewRangeReader returns a reader for the given object, reading up to length

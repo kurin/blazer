@@ -149,7 +149,7 @@ func TestResumeWriter(t *testing.T) {
 		}
 	}()
 	if _, err := io.Copy(w, r); err != context.Canceled {
-		t.Fatalf("io.Copy should have resulted in a canceled context")
+		t.Fatalf("io.Copy: wanted canceled context, got: %v", err)
 	}
 
 	ctx2 := context.Background()
@@ -253,6 +253,34 @@ func TestAttrs(t *testing.T) {
 				t.Errorf("Object(%q).Delete: %v", e.name, err)
 			}
 		}
+	}
+}
+
+func TestFileBufferLive(t *testing.T) {
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+	bucket, done := startLiveTest(ctx, t)
+	defer done()
+
+	r := io.LimitReader(zReader{}, 1e6)
+	w := bucket.Object("small").NewWriter(ctx)
+
+	w.UseFileBuffer = true
+
+	w.Write(nil)
+	wb, ok := w.w.(*fileBuffer)
+	if !ok {
+		t.Fatalf("writer isn't using file buffer: %T", w.w)
+	}
+	smallTmpName := wb.f.Name()
+
+	if _, err := io.Copy(w, r); err != nil {
+		t.Fatalf("creating small file: %v", err)
+	}
+
+	if _, err := os.Stat(smallTmpName); !os.IsNotExist(err) {
+		fmt.Errorf("tmp file exists or other error: %v", err)
 	}
 }
 

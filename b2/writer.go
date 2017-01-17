@@ -15,14 +15,11 @@
 package b2
 
 import (
-	"bytes"
-	"crypto/sha1"
 	"errors"
 	"fmt"
-	"hash"
-	"io"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/golang/glog"
 
@@ -30,10 +27,8 @@ import (
 )
 
 type chunk struct {
-	id   int
-	size int
-	sha1 string
-	buf  *bytes.Buffer
+	id  int
+	buf writeBuffer
 }
 
 // Writer writes data into Backblaze.  It automatically switches to the large
@@ -61,6 +56,15 @@ type Writer struct {
 	// maximum is 5GB (5e9).
 	ChunkSize int
 
+	// UseFileBuffer controls whether to use an in-memory buffer (the default) or
+	// scratch space on the file system.  If this is true, b2 will save chunks in
+	// FileBufferDir.
+	UseFileBuffer bool
+
+	// FileBufferDir specifies the directory where scratch files are kept.  If
+	// blank, os.TempDir() is used.
+	FileBufferDir string
+
 	contentType string
 	info        map[string]string
 
@@ -78,13 +82,18 @@ type Writer struct {
 	o    *Object
 	name string
 
-	cbuf *bytes.Buffer
 	cidx int
-	chsh hash.Hash
-	w    io.Writer
+	w    writeBuffer
 
 	emux sync.RWMutex
 	err  error
+}
+
+func (w *Writer) getBuffer() (writeBuffer, error) {
+	if !w.UseFileBuffer {
+		return newMemoryBuffer(), nil
+	}
+	return newFileBuffer(w.FileBufferDir)
 }
 
 func (w *Writer) setErr(err error) {
@@ -124,7 +133,7 @@ func (w *Writer) thread() {
 				return
 			}
 			if sha, ok := w.seen[chunk.id]; ok {
-				if sha != chunk.sha1 {
+				if sha != chunk.buf.Hash() {
 					w.setErr(errors.New("resumable upload was requested, but chunks don't match!"))
 					return
 				}
@@ -132,12 +141,23 @@ func (w *Writer) thread() {
 				continue
 			}
 			glog.V(2).Infof("thread %d handling chunk %d", id, chunk.id)
-			r := bytes.NewReader(chunk.buf.Bytes())
+			r, err := chunk.buf.Reader()
+			if err != nil {
+				w.setErr(err)
+				return
+			}
+			defer chunk.buf.Close() // TODO: log error
+			sleep := time.Millisecond * 15
 		redo:
-			n, err := fc.uploadPart(w.ctx, r, chunk.sha1, chunk.size, chunk.id)
-			if n != chunk.size || err != nil {
+			n, err := fc.uploadPart(w.ctx, r, chunk.buf.Hash(), chunk.buf.Len(), chunk.id)
+			if n != chunk.buf.Len() || err != nil {
 				if w.o.b.r.reupload(err) {
-					glog.Infof("b2 writer: wrote %d of %d: error: %v; retrying", n, chunk.size, err)
+					time.Sleep(sleep)
+					sleep *= 2
+					if sleep > time.Second*15 {
+						sleep = time.Second * 15
+					}
+					glog.Infof("b2 writer: wrote %d of %d: error: %v; retrying", n, chunk.buf.Len(), err)
 					f, err := w.file.getUploadPartURL(w.ctx)
 					if err != nil {
 						w.setErr(err)
@@ -156,19 +176,22 @@ func (w *Writer) thread() {
 
 // Write satisfies the io.Writer interface.
 func (w *Writer) Write(p []byte) (int, error) {
-	if err := w.getErr(); err != nil {
-		return 0, err
-	}
 	w.start.Do(func() {
 		w.csize = w.ChunkSize
 		if w.csize == 0 {
 			w.csize = 1e8
 		}
-		w.chsh = sha1.New()
-		w.cbuf = &bytes.Buffer{}
-		w.w = io.MultiWriter(w.chsh, w.cbuf)
+		v, err := w.getBuffer()
+		if err != nil {
+			w.setErr(err)
+			return
+		}
+		w.w = v
 	})
-	left := w.csize - w.cbuf.Len()
+	if err := w.getErr(); err != nil {
+		return 0, err
+	}
+	left := w.csize - w.w.Len()
 	if len(p) < left {
 		return w.w.Write(p)
 	}
@@ -193,14 +216,17 @@ func (w *Writer) simpleWriteFile() error {
 	if err != nil {
 		return err
 	}
-	sha1 := fmt.Sprintf("%x", w.chsh.Sum(nil))
+	sha1 := w.w.Hash()
 	ctype := w.contentType
 	if ctype == "" {
 		ctype = "application/octet-stream"
 	}
-	r := bytes.NewReader(w.cbuf.Bytes())
+	r, err := w.w.Reader()
+	if err != nil {
+		return err
+	}
 redo:
-	f, err := ue.uploadFile(w.ctx, r, int(r.Size()), w.name, ctype, sha1, w.info)
+	f, err := ue.uploadFile(w.ctx, r, int(w.w.Len()), w.name, ctype, sha1, w.info)
 	if err != nil {
 		if w.o.b.r.reupload(err) {
 			glog.Infof("b2 writer: %v; retrying", err)
@@ -285,18 +311,18 @@ func (w *Writer) sendChunk() error {
 	}
 	select {
 	case w.ready <- chunk{
-		id:   w.cidx + 1,
-		size: w.cbuf.Len(),
-		sha1: fmt.Sprintf("%x", w.chsh.Sum(nil)),
-		buf:  w.cbuf,
+		id:  w.cidx + 1,
+		buf: w.w,
 	}:
 	case <-w.ctx.Done():
 		return w.ctx.Err()
 	}
 	w.cidx++
-	w.chsh = sha1.New()
-	w.cbuf = &bytes.Buffer{}
-	w.w = io.MultiWriter(w.chsh, w.cbuf)
+	v, err := w.getBuffer()
+	if err != nil {
+		return err
+	}
+	w.w = v
 	return nil
 }
 
@@ -308,7 +334,7 @@ func (w *Writer) Close() error {
 			w.setErr(w.simpleWriteFile())
 			return
 		}
-		if w.cbuf.Len() > 0 {
+		if w.w.Len() > 0 {
 			if err := w.sendChunk(); err != nil {
 				w.setErr(err)
 				return
@@ -321,6 +347,7 @@ func (w *Writer) Close() error {
 			w.setErr(err)
 			return
 		}
+		w.w.Close() // TODO: log error
 		w.o.f = f
 	})
 	return w.getErr()

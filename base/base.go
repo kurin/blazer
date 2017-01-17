@@ -225,13 +225,32 @@ func makeNetRequest(req *http.Request) <-chan httpReply {
 	return ch
 }
 
+type requestBody struct {
+	size int64
+	body io.Reader
+}
+
+func (rb *requestBody) getSize() int64 {
+	if rb == nil {
+		return 0
+	}
+	return rb.size
+}
+
+func (rb *requestBody) getBody() io.Reader {
+	if rb == nil {
+		return nil
+	}
+	return rb.body
+}
+
 // FailSomeUploads causes B2 to return errors, randomly, to some RPCs.  It is
 // intended to be used for integration testing.
 var FailSomeUploads = false
 
 var reqID int64
 
-func makeRequest(ctx context.Context, method, verb, url string, b2req, b2resp interface{}, headers map[string]string, body io.Reader) error {
+func makeRequest(ctx context.Context, method, verb, url string, b2req, b2resp interface{}, headers map[string]string, body *requestBody) error {
 	var args []byte
 	if b2req != nil {
 		enc, err := json.Marshal(b2req)
@@ -239,12 +258,16 @@ func makeRequest(ctx context.Context, method, verb, url string, b2req, b2resp in
 			return err
 		}
 		args = enc
-		body = bytes.NewBuffer(enc)
+		body = &requestBody{
+			body: bytes.NewBuffer(enc),
+			size: int64(len(enc)),
+		}
 	}
-	req, err := http.NewRequest(verb, url, body)
+	req, err := http.NewRequest(verb, url, body.getBody())
 	if err != nil {
 		return err
 	}
+	req.ContentLength = body.getSize()
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
@@ -535,7 +558,7 @@ func (url *URL) UploadFile(ctx context.Context, r io.Reader, size int, name, con
 		headers[fmt.Sprintf("X-Bz-Info-%s", k)] = v
 	}
 	b2resp := &b2types.UploadFileResponse{}
-	if err := makeRequest(ctx, "b2_upload_file", "POST", url.uri, nil, b2resp, headers, r); err != nil {
+	if err := makeRequest(ctx, "b2_upload_file", "POST", url.uri, nil, b2resp, headers, &requestBody{body: r, size: int64(size)}); err != nil {
 		return nil, err
 	}
 	return &File{
@@ -705,7 +728,7 @@ func (fc *FileChunk) UploadPart(ctx context.Context, r io.Reader, sha1 string, s
 		"Content-Length":    fmt.Sprintf("%d", size),
 		"X-Bz-Content-Sha1": sha1,
 	}
-	if err := makeRequest(ctx, "b2_upload_part", "POST", fc.url, nil, nil, headers, r); err != nil {
+	if err := makeRequest(ctx, "b2_upload_part", "POST", fc.url, nil, nil, headers, &requestBody{body: r, size: int64(size)}); err != nil {
 		return 0, err
 	}
 	fc.file.mu.Lock()

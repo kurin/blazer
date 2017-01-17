@@ -244,9 +244,19 @@ func (rb *requestBody) getBody() io.Reader {
 	return rb.body
 }
 
-// FailSomeUploads causes B2 to return errors, randomly, to some RPCs.  It is
-// intended to be used for integration testing.
-var FailSomeUploads = false
+var (
+	// FailSomeUploads causes B2 to return errors, randomly, to some RPCs.  It is
+	// intended to be used for integration testing.
+	FailSomeUploads = false
+
+	// ExpireSomeAuthTokens causes B2 to expire auth tokens frequently, testing
+	// account reauthentication.
+	ExpireSomeAuthTokens = false
+
+	// ForceCapExceeded causes B2 to reject all uploads with capacity limit
+	// failures.
+	ForceCapExceeded = false
+)
 
 var reqID int64
 
@@ -274,7 +284,13 @@ func makeRequest(ctx context.Context, method, verb, url string, b2req, b2resp in
 	req.Header.Set("X-Blazer-Request-ID", fmt.Sprintf("%d", atomic.AddInt64(&reqID, 1)))
 	req.Header.Set("X-Blazer-Method", method)
 	if FailSomeUploads {
-		req.Header.Set("X-Bz-Test-Mode", "fail_some_uploads")
+		req.Header.Add("X-Bz-Test-Mode", "fail_some_uploads")
+	}
+	if ExpireSomeAuthTokens {
+		req.Header.Add("X-Bz-Test-Mode", "expire_some_account_authorization_tokens")
+	}
+	if ForceCapExceeded {
+		req.Header.Add("X-Bz-Test-Mode", "force_cap_exceeded")
 	}
 	cancel := make(chan struct{})
 	req.Cancel = cancel

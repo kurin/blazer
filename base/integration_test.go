@@ -68,7 +68,8 @@ func TestStorage(t *testing.T) {
 			DaysNewUntilHidden: 5,
 		},
 	}
-	bucket, err := b2.CreateBucket(ctx, id+bucketName, "", m, rules)
+	bname := id + "-" + bucketName
+	bucket, err := b2.CreateBucket(ctx, bname, "", m, rules)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,13 +110,13 @@ func TestStorage(t *testing.T) {
 	}
 	var found bool
 	for _, bucket := range buckets {
-		if bucket.Name == id+bucketName {
+		if bucket.Name == bname {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Errorf("%s: new bucket not found", id+bucketName)
+		t.Errorf("%s: new bucket not found", bname)
 	}
 
 	// b2_get_upload_url

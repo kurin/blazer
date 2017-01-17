@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"hash"
 	"io"
+	"io/ioutil"
+	"os"
 )
 
 type writeBuffer interface {
@@ -27,6 +29,7 @@ type writeBuffer interface {
 	Len() int
 	Reader() (io.ReadSeeker, error)
 	Hash() string // sha1 or whatever it is
+	Close() error
 }
 
 type memoryBuffer struct {
@@ -44,7 +47,62 @@ func newMemoryBuffer() *memoryBuffer {
 	return mb
 }
 
+type thing struct {
+	rs io.ReadSeeker
+	t  int
+}
+
 func (mb *memoryBuffer) Write(p []byte) (int, error)    { return mb.w.Write(p) }
 func (mb *memoryBuffer) Len() int                       { return mb.buf.Len() }
 func (mb *memoryBuffer) Reader() (io.ReadSeeker, error) { return bytes.NewReader(mb.buf.Bytes()), nil }
 func (mb *memoryBuffer) Hash() string                   { return fmt.Sprintf("%x", mb.hsh.Sum(nil)) }
+func (mb *memoryBuffer) Close() error                   { return nil }
+
+type fileBuffer struct {
+	f   *os.File
+	hsh hash.Hash
+	w   io.Writer
+	s   int
+}
+
+func newFileBuffer(loc string) (*fileBuffer, error) {
+	f, err := ioutil.TempFile(loc, "blazer")
+	if err != nil {
+		return nil, err
+	}
+	fb := &fileBuffer{
+		f:   f,
+		hsh: sha1.New(),
+	}
+	fb.w = io.MultiWriter(fb.f, fb.hsh)
+	return fb, nil
+}
+
+func (fb *fileBuffer) Write(p []byte) (int, error) {
+	n, err := fb.w.Write(p)
+	fb.s += n
+	return n, err
+}
+
+func (fb *fileBuffer) Len() int     { return fb.s }
+func (fb *fileBuffer) Hash() string { return fmt.Sprintf("%x", fb.hsh.Sum(nil)) }
+
+func (fb *fileBuffer) Reader() (io.ReadSeeker, error) {
+	if _, err := fb.f.Seek(0, 0); err != nil {
+		return nil, err
+	}
+	return &fr{f: fb.f}, nil
+}
+
+func (fb *fileBuffer) Close() error {
+	fb.f.Close()
+	return os.Remove(fb.f.Name())
+}
+
+// wraps *os.File so that the http package doesn't see it as an io.Closer
+type fr struct {
+	f *os.File
+}
+
+func (r *fr) Read(p []byte) (int, error)         { return r.f.Read(p) }
+func (r *fr) Seek(a int64, b int) (int64, error) { return r.f.Seek(a, b) }

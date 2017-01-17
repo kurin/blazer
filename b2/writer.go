@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/golang/glog"
 
@@ -55,6 +56,15 @@ type Writer struct {
 	// maximum is 5GB (5e9).
 	ChunkSize int
 
+	// UseFileBuffer controls whether to use an in-memory buffer (the default) or
+	// scratch space on the file system.  If this is true, b2 will save chunks in
+	// FileBufferDir.
+	UseFileBuffer bool
+
+	// FileBufferDir specifies the directory where scratch files are kept.  If
+	// blank, os.TempDir() is used.
+	FileBufferDir string
+
 	contentType string
 	info        map[string]string
 
@@ -77,6 +87,13 @@ type Writer struct {
 
 	emux sync.RWMutex
 	err  error
+}
+
+func (w *Writer) getBuffer() (writeBuffer, error) {
+	if !w.UseFileBuffer {
+		return newMemoryBuffer(), nil
+	}
+	return newFileBuffer(w.FileBufferDir)
 }
 
 func (w *Writer) setErr(err error) {
@@ -129,6 +146,7 @@ func (w *Writer) thread() {
 				w.setErr(err)
 				return
 			}
+			defer chunk.buf.Close() // TODO: log error
 			sleep := time.Millisecond * 15
 		redo:
 			n, err := fc.uploadPart(w.ctx, r, chunk.buf.Hash(), chunk.buf.Len(), chunk.id)
@@ -158,16 +176,21 @@ func (w *Writer) thread() {
 
 // Write satisfies the io.Writer interface.
 func (w *Writer) Write(p []byte) (int, error) {
-	if err := w.getErr(); err != nil {
-		return 0, err
-	}
 	w.start.Do(func() {
 		w.csize = w.ChunkSize
 		if w.csize == 0 {
 			w.csize = 1e8
 		}
-		w.w = newMemoryBuffer()
+		v, err := w.getBuffer()
+		if err != nil {
+			w.setErr(err)
+			return
+		}
+		w.w = v
 	})
+	if err := w.getErr(); err != nil {
+		return 0, err
+	}
 	left := w.csize - w.w.Len()
 	if len(p) < left {
 		return w.w.Write(p)
@@ -295,7 +318,11 @@ func (w *Writer) sendChunk() error {
 		return w.ctx.Err()
 	}
 	w.cidx++
-	w.w = newMemoryBuffer()
+	v, err := w.getBuffer()
+	if err != nil {
+		return err
+	}
+	w.w = v
 	return nil
 }
 
@@ -320,6 +347,7 @@ func (w *Writer) Close() error {
 			w.setErr(err)
 			return
 		}
+		w.w.Close() // TODO: log error
 		w.o.f = f
 	})
 	return w.getErr()

@@ -129,10 +129,16 @@ func (w *Writer) thread() {
 				w.setErr(err)
 				return
 			}
+			sleep := time.Millisecond * 15
 		redo:
 			n, err := fc.uploadPart(w.ctx, r, chunk.buf.Hash(), chunk.buf.Len(), chunk.id)
 			if n != chunk.buf.Len() || err != nil {
 				if w.o.b.r.reupload(err) {
+					time.Sleep(sleep)
+					sleep *= 2
+					if sleep > time.Second*15 {
+						sleep = time.Second * 15
+					}
 					glog.Infof("b2 writer: wrote %d of %d: error: %v; retrying", n, chunk.buf.Len(), err)
 					f, err := w.file.getUploadPartURL(w.ctx)
 					if err != nil {

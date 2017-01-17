@@ -320,7 +320,9 @@ type zReader struct{}
 var pattern = []byte{0x02, 0x80, 0xff, 0x1a, 0xcc, 0x63, 0x22}
 
 func (zReader) Read(p []byte) (int, error) {
-	copy(p, pattern)
+	for i := 0; i+len(pattern) < len(p); i += len(pattern) {
+		copy(p[i:], pattern)
+	}
 	return len(p), nil
 }
 
@@ -549,6 +551,30 @@ func TestWriterReturnsError(t *testing.T) {
 	w.ConcurrentUploads = 4
 	if _, err := io.Copy(w, r); err == nil {
 		t.Fatalf("io.Copy: should have returned an error")
+	}
+}
+
+func TestFileBuffer(t *testing.T) {
+	r := io.LimitReader(zReader{}, 1e8)
+	w, err := newFileBuffer("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	if _, err := io.Copy(w, r); err != nil {
+		t.Fatal(err)
+	}
+	bReader, err := w.Reader()
+	if err != nil {
+		t.Fatal(err)
+	}
+	hsh := sha1.New()
+	if _, err := io.Copy(hsh, bReader); err != nil {
+		t.Fatal(err)
+	}
+	hshText := fmt.Sprintf("%x", hsh.Sum(nil))
+	if hshText != w.Hash() {
+		t.Errorf("hashes are not equal: bufferWriter is %q, read buffer is %q", w.Hash(), hshText)
 	}
 }
 

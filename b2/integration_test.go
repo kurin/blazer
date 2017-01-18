@@ -25,13 +25,27 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kurin/blazer/base"
+
 	"golang.org/x/net/context"
 )
 
 const (
 	apiID  = "B2_ACCOUNT_ID"
 	apiKey = "B2_SECRET_KEY"
+
+	errVar = "B2_TRANSIENT_ERRORS"
 )
+
+func init() {
+	fail := os.Getenv(errVar)
+	switch fail {
+	case "", "0", "false":
+		return
+	}
+	base.FailSomeUploads = true
+	base.ExpireSomeAuthTokens = true
+}
 
 func TestReadWriteLive(t *testing.T) {
 	ctx := context.Background()

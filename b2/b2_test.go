@@ -29,7 +29,7 @@ import (
 )
 
 const (
-	bucketName    = "MahBucket"
+	bucketName    = "b2-tests"
 	smallFileName = "TeenyTiny"
 	largeFileName = "BigBytes"
 )

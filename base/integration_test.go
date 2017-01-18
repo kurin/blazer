@@ -33,7 +33,7 @@ const (
 )
 
 const (
-	bucketName    = "MahBucket"
+	bucketName    = "base-tests"
 	smallFileName = "TeenyTiny"
 	largeFileName = "BigBytes"
 )

@@ -39,7 +39,7 @@ func (c *Client) addWriter(w *Writer) {
 		c.sWriters = make(map[string]*Writer)
 	}
 
-	c.sWriters[fmt.Sprintf("%s/%s", w.b.name, w.name)] = w
+	c.sWriters[fmt.Sprintf("%s/%s", w.o.b.Name, w.name)] = w
 }
 
 func (c *Client) removeWriter(w *Writer) {
@@ -50,5 +50,5 @@ func (c *Client) removeWriter(w *Writer) {
 		return
 	}
 
-	delete(c.sWriters, fmt.Sprintf("%s/%s", w.b.name, w.name))
+	delete(c.sWriters, fmt.Sprintf("%s/%s", w.o.b.Name, w.name))
 }

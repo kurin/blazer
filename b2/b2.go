@@ -42,7 +42,8 @@ import (
 type Client struct {
 	backend beRootInterface
 
-	slock sync.Mutex
+	slock    sync.Mutex
+	sWriters map[string]*Writer
 }
 
 // NewClient creates and returns a new Client with valid B2 service account

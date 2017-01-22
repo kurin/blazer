@@ -14,7 +14,10 @@
 
 package b2
 
-import "net/http"
+import (
+	"fmt"
+	"net/http"
+)
 
 // ShowStats causes b2 to listen for http on the given network address, where
 // it displays information about what it's doing.
@@ -31,8 +34,21 @@ func (c *Client) infoHandler(rw http.ResponseWriter, req *http.Request) {
 func (c *Client) addWriter(w *Writer) {
 	c.slock.Lock()
 	defer c.slock.Unlock()
+
+	if c.sWriters == nil {
+		c.sWriters = make(map[string]*Writer)
+	}
+
+	c.sWriters[fmt.Sprintf("%s/%s", w.b.name, w.name)] = w
 }
 
 func (c *Client) removeWriter(w *Writer) {
+	c.slock.Lock()
+	defer c.slock.Unlock()
 
+	if c.sWriters == nil {
+		return
+	}
+
+	delete(c.sWriters, fmt.Sprintf("%s/%s", w.b.name, w.name))
 }

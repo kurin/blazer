@@ -177,6 +177,7 @@ func (w *Writer) thread() {
 // Write satisfies the io.Writer interface.
 func (w *Writer) Write(p []byte) (int, error) {
 	w.start.Do(func() {
+		w.o.b.c.addWriter(w)
 		w.csize = w.ChunkSize
 		if w.csize == 0 {
 			w.csize = 1e8
@@ -330,6 +331,7 @@ func (w *Writer) sendChunk() error {
 // value of Close on all writers.
 func (w *Writer) Close() error {
 	w.done.Do(func() {
+		defer w.o.b.c.removeWriter(w)
 		if w.cidx == 0 {
 			w.setErr(w.simpleWriteFile())
 			return

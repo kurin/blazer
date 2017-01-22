@@ -27,3 +27,12 @@ func (c *Client) ShowStats(addr string) {
 func (c *Client) infoHandler(rw http.ResponseWriter, req *http.Request) {
 	rw.Write([]byte("hello, world"))
 }
+
+func (c *Client) addWriter(w *Writer) {
+	c.slock.Lock()
+	defer c.slock.Unlock()
+}
+
+func (c *Client) removeWriter(w *Writer) {
+
+}

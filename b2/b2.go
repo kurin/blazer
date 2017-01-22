@@ -32,6 +32,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"sync"
 	"time"
 
 	"golang.org/x/net/context"
@@ -40,6 +41,8 @@ import (
 // Client is a Backblaze B2 client.
 type Client struct {
 	backend beRootInterface
+
+	slock sync.Mutex
 }
 
 // NewClient creates and returns a new Client with valid B2 service account
@@ -60,6 +63,8 @@ func NewClient(ctx context.Context, account, key string) (*Client, error) {
 type Bucket struct {
 	b beBucketInterface
 	r beRootInterface
+
+	c *Client
 }
 
 type BucketType string
@@ -119,6 +124,7 @@ func (c *Client) NewBucket(ctx context.Context, name string, attrs *BucketAttrs)
 			return &Bucket{
 				b: bucket,
 				r: c.backend,
+				c: c,
 			}, nil
 		}
 	}
@@ -132,6 +138,7 @@ func (c *Client) NewBucket(ctx context.Context, name string, attrs *BucketAttrs)
 	return &Bucket{
 		b: b,
 		r: c.backend,
+		c: c,
 	}, err
 }
 
@@ -146,6 +153,7 @@ func (c *Client) ListBuckets(ctx context.Context) ([]*Bucket, error) {
 		buckets = append(buckets, &Bucket{
 			b: b,
 			r: c.backend,
+			c: c,
 		})
 	}
 	return buckets, nil

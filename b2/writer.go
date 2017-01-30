@@ -368,3 +368,10 @@ func (w *Writer) WithAttrs(attrs *Attrs) *Writer {
 	}
 	return w
 }
+
+func (w *Writer) status() *WriterStatus {
+	ws := &WriterStatus{
+		Progress: make(map[int]float64),
+	}
+	return ws
+}

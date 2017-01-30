@@ -14,21 +14,34 @@
 
 package b2
 
-import (
-	"fmt"
-	"net/http"
-)
+import "fmt"
 
-// ShowStats causes b2 to listen for http on the given network address, where
-// it displays information about what it's doing.
-func (c *Client) ShowStats(addr string) {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", c.infoHandler)
-	go http.ListenAndServe(addr, mux)
+// StatusInfo reports information about a client.
+type StatusInfo struct {
+	// Writers report the status of each upload in progress.
+	Writers map[string]*WriterStatus
 }
 
-func (c *Client) infoHandler(rw http.ResponseWriter, req *http.Request) {
-	rw.Write([]byte("hello, world"))
+// WriterStatus reports the status for each writer.
+type WriterStatus struct {
+	// Progress maps chunk IDs to a completion ratio between 0 and 1.
+	Progress map[int]float64
+}
+
+// Status returns information about the current state of the client.
+func (c *Client) Status(addr string) *StatusInfo {
+	c.slock.Lock()
+	defer c.slock.Unlock()
+
+	si := &StatusInfo{
+		Writers: make(map[string]*WriterStatus),
+	}
+
+	for name, w := range c.sWriters {
+		si.Writers[name] = w.status()
+	}
+
+	return si
 }
 
 func (c *Client) addWriter(w *Writer) {

@@ -255,7 +255,6 @@ func (w *Writer) simpleWriteFile() error {
 	mr := &meteredReader{r: r, size: w.w.Len()}
 	w.registerChunk(1, mr)
 	defer w.completeChunk(1)
-	defer w.w.Close()
 redo:
 	f, err := ue.uploadFile(w.ctx, mr, int(w.w.Len()), w.name, ctype, sha1, w.info)
 	if err != nil {

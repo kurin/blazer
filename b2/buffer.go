@@ -22,6 +22,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"sync"
 )
 
 type writeBuffer interface {
@@ -38,11 +39,18 @@ type memoryBuffer struct {
 	w   io.Writer
 }
 
+var bufpool *sync.Pool
+
+func init() {
+	bufpool = &sync.Pool{}
+	bufpool.New = func() interface{} { return &bytes.Buffer{} }
+}
+
 func newMemoryBuffer() *memoryBuffer {
 	mb := &memoryBuffer{
-		buf: &bytes.Buffer{},
 		hsh: sha1.New(),
 	}
+	mb.buf = bufpool.Get().(*bytes.Buffer)
 	mb.w = io.MultiWriter(mb.hsh, mb.buf)
 	return mb
 }
@@ -56,7 +64,13 @@ func (mb *memoryBuffer) Write(p []byte) (int, error)    { return mb.w.Write(p) }
 func (mb *memoryBuffer) Len() int                       { return mb.buf.Len() }
 func (mb *memoryBuffer) Reader() (io.ReadSeeker, error) { return bytes.NewReader(mb.buf.Bytes()), nil }
 func (mb *memoryBuffer) Hash() string                   { return fmt.Sprintf("%x", mb.hsh.Sum(nil)) }
-func (mb *memoryBuffer) Close() error                   { return nil }
+
+func (mb *memoryBuffer) Close() error {
+	mb.buf.Truncate(0)
+	bufpool.Put(mb.buf)
+	mb.buf = nil
+	return nil
+}
 
 type fileBuffer struct {
 	f   *os.File

@@ -29,7 +29,7 @@ type WriterStatus struct {
 }
 
 // Status returns information about the current state of the client.
-func (c *Client) Status(addr string) *StatusInfo {
+func (c *Client) Status() *StatusInfo {
 	c.slock.Lock()
 	defer c.slock.Unlock()
 
@@ -52,7 +52,7 @@ func (c *Client) addWriter(w *Writer) {
 		c.sWriters = make(map[string]*Writer)
 	}
 
-	c.sWriters[fmt.Sprintf("%s/%s", w.o.b.Name, w.name)] = w
+	c.sWriters[fmt.Sprintf("%s/%s", w.o.b.Name(), w.name)] = w
 }
 
 func (c *Client) removeWriter(w *Writer) {
@@ -63,5 +63,5 @@ func (c *Client) removeWriter(w *Writer) {
 		return
 	}
 
-	delete(c.sWriters, fmt.Sprintf("%s/%s", w.o.b.Name, w.name))
+	delete(c.sWriters, fmt.Sprintf("%s/%s", w.o.b.Name(), w.name))
 }

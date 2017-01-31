@@ -164,8 +164,6 @@ func (w *Writer) thread() {
 			}
 			mr := &meteredReader{r: r, size: chunk.buf.Len()}
 			w.registerChunk(chunk.id, mr)
-			defer w.completeChunk(chunk.id)
-			defer chunk.buf.Close() // TODO: log error
 			sleep := time.Millisecond * 15
 		redo:
 			n, err := fc.uploadPart(w.ctx, mr, chunk.buf.Hash(), chunk.buf.Len(), chunk.id)
@@ -180,14 +178,20 @@ func (w *Writer) thread() {
 					f, err := w.file.getUploadPartURL(w.ctx)
 					if err != nil {
 						w.setErr(err)
+						w.completeChunk(chunk.id)
+						chunk.buf.Close() // TODO: log error
 						return
 					}
 					fc = f
 					goto redo
 				}
 				w.setErr(err)
+				w.completeChunk(chunk.id)
+				chunk.buf.Close() // TODO: log error
 				return
 			}
+			w.completeChunk(chunk.id)
+			chunk.buf.Close() // TODO: log error
 			glog.V(2).Infof("chunk %d handled", chunk.id)
 		}
 	}()
@@ -251,6 +255,7 @@ func (w *Writer) simpleWriteFile() error {
 	mr := &meteredReader{r: r, size: w.w.Len()}
 	w.registerChunk(1, mr)
 	defer w.completeChunk(1)
+	defer w.w.Close()
 redo:
 	f, err := ue.uploadFile(w.ctx, mr, int(w.w.Len()), w.name, ctype, sha1, w.info)
 	if err != nil {

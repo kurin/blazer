@@ -17,6 +17,7 @@ package b2
 import (
 	"errors"
 	"fmt"
+	"io"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -25,11 +26,6 @@ import (
 
 	"golang.org/x/net/context"
 )
-
-type chunk struct {
-	id  int
-	buf writeBuffer
-}
 
 // Writer writes data into Backblaze.  It automatically switches to the large
 // file API if the file exceeds ChunkSize bytes.  Due to that and other
@@ -87,6 +83,14 @@ type Writer struct {
 
 	emux sync.RWMutex
 	err  error
+
+	smux sync.RWMutex
+	smap map[int]*meteredReader
+}
+
+type chunk struct {
+	id  int
+	buf writeBuffer
 }
 
 func (w *Writer) getBuffer() (writeBuffer, error) {
@@ -113,6 +117,18 @@ func (w *Writer) getErr() error {
 	w.emux.RLock()
 	defer w.emux.RUnlock()
 	return w.err
+}
+
+func (w *Writer) registerChunk(id int, r *meteredReader) {
+	w.smux.Lock()
+	w.smap[id] = r
+	w.smux.Unlock()
+}
+
+func (w *Writer) completeChunk(id int) {
+	w.smux.Lock()
+	w.smap[id] = nil
+	w.smux.Unlock()
 }
 
 var gid int32
@@ -146,10 +162,13 @@ func (w *Writer) thread() {
 				w.setErr(err)
 				return
 			}
+			mr := &meteredReader{r: r, size: chunk.buf.Len()}
+			w.registerChunk(chunk.id, mr)
+			defer w.completeChunk(chunk.id)
 			defer chunk.buf.Close() // TODO: log error
 			sleep := time.Millisecond * 15
 		redo:
-			n, err := fc.uploadPart(w.ctx, r, chunk.buf.Hash(), chunk.buf.Len(), chunk.id)
+			n, err := fc.uploadPart(w.ctx, mr, chunk.buf.Hash(), chunk.buf.Len(), chunk.id)
 			if n != chunk.buf.Len() || err != nil {
 				if w.o.b.r.reupload(err) {
 					time.Sleep(sleep)
@@ -177,6 +196,9 @@ func (w *Writer) thread() {
 // Write satisfies the io.Writer interface.
 func (w *Writer) Write(p []byte) (int, error) {
 	w.start.Do(func() {
+		w.smux.Lock()
+		w.smap = make(map[int]*meteredReader)
+		w.smux.Unlock()
 		w.o.b.c.addWriter(w)
 		w.csize = w.ChunkSize
 		if w.csize == 0 {
@@ -226,8 +248,11 @@ func (w *Writer) simpleWriteFile() error {
 	if err != nil {
 		return err
 	}
+	mr := &meteredReader{r: r, size: w.w.Len()}
+	w.registerChunk(1, mr)
+	defer w.completeChunk(1)
 redo:
-	f, err := ue.uploadFile(w.ctx, r, int(w.w.Len()), w.name, ctype, sha1, w.info)
+	f, err := ue.uploadFile(w.ctx, mr, int(w.w.Len()), w.name, ctype, sha1, w.info)
 	if err != nil {
 		if w.o.b.r.reupload(err) {
 			glog.Infof("b2 writer: %v; retrying", err)
@@ -373,5 +398,38 @@ func (w *Writer) status() *WriterStatus {
 	ws := &WriterStatus{
 		Progress: make(map[int]float64),
 	}
+	w.smux.RLock()
+	defer w.smux.RUnlock()
+
+	for id, mr := range w.smap {
+		if mr == nil {
+			ws.Progress[id] = 1
+			continue
+		}
+		ws.Progress[id] = mr.done()
+	}
+
 	return ws
+}
+
+type meteredReader struct {
+	read int64
+	size int
+	r    io.ReadSeeker
+}
+
+func (mr *meteredReader) Read(p []byte) (int, error) {
+	n, err := mr.r.Read(p)
+	atomic.AddInt64(&mr.read, int64(n))
+	return n, err
+}
+
+func (mr *meteredReader) Seek(offset int64, whence int) (int64, error) {
+	atomic.StoreInt64(&mr.read, offset)
+	return mr.r.Seek(offset, whence)
+}
+
+func (mr *meteredReader) done() float64 {
+	read := float64(atomic.LoadInt64(&mr.read))
+	return read / float64(mr.size)
 }

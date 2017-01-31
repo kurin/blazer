@@ -55,11 +55,15 @@ type Reader struct {
 
 	emux sync.RWMutex // guards err, believe it or not
 	err  error
+
+	smux sync.Mutex
+	smap map[int]*meteredReader
 }
 
 // Close frees resources associated with the download.
 func (r *Reader) Close() error {
 	r.cancel()
+	r.o.b.c.removeReader(r)
 	return nil
 }
 
@@ -110,7 +114,14 @@ func (r *Reader) thread() {
 				r.rcond.Broadcast()
 				return
 			}
-			i, err := copyContext(r.ctx, buf, fr)
+			mr := &meteredReader{r: &fakeSeeker{fr}, size: int(size)}
+			r.smux.Lock()
+			r.smap[chunkID] = mr
+			r.smux.Unlock()
+			i, err := copyContext(r.ctx, buf, mr)
+			r.smux.Lock()
+			r.smap[chunkID] = nil
+			r.smux.Unlock()
 			if i < size || err == io.ErrUnexpectedEOF {
 				// Probably the network connection was closed early.  Retry.
 				glog.Infof("b2 reader %d: got %dB of %dB; retrying", chunkID, i, size)
@@ -156,6 +167,10 @@ func (r *Reader) curChunk() (*bytes.Buffer, error) {
 }
 
 func (r *Reader) initFunc() {
+	r.smux.Lock()
+	r.smap = make(map[int]*meteredReader)
+	r.smux.Unlock()
+	r.o.b.c.addReader(r)
 	if err := r.o.ensure(r.ctx); err != nil {
 		r.setErr(err)
 		return
@@ -205,6 +220,24 @@ func (r *Reader) Read(p []byte) (int, error) {
 	return n, err
 }
 
+func (r *Reader) status() *ReaderStatus {
+	rs := &ReaderStatus{
+		Progress: make(map[int]float64),
+	}
+	r.smux.Lock()
+	defer r.smux.Unlock()
+
+	for id, mr := range r.smap {
+		if mr == nil {
+			rs.Progress[id] = 1
+			continue
+		}
+		rs.Progress[id] = mr.done()
+	}
+
+	return rs
+}
+
 // copied from io.Copy, basically.
 func copyContext(ctx context.Context, dst io.Writer, src io.Reader) (written int64, err error) {
 	buf := make([]byte, 32*1024)
@@ -238,3 +271,12 @@ func copyContext(ctx context.Context, dst io.Writer, src io.Reader) (written int
 	}
 	return written, err
 }
+
+// fakeSeeker exists so that we can wrap the http response body (an io.Reader
+// but not an io.Seeker) into a meteredReader, which will allow us to keep tabs
+// on how much of the chunk we've read so far.
+type fakeSeeker struct {
+	io.Reader
+}
+
+func (fs *fakeSeeker) Seek(int64, int) (int64, error) { return 0, nil }

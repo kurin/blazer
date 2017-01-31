@@ -18,12 +18,18 @@ import "fmt"
 
 // StatusInfo reports information about a client.
 type StatusInfo struct {
-	// Writers report the status of each upload in progress.
 	Writers map[string]*WriterStatus
+	Readers map[string]*ReaderStatus
 }
 
 // WriterStatus reports the status for each writer.
 type WriterStatus struct {
+	// Progress maps chunk IDs to a completion ratio between 0 and 1.
+	Progress map[int]float64
+}
+
+// ReaderStatus reports the status for each reader.
+type ReaderStatus struct {
 	// Progress maps chunk IDs to a completion ratio between 0 and 1.
 	Progress map[int]float64
 }
@@ -35,10 +41,15 @@ func (c *Client) Status() *StatusInfo {
 
 	si := &StatusInfo{
 		Writers: make(map[string]*WriterStatus),
+		Readers: make(map[string]*ReaderStatus),
 	}
 
 	for name, w := range c.sWriters {
 		si.Writers[name] = w.status()
+	}
+
+	for name, r := range c.sReaders {
+		si.Readers[name] = r.status()
 	}
 
 	return si
@@ -64,4 +75,26 @@ func (c *Client) removeWriter(w *Writer) {
 	}
 
 	delete(c.sWriters, fmt.Sprintf("%s/%s", w.o.b.Name(), w.name))
+}
+
+func (c *Client) addReader(r *Reader) {
+	c.slock.Lock()
+	defer c.slock.Unlock()
+
+	if c.sReaders == nil {
+		c.sReaders = make(map[string]*Reader)
+	}
+
+	c.sReaders[fmt.Sprintf("%s/%s", r.o.b.Name(), r.name)] = r
+}
+
+func (c *Client) removeReader(r *Reader) {
+	c.slock.Lock()
+	defer c.slock.Unlock()
+
+	if c.sReaders == nil {
+		return
+	}
+
+	delete(c.sReaders, fmt.Sprintf("%s/%s", r.o.b.Name(), r.name))
 }

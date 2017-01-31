@@ -44,6 +44,7 @@ type Client struct {
 
 	slock    sync.Mutex
 	sWriters map[string]*Writer
+	sReaders map[string]*Reader
 }
 
 // NewClient creates and returns a new Client with valid B2 service account

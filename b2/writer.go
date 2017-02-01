@@ -153,6 +153,7 @@ func (w *Writer) thread() {
 					w.setErr(errors.New("resumable upload was requested, but chunks don't match!"))
 					return
 				}
+				chunk.buf.Close()
 				w.completeChunk(chunk.id)
 				glog.V(2).Infof("skipping chunk %d", chunk.id)
 				continue

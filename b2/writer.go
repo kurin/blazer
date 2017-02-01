@@ -400,18 +400,15 @@ func (w *Writer) WithAttrs(attrs *Attrs) *Writer {
 }
 
 func (w *Writer) status() *WriterStatus {
-	ws := &WriterStatus{
-		Progress: make(map[int]float64),
-	}
 	w.smux.RLock()
 	defer w.smux.RUnlock()
 
-	for id, mr := range w.smap {
-		if mr == nil {
-			ws.Progress[id] = 1
-			continue
-		}
-		ws.Progress[id] = mr.done()
+	ws := &WriterStatus{
+		Progress: make([]float64, len(w.smap)),
+	}
+
+	for i := 1; i <= len(w.smap); i++ {
+		ws.Progress[i-1] = w.smap[i].done()
 	}
 
 	return ws
@@ -435,6 +432,9 @@ func (mr *meteredReader) Seek(offset int64, whence int) (int64, error) {
 }
 
 func (mr *meteredReader) done() float64 {
+	if mr == nil {
+		return 1
+	}
 	read := float64(atomic.LoadInt64(&mr.read))
 	return read / float64(mr.size)
 }

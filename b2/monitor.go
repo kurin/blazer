@@ -24,14 +24,16 @@ type StatusInfo struct {
 
 // WriterStatus reports the status for each writer.
 type WriterStatus struct {
-	// Progress maps chunk IDs to a completion ratio between 0 and 1.
-	Progress map[int]float64
+	// Progress is a slice of completion ratios.  The index of a ratio is its
+	// chunk id less one.
+	Progress []float64
 }
 
 // ReaderStatus reports the status for each reader.
 type ReaderStatus struct {
-	// Progress maps chunk IDs to a completion ratio between 0 and 1.
-	Progress map[int]float64
+	// Progress is a slice of completion ratios.  The index of a ratio is its
+	// chunk id less one.
+	Progress []float64
 }
 
 // Status returns information about the current state of the client.

@@ -221,18 +221,15 @@ func (r *Reader) Read(p []byte) (int, error) {
 }
 
 func (r *Reader) status() *ReaderStatus {
-	rs := &ReaderStatus{
-		Progress: make(map[int]float64),
-	}
 	r.smux.Lock()
 	defer r.smux.Unlock()
 
-	for id, mr := range r.smap {
-		if mr == nil {
-			rs.Progress[id] = 1
-			continue
-		}
-		rs.Progress[id] = mr.done()
+	rs := &ReaderStatus{
+		Progress: make([]float64, len(r.smap)),
+	}
+
+	for i := 1; i <= len(r.smap); i++ {
+		rs.Progress[i-1] = r.smap[i].done()
 	}
 
 	return rs

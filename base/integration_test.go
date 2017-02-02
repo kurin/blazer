@@ -216,7 +216,7 @@ func TestStorage(t *testing.T) {
 	}
 
 	// b2_list_file_names
-	files, _, err := bucket.ListFileNames(ctx, 100, "")
+	files, _, err := bucket.ListFileNames(ctx, 100, "", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -252,7 +252,7 @@ func TestStorage(t *testing.T) {
 	}()
 
 	// b2_list_file_versions
-	files, _, _, err = bucket.ListFileVersions(ctx, 100, "", "")
+	files, _, _, err = bucket.ListFileVersions(ctx, 100, "", "", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}

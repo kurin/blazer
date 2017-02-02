@@ -359,7 +359,12 @@ type Cursor struct {
 	// Prefix limits the listed objects to those that begin with this string.
 	Prefix string
 
-	// Delimiter denotes the path separator.  Defaults to "/".
+	// Delimiter denotes the path separator.  If set, object listings will be
+	// truncated at this character.
+	//
+	// For example, if the bucket contains objects foo/bar, foo/baz, and foo,
+	// then a delimiter of "/" will cause the listing to return "foo" and "foo/".
+	// Otherwise, the listing would have returned all object names.
 	Delimiter string
 
 	name string

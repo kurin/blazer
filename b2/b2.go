@@ -113,6 +113,24 @@ type LifecycleRule struct {
 	DaysHiddenUntilDeleted int
 }
 
+// Bucket returns a bucket if it exists.
+func (c *Client) Bucket(ctx context.Context, name string) (*Bucket, error) {
+	buckets, err := c.backend.listBuckets(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, bucket := range buckets {
+		if bucket.name() == name {
+			return &Bucket{
+				b: bucket,
+				r: c.backend,
+				c: c,
+			}, nil
+		}
+	}
+	return nil, fmt.Errorf("%s: bucket not found", name)
+}
+
 // NewBucket returns a bucket.  The bucket is created with the given attributes
 // if it does not already exist.  If attrs is nil, it is created as a private
 // bucket with no info metadata and no lifecycle rules.

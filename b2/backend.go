@@ -48,8 +48,8 @@ type beBucketInterface interface {
 	deleteBucket(context.Context) error
 	getUploadURL(context.Context) (beURLInterface, error)
 	startLargeFile(ctx context.Context, name, contentType string, info map[string]string) (beLargeFileInterface, error)
-	listFileNames(context.Context, int, string) ([]beFileInterface, string, error)
-	listFileVersions(context.Context, int, string, string) ([]beFileInterface, string, string, error)
+	listFileNames(context.Context, int, string, string, string) ([]beFileInterface, string, error)
+	listFileVersions(context.Context, int, string, string, string, string) ([]beFileInterface, string, string, error)
 	downloadFileByName(context.Context, string, int64, int64) (beFileReaderInterface, error)
 	hideFile(context.Context, string) (beFileInterface, error)
 	getDownloadAuthorization(context.Context, string, time.Duration) (string, error)
@@ -285,12 +285,12 @@ func (b *beBucket) startLargeFile(ctx context.Context, name, ct string, info map
 	return file, nil
 }
 
-func (b *beBucket) listFileNames(ctx context.Context, count int, continuation string) ([]beFileInterface, string, error) {
+func (b *beBucket) listFileNames(ctx context.Context, count int, continuation, prefix, delimiter string) ([]beFileInterface, string, error) {
 	var cont string
 	var files []beFileInterface
 	f := func() error {
 		g := func() error {
-			fs, c, err := b.b2bucket.listFileNames(ctx, count, continuation)
+			fs, c, err := b.b2bucket.listFileNames(ctx, count, continuation, prefix, delimiter)
 			if err != nil {
 				return err
 			}
@@ -311,12 +311,12 @@ func (b *beBucket) listFileNames(ctx context.Context, count int, continuation st
 	return files, cont, nil
 }
 
-func (b *beBucket) listFileVersions(ctx context.Context, count int, nextName, nextID string) ([]beFileInterface, string, string, error) {
+func (b *beBucket) listFileVersions(ctx context.Context, count int, nextName, nextID, prefix, delimiter string) ([]beFileInterface, string, string, error) {
 	var name, id string
 	var files []beFileInterface
 	f := func() error {
 		g := func() error {
-			fs, n, d, err := b.b2bucket.listFileVersions(ctx, count, nextName, nextID)
+			fs, n, d, err := b.b2bucket.listFileVersions(ctx, count, nextName, nextID, prefix, delimiter)
 			if err != nil {
 				return err
 			}

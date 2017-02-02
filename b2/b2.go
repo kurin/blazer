@@ -356,7 +356,13 @@ func (o *Object) Delete(ctx context.Context) error {
 
 // Cursor is passed to ListObjects to return subsequent pages.
 type Cursor struct {
-	Name string
+	// Prefix limits the listed objects to those that begin with this string.
+	Prefix string
+
+	// Delimiter denotes the path separator.  Defaults to "/".
+	Delimiter string
+
+	name string
 	id   string
 }
 
@@ -370,15 +376,17 @@ func (b *Bucket) ListObjects(ctx context.Context, count int, c *Cursor) ([]*Obje
 	if c == nil {
 		c = &Cursor{}
 	}
-	fs, name, id, err := b.b.listFileVersions(ctx, count, c.Name, c.id)
+	fs, name, id, err := b.b.listFileVersions(ctx, count, c.name, c.id, c.Prefix, c.Delimiter)
 	if err != nil {
 		return nil, nil, err
 	}
 	var next *Cursor
 	if name != "" && id != "" {
 		next = &Cursor{
-			Name: name,
-			id:   id,
+			Prefix:    c.Prefix,
+			Delimiter: c.Delimiter,
+			name:      name,
+			id:        id,
 		}
 	}
 	var objects []*Object
@@ -402,14 +410,16 @@ func (b *Bucket) ListCurrentObjects(ctx context.Context, count int, c *Cursor) (
 	if c == nil {
 		c = &Cursor{}
 	}
-	fs, name, err := b.b.listFileNames(ctx, count, c.Name)
+	fs, name, err := b.b.listFileNames(ctx, count, c.name, c.Prefix, c.Delimiter)
 	if err != nil {
 		return nil, nil, err
 	}
 	var next *Cursor
 	if name != "" {
 		next = &Cursor{
-			Name: name,
+			Prefix:    c.Prefix,
+			Delimiter: c.Delimiter,
+			name:      name,
 		}
 	}
 	var objects []*Object
@@ -440,7 +450,7 @@ func (o *Object) Hide(ctx context.Context) error {
 // of a given name, it will reveal the most recent.
 func (b *Bucket) Reveal(ctx context.Context, name string) error {
 	cur := &Cursor{
-		Name: name,
+		name: name,
 	}
 	objs, _, err := b.ListObjects(ctx, 1, cur)
 	if err != nil && err != io.EOF {
@@ -457,7 +467,7 @@ func (b *Bucket) Reveal(ctx context.Context, name string) error {
 }
 
 func (b *Bucket) getObject(ctx context.Context, name string) (*Object, error) {
-	fs, _, err := b.b.listFileNames(ctx, 1, name)
+	fs, _, err := b.b.listFileNames(ctx, 1, name, "", "")
 	if err != nil {
 		return nil, err
 	}

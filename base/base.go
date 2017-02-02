@@ -783,11 +783,13 @@ func (l *LargeFile) FinishLargeFile(ctx context.Context) (*File, error) {
 }
 
 // ListFileNames wraps b2_list_file_names.
-func (b *Bucket) ListFileNames(ctx context.Context, count int, continuation string) ([]*File, string, error) {
+func (b *Bucket) ListFileNames(ctx context.Context, count int, continuation, prefix, delimiter string) ([]*File, string, error) {
 	b2req := &b2types.ListFileNamesRequest{
 		Count:        count,
 		Continuation: continuation,
 		BucketID:     b.id,
+		Prefix:       prefix,
+		Delimiter:    delimiter,
 	}
 	b2resp := &b2types.ListFileNamesResponse{}
 	headers := map[string]string{
@@ -812,12 +814,14 @@ func (b *Bucket) ListFileNames(ctx context.Context, count int, continuation stri
 }
 
 // ListFileVersions wraps b2_list_file_versions.
-func (b *Bucket) ListFileVersions(ctx context.Context, count int, startName, startID string) ([]*File, string, string, error) {
+func (b *Bucket) ListFileVersions(ctx context.Context, count int, startName, startID, prefix, delimiter string) ([]*File, string, string, error) {
 	b2req := &b2types.ListFileVersionsRequest{
 		BucketID:  b.id,
 		Count:     count,
 		StartName: startName,
 		StartID:   startID,
+		Prefix:    prefix,
+		Delimiter: delimiter,
 	}
 	b2resp := &b2types.ListFileVersionsResponse{}
 	headers := map[string]string{

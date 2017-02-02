@@ -166,6 +166,8 @@ type ListFileNamesRequest struct {
 	BucketID     string `json:"bucketId"`
 	Count        int    `json:"maxFileCount"`
 	Continuation string `json:"startFileName,omitempty"`
+	Prefix       string `json:"prefix,omitempty"`
+	Delimiter    string `json:"delimiter,omitempty"`
 }
 
 type ListFileNamesResponse struct {
@@ -184,6 +186,8 @@ type ListFileVersionsRequest struct {
 	Count     int    `json:"maxFileCount"`
 	StartName string `json:"startFileName,omitempty"`
 	StartID   string `json:"startFileId,omitempty"`
+	Prefix    string `json:"prefix,omitempty"`
+	Delimiter string `json:"delimiter,omitempty"`
 }
 
 type ListFileVersionsResponse struct {

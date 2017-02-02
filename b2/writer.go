@@ -288,7 +288,7 @@ func (w *Writer) getLargeFile() (beLargeFileInterface, error) {
 	var size int64
 	var fi beFileInterface
 	for {
-		cur := &Cursor{Name: w.name}
+		cur := &Cursor{name: w.name}
 		objs, _, err := w.o.b.ListObjects(w.ctx, 1, cur)
 		if err != nil {
 			return nil, err

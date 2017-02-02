@@ -163,7 +163,7 @@ func (t *testBucket) startLargeFile(_ context.Context, name, _ string, _ map[str
 	}, nil
 }
 
-func (t *testBucket) listFileNames(ctx context.Context, count int, cont string) ([]b2FileInterface, string, error) {
+func (t *testBucket) listFileNames(ctx context.Context, count int, cont, pfx, del string) ([]b2FileInterface, string, error) {
 	var f []string
 	for name := range t.files {
 		f = append(f, name)
@@ -188,8 +188,8 @@ func (t *testBucket) listFileNames(ctx context.Context, count int, cont string) 
 	return b, next, nil
 }
 
-func (t *testBucket) listFileVersions(ctx context.Context, count int, a, b string) ([]b2FileInterface, string, string, error) {
-	x, y, z := t.listFileNames(ctx, count, a)
+func (t *testBucket) listFileVersions(ctx context.Context, count int, a, b, c, d string) ([]b2FileInterface, string, string, error) {
+	x, y, z := t.listFileNames(ctx, count, a, c, d)
 	return x, y, "", z
 }
 

@@ -44,8 +44,8 @@ type b2BucketInterface interface {
 	deleteBucket(context.Context) error
 	getUploadURL(context.Context) (b2URLInterface, error)
 	startLargeFile(ctx context.Context, name, contentType string, info map[string]string) (b2LargeFileInterface, error)
-	listFileNames(context.Context, int, string) ([]b2FileInterface, string, error)
-	listFileVersions(context.Context, int, string, string) ([]b2FileInterface, string, string, error)
+	listFileNames(context.Context, int, string, string, string) ([]b2FileInterface, string, error)
+	listFileVersions(context.Context, int, string, string, string, string) ([]b2FileInterface, string, string, error)
 	downloadFileByName(context.Context, string, int64, int64) (b2FileReaderInterface, error)
 	hideFile(context.Context, string) (b2FileInterface, error)
 	getDownloadAuthorization(context.Context, string, time.Duration) (string, error)
@@ -262,8 +262,8 @@ func (b *b2Bucket) startLargeFile(ctx context.Context, name, ct string, info map
 	return &b2LargeFile{lf}, nil
 }
 
-func (b *b2Bucket) listFileNames(ctx context.Context, count int, continuation string) ([]b2FileInterface, string, error) {
-	fs, c, err := b.b.ListFileNames(ctx, count, continuation)
+func (b *b2Bucket) listFileNames(ctx context.Context, count int, continuation, prefix, delimiter string) ([]b2FileInterface, string, error) {
+	fs, c, err := b.b.ListFileNames(ctx, count, continuation, prefix, delimiter)
 	if err != nil {
 		return nil, "", err
 	}
@@ -274,8 +274,8 @@ func (b *b2Bucket) listFileNames(ctx context.Context, count int, continuation st
 	return files, c, nil
 }
 
-func (b *b2Bucket) listFileVersions(ctx context.Context, count int, nextName, nextID string) ([]b2FileInterface, string, string, error) {
-	fs, name, id, err := b.b.ListFileVersions(ctx, count, nextName, nextID)
+func (b *b2Bucket) listFileVersions(ctx context.Context, count int, nextName, nextID, prefix, delimiter string) ([]b2FileInterface, string, string, error) {
+	fs, name, id, err := b.b.ListFileVersions(ctx, count, nextName, nextID, prefix, delimiter)
 	if err != nil {
 		return nil, "", "", err
 	}

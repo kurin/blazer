@@ -449,7 +449,7 @@ func TestListObjectsWithPrefix(t *testing.T) {
 
 	for _, f := range []lfun{bucket.ListObjects, bucket.ListCurrentObjects} {
 		c := &Cursor{
-			Name: "foo/",
+			Prefix: "baz/",
 		}
 		var res []string
 		for {
@@ -471,7 +471,7 @@ func TestListObjectsWithPrefix(t *testing.T) {
 			c = cur
 		}
 
-		want := []string{"foo/bar"}
+		want := []string{"baz/bar"}
 		if !reflect.DeepEqual(res, want) {
 			t.Errorf("got %v, want %v", res, want)
 		}

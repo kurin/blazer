@@ -19,7 +19,7 @@ import (
 	"io"
 	"sync"
 
-	"github.com/golang/glog"
+	"github.com/kurin/blazer/internal/blog"
 
 	"golang.org/x/net/context"
 )
@@ -124,7 +124,7 @@ func (r *Reader) thread() {
 			r.smux.Unlock()
 			if i < size || err == io.ErrUnexpectedEOF {
 				// Probably the network connection was closed early.  Retry.
-				glog.Infof("b2 reader %d: got %dB of %dB; retrying", chunkID, i, size)
+				blog.V(1).Infof("b2 reader %d: got %dB of %dB; retrying", chunkID, i, size)
 				buf.Reset()
 				goto redo
 			}

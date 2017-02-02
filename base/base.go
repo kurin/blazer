@@ -35,8 +35,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/golang/glog"
 	"github.com/kurin/blazer/internal/b2types"
+	"github.com/kurin/blazer/internal/blog"
 
 	"golang.org/x/net/context"
 )
@@ -151,7 +151,7 @@ func Backoff(err error) time.Duration {
 }
 
 func logRequest(req *http.Request, args []byte) {
-	if !glog.V(2) {
+	if !blog.V(2) {
 		return
 	}
 	var headers []string
@@ -164,14 +164,14 @@ func logRequest(req *http.Request, args []byte) {
 	hstr := strings.Join(headers, ";")
 	method := req.Header.Get("X-Blazer-Method")
 	if args != nil {
-		glog.V(2).Infof(">> %s uri: %v headers: {%s} args: (%s)", method, req.URL, hstr, string(args))
+		blog.V(2).Infof(">> %s uri: %v headers: {%s} args: (%s)", method, req.URL, hstr, string(args))
 		return
 	}
-	glog.V(2).Infof(">> %s uri: %v {%s} (no args)", method, req.URL, hstr)
+	blog.V(2).Infof(">> %s uri: %v {%s} (no args)", method, req.URL, hstr)
 }
 
 func logResponse(resp *http.Response, reply []byte) {
-	if !glog.V(2) {
+	if !blog.V(2) {
 		return
 	}
 	var headers []string
@@ -182,10 +182,10 @@ func logResponse(resp *http.Response, reply []byte) {
 	method := resp.Request.Header.Get("X-Blazer-Method")
 	id := resp.Request.Header.Get("X-Blazer-Request-ID")
 	if reply != nil {
-		glog.V(2).Infof("<< %s (%s) %s {%s} (%s)", method, id, resp.Status, hstr, string(reply))
+		blog.V(2).Infof("<< %s (%s) %s {%s} (%s)", method, id, resp.Status, hstr, string(reply))
 		return
 	}
-	glog.V(2).Infof("<< %s (%s) %s {%s} (no reply)", method, id, resp.Status, hstr)
+	blog.V(2).Infof("<< %s (%s) %s {%s} (no reply)", method, id, resp.Status, hstr)
 }
 
 func millitime(t int64) time.Time {

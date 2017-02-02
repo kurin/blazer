@@ -22,7 +22,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/golang/glog"
+	"github.com/kurin/blazer/internal/blog"
 
 	"golang.org/x/net/context"
 )
@@ -107,7 +107,7 @@ func (w *Writer) setErr(err error) {
 	w.emux.Lock()
 	defer w.emux.Unlock()
 	if w.err == nil {
-		glog.Errorf("error writing %s: %v", w.name, err)
+		blog.V(0).Infof("error writing %s: %v", w.name, err)
 		w.err = err
 		w.cancel()
 	}
@@ -155,10 +155,10 @@ func (w *Writer) thread() {
 				}
 				chunk.buf.Close()
 				w.completeChunk(chunk.id)
-				glog.V(2).Infof("skipping chunk %d", chunk.id)
+				blog.V(2).Infof("skipping chunk %d", chunk.id)
 				continue
 			}
-			glog.V(2).Infof("thread %d handling chunk %d", id, chunk.id)
+			blog.V(2).Infof("thread %d handling chunk %d", id, chunk.id)
 			r, err := chunk.buf.Reader()
 			if err != nil {
 				w.setErr(err)
@@ -176,7 +176,7 @@ func (w *Writer) thread() {
 					if sleep > time.Second*15 {
 						sleep = time.Second * 15
 					}
-					glog.Infof("b2 writer: wrote %d of %d: error: %v; retrying", n, chunk.buf.Len(), err)
+					blog.V(1).Infof("b2 writer: wrote %d of %d: error: %v; retrying", n, chunk.buf.Len(), err)
 					f, err := w.file.getUploadPartURL(w.ctx)
 					if err != nil {
 						w.setErr(err)
@@ -194,7 +194,7 @@ func (w *Writer) thread() {
 			}
 			w.completeChunk(chunk.id)
 			chunk.buf.Close() // TODO: log error
-			glog.V(2).Infof("chunk %d handled", chunk.id)
+			blog.V(2).Infof("chunk %d handled", chunk.id)
 		}
 	}()
 }
@@ -261,7 +261,7 @@ redo:
 	f, err := ue.uploadFile(w.ctx, mr, int(w.w.Len()), w.name, ctype, sha1, w.info)
 	if err != nil {
 		if w.o.b.r.reupload(err) {
-			glog.Infof("b2 writer: %v; retrying", err)
+			blog.V(1).Infof("b2 writer: %v; retrying", err)
 			u, err := w.o.b.b.getUploadURL(w.ctx)
 			if err != nil {
 				return err

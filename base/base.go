@@ -187,6 +187,7 @@ func logResponse(resp *http.Response, reply []byte) {
 	if reply != nil {
 		safe := string(authRegexp.ReplaceAll(reply, []byte(`"authorizationToken": "[redacted]"`)))
 		blog.V(2).Infof("<< %s (%s) %s {%s} (%s)", method, id, resp.Status, hstr, safe)
+		return
 	}
 	blog.V(2).Infof("<< %s (%s) %s {%s} (no reply)", method, id, resp.Status, hstr)
 }

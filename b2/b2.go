@@ -124,7 +124,7 @@ func (e b2err) Error() string {
 
 // IsNotExist reports whether a given error indicates that an object or bucket
 // does not exist.
-func IsNotFound(err error) bool {
+func IsNotExist(err error) bool {
 	berr, ok := err.(b2err)
 	if !ok {
 		return false

@@ -7,4 +7,4 @@ branches:
   only:
   - master
  
-script: go test ./base ./b2
+script: go test -v ./base ./b2

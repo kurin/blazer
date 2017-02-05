@@ -249,6 +249,8 @@ func (o *Object) Attrs(ctx context.Context) (*Attrs, error) {
 		state = Started
 	case "hide":
 		state = Hider
+	case "folder":
+		state = Folder
 	}
 	var mtime time.Time
 	if v, ok := info["src_last_modified_millis"]; ok {
@@ -284,6 +286,10 @@ const (
 	// Hider represents an object that exists only to hide another object.  It
 	// cannot in itself be downloaded and, in particular, is not a hidden object.
 	Hider
+
+	// Folder is a special state given to non-objects that are returned during a
+	// List*Objects call with a non-empty Delimiter.
+	Folder
 )
 
 // Object returns a reference to the named object in the bucket.  Hidden

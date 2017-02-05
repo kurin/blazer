@@ -184,7 +184,7 @@ func TestStorage(t *testing.T) {
 	// b2_finish_large_file
 	lfile, err := lf.FinishLargeFile(ctx)
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 
 	// b2_get_file_info

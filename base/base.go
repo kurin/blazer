@@ -29,6 +29,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -170,6 +171,8 @@ func logRequest(req *http.Request, args []byte) {
 	blog.V(2).Infof(">> %s uri: %v {%s} (no args)", method, req.URL, hstr)
 }
 
+var authRegexp = regexp.MustCompile(`"authorizationToken": ".[^"]*"`)
+
 func logResponse(resp *http.Response, reply []byte) {
 	if !blog.V(2) {
 		return
@@ -182,8 +185,8 @@ func logResponse(resp *http.Response, reply []byte) {
 	method := resp.Request.Header.Get("X-Blazer-Method")
 	id := resp.Request.Header.Get("X-Blazer-Request-ID")
 	if reply != nil {
-		blog.V(2).Infof("<< %s (%s) %s {%s} (%s)", method, id, resp.Status, hstr, string(reply))
-		return
+		safe := string(authRegexp.ReplaceAll(reply, []byte(`"authorizationToken": "[redacted]"`)))
+		blog.V(2).Infof("<< %s (%s) %s {%s} (%s)", method, id, resp.Status, hstr, safe)
 	}
 	blog.V(2).Infof("<< %s (%s) %s {%s} (no reply)", method, id, resp.Status, hstr)
 }

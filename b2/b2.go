@@ -113,6 +113,25 @@ type LifecycleRule struct {
 	DaysHiddenUntilDeleted int
 }
 
+type b2err struct {
+	err         error
+	notFoundErr bool
+}
+
+func (e b2err) Error() string {
+	return e.err.Error()
+}
+
+// IsNotExist reports whether a given error indicates that an object or bucket
+// does not exist.
+func IsNotFound(err error) bool {
+	berr, ok := err.(b2err)
+	if !ok {
+		return false
+	}
+	return berr.notFoundErr
+}
+
 // Bucket returns a bucket if it exists.
 func (c *Client) Bucket(ctx context.Context, name string) (*Bucket, error) {
 	buckets, err := c.backend.listBuckets(ctx)
@@ -128,7 +147,10 @@ func (c *Client) Bucket(ctx context.Context, name string) (*Bucket, error) {
 			}, nil
 		}
 	}
-	return nil, fmt.Errorf("%s: bucket not found", name)
+	return nil, b2err{
+		err:         fmt.Errorf("%s: bucket not found", name),
+		notFoundErr: true,
+	}
 }
 
 // NewBucket returns a bucket.  The bucket is created with the given attributes
@@ -474,7 +496,7 @@ func (b *Bucket) Reveal(ctx context.Context, name string) error {
 		return err
 	}
 	if len(objs) < 1 || objs[0].name != name {
-		return fmt.Errorf("%s: not found", name)
+		return b2err{err: fmt.Errorf("%s: not found", name), notFoundErr: true}
 	}
 	obj := objs[0]
 	if obj.f.status() != "hide" {
@@ -489,11 +511,11 @@ func (b *Bucket) getObject(ctx context.Context, name string) (*Object, error) {
 		return nil, err
 	}
 	if len(fs) < 1 {
-		return nil, fmt.Errorf("%s: not found", name)
+		return nil, b2err{err: fmt.Errorf("%s: not found", name), notFoundErr: true}
 	}
 	f := fs[0]
 	if f.name() != name {
-		return nil, fmt.Errorf("%s: not found", name)
+		return nil, b2err{err: fmt.Errorf("%s: not found", name), notFoundErr: true}
 	}
 	return &Object{
 		name: name,

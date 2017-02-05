@@ -98,7 +98,7 @@ const (
 	ReAuthenticate ErrAction = iota
 
 	// AttemptNewUpload indicates that an upload's authentication token (or URL
-	// endpoint) has expored, and that users should request new ones with a call
+	// endpoint) has expired, and that users should request new ones with a call
 	// to GetUploadURL or GetUploadPartURL.
 	AttemptNewUpload
 

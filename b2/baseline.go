@@ -193,7 +193,9 @@ func (b *b2Bucket) updateBucket(ctx context.Context, attrs *BucketAttrs) error {
 	if attrs == nil {
 		// Force an update anyway.
 		newBucket, err := b.b.Update(ctx)
-		b.b = newBucket
+		if err == nil {
+			b.b = newBucket
+		}
 		return err
 	}
 	if attrs.Type != UnknownType {
@@ -214,7 +216,9 @@ func (b *b2Bucket) updateBucket(ctx context.Context, attrs *BucketAttrs) error {
 		b.b.LifecycleRules = rules
 	}
 	newBucket, err := b.b.Update(ctx)
-	b.b = newBucket
+	if err == nil {
+		b.b = newBucket
+	}
 	return err
 }
 

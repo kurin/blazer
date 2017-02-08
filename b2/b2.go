@@ -31,6 +31,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"regexp"
 	"strconv"
 	"sync"
 	"time"
@@ -213,9 +214,27 @@ func (b *Bucket) Attrs(ctx context.Context) (*BucketAttrs, error) {
 	return b.b.attrs(), nil
 }
 
+var bNotExist = regexp.MustCompile("Bucket.*does not exist")
+
 // Delete removes a bucket.  The bucket must be empty.
 func (b *Bucket) Delete(ctx context.Context) error {
-	return b.b.deleteBucket(ctx)
+	err := b.b.deleteBucket(ctx)
+	if err == nil {
+		return err
+	}
+	// So, the B2 documentation disagrees with the implementation here, and the
+	// error code is not really helpful.  If the bucket doesn't exist, the error is
+	// 400, not 404, and the string is "Bucket <name> does not exist".  However, the
+	// documentation says it will be "Bucket id <name> does not exist".  In case
+	// they update the implementation to match the documentation, we're just going
+	// to regexp over the error message and hope it's okay.
+	if bNotExist.MatchString(err.Error()) {
+		return b2err{
+			err:         err,
+			notFoundErr: true,
+		}
+	}
+	return err
 }
 
 // BaseURL returns the base URL to use for all files uploaded to this bucket.

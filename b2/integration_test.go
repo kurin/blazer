@@ -567,6 +567,42 @@ func TestNewBucket(t *testing.T) {
 	}
 }
 
+func TestDuelingBuckets(t *testing.T) {
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	defer cancel()
+
+	bucket, done := startLiveTest(ctx, t)
+	defer done()
+	bucket2, done2 := startLiveTest(ctx, t)
+	defer done2()
+
+	attrs, err := bucket.Attrs(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	attrs.Info["food"] = "yum"
+	if err := bucket.Update(ctx, attrs); err != nil {
+		t.Fatal(err)
+	}
+
+	attrs2, err := bucket2.Attrs(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	attrs2.Info["nails"] = "not"
+	if err := bucket2.Update(ctx, attrs2); err == nil {
+		t.Fatalf("bucket.Update should have failed; did not")
+	}
+
+	if err := bucket2.Update(ctx, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := bucket2.Update(ctx, attrs2); err != nil {
+		t.Fatal(err)
+	}
+}
+
 type object struct {
 	o   *Object
 	err error
@@ -633,7 +669,7 @@ func startLiveTest(ctx context.Context, t *testing.T) (*Bucket, func()) {
 				t.Error(err)
 			}
 		}
-		if err := bucket.Delete(ctx); err != nil {
+		if err := bucket.Delete(ctx); err != nil && !IsNotExist(err) {
 			t.Error(err)
 		}
 	}

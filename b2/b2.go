@@ -204,6 +204,13 @@ func (c *Client) ListBuckets(ctx context.Context) ([]*Bucket, error) {
 
 // Update modifies the given bucket with new attributes.
 func (b *Bucket) Update(ctx context.Context, attrs *BucketAttrs) error {
+	if attrs == nil {
+		bucket, err := b.c.Bucket(ctx, b.Name())
+		if err != nil {
+			return err
+		}
+		b.b = bucket.b
+	}
 	return b.b.updateBucket(ctx, attrs)
 }
 

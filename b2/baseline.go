@@ -191,12 +191,7 @@ func (b *b2Root) listBuckets(ctx context.Context) ([]b2BucketInterface, error) {
 
 func (b *b2Bucket) updateBucket(ctx context.Context, attrs *BucketAttrs) error {
 	if attrs == nil {
-		// Force an update anyway.
-		newBucket, err := b.b.Update(ctx)
-		if err == nil {
-			b.b = newBucket
-		}
-		return err
+		return nil
 	}
 	if attrs.Type != UnknownType {
 		b.b.Type = string(attrs.Type)
@@ -218,6 +213,13 @@ func (b *b2Bucket) updateBucket(ctx context.Context, attrs *BucketAttrs) error {
 	newBucket, err := b.b.Update(ctx)
 	if err == nil {
 		b.b = newBucket
+	}
+	code, _ := base.Code(err)
+	if code == 409 {
+		return b2err{
+			err:              err,
+			isUpdateConflict: true,
+		}
 	}
 	return err
 }

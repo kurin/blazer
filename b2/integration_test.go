@@ -581,20 +581,25 @@ func TestDuelingBuckets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	attrs2, err := bucket2.Attrs(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
 	attrs.Info["food"] = "yum"
 	if err := bucket.Update(ctx, attrs); err != nil {
 		t.Fatal(err)
 	}
 
-	attrs2, err := bucket2.Attrs(ctx)
+	attrs2.Info["nails"] = "not"
+	if err := bucket2.Update(ctx, attrs2); !IsUpdateConflict(err) {
+		t.Fatalf("bucket.Update should have failed with IsUpdateConflict; instead failed with %v", err)
+	}
+
+	attrs2, err = bucket2.Attrs(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	attrs2.Info["nails"] = "not"
-	if err := bucket2.Update(ctx, attrs2); err == nil {
-		t.Fatalf("bucket.Update should have failed; did not")
-	}
-
 	if err := bucket2.Update(ctx, nil); err != nil {
 		t.Fatal(err)
 	}

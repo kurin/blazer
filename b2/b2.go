@@ -115,8 +115,9 @@ type LifecycleRule struct {
 }
 
 type b2err struct {
-	err         error
-	notFoundErr bool
+	err              error
+	notFoundErr      bool
+	isUpdateConflict bool
 }
 
 func (e b2err) Error() string {
@@ -202,22 +203,30 @@ func (c *Client) ListBuckets(ctx context.Context) ([]*Bucket, error) {
 	return buckets, nil
 }
 
-// Update modifies the given bucket with new attributes.
-func (b *Bucket) Update(ctx context.Context, attrs *BucketAttrs) error {
-	if attrs == nil {
-		bucket, err := b.c.Bucket(ctx, b.Name())
-		if err != nil {
-			return err
-		}
-		b.b = bucket.b
+// IsUpdateConflict reports whether a given error is the result of a bucket
+// update conflict.
+func IsUpdateConflict(err error) bool {
+	e, ok := err.(b2err)
+	if !ok {
+		return false
 	}
+	return e.isUpdateConflict
+}
+
+// Update modifies the given bucket with new attributes.  It is possible that
+// this method could fail with an update conflict, in which case you should
+// retrieve the latest bucket attributes with Attrs and try again.
+func (b *Bucket) Update(ctx context.Context, attrs *BucketAttrs) error {
 	return b.b.updateBucket(ctx, attrs)
 }
 
-// Attrs returns the current bucket's attributes.
+// Attrs retrieves and returns the current bucket's attributes.
 func (b *Bucket) Attrs(ctx context.Context) (*BucketAttrs, error) {
-	// I don't *think* we need to do a round-trip here, but I'm leaving the
-	// function sig open to that just in case.
+	bucket, err := b.c.Bucket(ctx, b.Name())
+	if err != nil {
+		return nil, err
+	}
+	b.b = bucket.b
 	return b.b.attrs(), nil
 }
 

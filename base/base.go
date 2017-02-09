@@ -93,6 +93,15 @@ func Action(err error) ErrAction {
 // error.
 type ErrAction int
 
+// Code returns the error code and message.
+func Code(err error) (int, string) {
+	e, ok := err.(b2err)
+	if !ok {
+		return 0, ""
+	}
+	return e.code, e.msg
+}
+
 const (
 	// ReAuthenticate indicates that the B2 account authentication tokens have
 	// expired, and should be refreshed with a new call to AuthorizeAccount.

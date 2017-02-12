@@ -102,6 +102,12 @@ func (r *Reader) thread() {
 			offset := int64(chunkID*r.csize) + r.offset
 			size := int64(r.csize)
 			if offset >= r.size {
+				// Send an empty chunk.  This is necessary to prevent a deadlock when
+				// this is the very first chunk.
+				r.rmux.Lock()
+				r.chunks[chunkID] = buf
+				r.rmux.Unlock()
+				r.rcond.Broadcast()
 				return
 			}
 			if offset+size > r.size {

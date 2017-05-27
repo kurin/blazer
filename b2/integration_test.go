@@ -294,7 +294,7 @@ func TestFileBufferLive(t *testing.T) {
 	}
 
 	if _, err := os.Stat(smallTmpName); !os.IsNotExist(err) {
-		fmt.Errorf("tmp file exists or other error: %v", err)
+		t.Errorf("tmp file exists or other error: %v", err)
 	}
 }
 
@@ -558,7 +558,7 @@ func TestNewBucket(t *testing.T) {
 		}
 		attrs, err := bucket.Attrs(ctx)
 		if err != nil {
-			t.Errorf("%s: Attrs(ctx): %v", err)
+			t.Errorf("%s: Attrs(ctx): %v", ent.name, err)
 			continue
 		}
 		if !compare(attrs, ent.attrs) {

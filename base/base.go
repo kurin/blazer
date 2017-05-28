@@ -45,6 +45,9 @@ import (
 var (
 	// APIBase is the URL for the API endpoint.
 	APIBase = "https://api.backblazeb2.com"
+
+	// Transport is the http.RoundTripper used to execute HTTP requests to the API.
+	Transport = http.DefaultTransport
 )
 
 type b2err struct {
@@ -232,7 +235,7 @@ type httpReply struct {
 func makeNetRequest(req *http.Request) <-chan httpReply {
 	ch := make(chan httpReply)
 	go func() {
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := Transport.RoundTrip(req)
 		ch <- httpReply{resp, err}
 		close(ch)
 	}()

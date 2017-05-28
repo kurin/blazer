@@ -43,6 +43,7 @@ import (
 )
 
 var (
+	// APIBase is the URL for the API endpoint.
 	APIBase = "https://api.backblazeb2.com"
 )
 

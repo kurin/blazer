@@ -37,6 +37,7 @@ type memoryBuffer struct {
 	buf *bytes.Buffer
 	hsh hash.Hash
 	w   io.Writer
+	mux sync.Mutex
 }
 
 var bufpool *sync.Pool
@@ -66,6 +67,11 @@ func (mb *memoryBuffer) Reader() (io.ReadSeeker, error) { return bytes.NewReader
 func (mb *memoryBuffer) Hash() string                   { return fmt.Sprintf("%x", mb.hsh.Sum(nil)) }
 
 func (mb *memoryBuffer) Close() error {
+	mb.mux.Lock()
+	defer mb.mux.Unlock()
+	if mb.buf == nil {
+		return nil
+	}
 	mb.buf.Truncate(0)
 	bufpool.Put(mb.buf)
 	mb.buf = nil

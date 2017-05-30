@@ -585,7 +585,7 @@ func writeFile(ctx context.Context, bucket *Bucket, name string, size int64, csi
 	h := sha1.New()
 	w := io.MultiWriter(f, h)
 	f.ConcurrentUploads = 5
-	f.csize = csize
+	f.ChunkSize = csize
 	if _, err := io.Copy(w, r); err != nil {
 		return nil, "", err
 	}

@@ -59,12 +59,12 @@ func TestReadWriteLive(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	lobj, wshaL, err := writeFile(ctx, bucket, largeFileName, 1e8+5e7, 1e8)
+	lobj, wshaL, err := writeFile(ctx, bucket, largeFileName, 5e6+5e4, 5e6)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if err := readFile(ctx, lobj, wshaL, 1e7, 10); err != nil {
+	if err := readFile(ctx, lobj, wshaL, 1e6, 10); err != nil {
 		t.Error(err)
 	}
 
@@ -150,7 +150,8 @@ func TestResumeWriter(t *testing.T) {
 	bucket, _ := startLiveTest(ctx, t)
 
 	w := bucket.Object("foo").NewWriter(ctx)
-	r := io.LimitReader(zReader{}, 3e8)
+	w.ChunkSize = 5e6
+	r := io.LimitReader(zReader{}, 15e6)
 	go func() {
 		// Cancel the context after the first chunk has been written.
 		ticker := time.NewTicker(time.Second)
@@ -172,7 +173,8 @@ func TestResumeWriter(t *testing.T) {
 	bucket2, done := startLiveTest(ctx2, t)
 	defer done()
 	w2 := bucket2.Object("foo").NewWriter(ctx2)
-	r2 := io.LimitReader(zReader{}, 3e8)
+	w2.ChunkSize = 5e6
+	r2 := io.LimitReader(zReader{}, 15e6)
 	h1 := sha1.New()
 	tr := io.TeeReader(r2, h1)
 	w2.Resume = true
@@ -233,7 +235,7 @@ func TestAttrs(t *testing.T) {
 		},
 		{
 			name: "large",
-			size: 1e8 + 4,
+			size: 5e6 + 4,
 		},
 	}
 
@@ -290,11 +292,15 @@ func TestFileBufferLive(t *testing.T) {
 	smallTmpName := wb.f.Name()
 
 	if _, err := io.Copy(w, r); err != nil {
-		t.Fatalf("creating small file: %v", err)
+		t.Errorf("creating small file: %v", err)
+	}
+
+	if err := w.Close(); err != nil {
+		t.Errorf("w.Close(): %v", err)
 	}
 
 	if _, err := os.Stat(smallTmpName); !os.IsNotExist(err) {
-		t.Errorf("tmp file exists or other error: %v", err)
+		t.Errorf("tmp file exists (%s) or other error: %v", smallTmpName, err)
 	}
 }
 

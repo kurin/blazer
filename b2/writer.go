@@ -47,8 +47,8 @@ type Writer struct {
 
 	// ChunkSize is the size, in bytes, of each individual part, when writing
 	// large files, and also when determining whether to upload a file normally
-	// or when to split it into parts.  The default is 100M (1e8) (which is also
-	// the minimum).  Values less than 100M are not an error, but will fail.  The
+	// or when to split it into parts.  The default is 100M (1e8)  The minimum is
+	// 5M (5e6); values less than this are not an error, but will fail.  The
 	// maximum is 5GB (5e9).
 	ChunkSize int
 
@@ -363,6 +363,7 @@ func (w *Writer) sendChunk() error {
 func (w *Writer) Close() error {
 	w.done.Do(func() {
 		defer w.o.b.c.removeWriter(w)
+		defer w.w.Close() // TODO: log error
 		if w.cidx == 0 {
 			w.setErr(w.simpleWriteFile())
 			return
@@ -380,7 +381,6 @@ func (w *Writer) Close() error {
 			w.setErr(err)
 			return
 		}
-		w.w.Close() // TODO: log error
 		w.o.f = f
 	})
 	return w.getErr()

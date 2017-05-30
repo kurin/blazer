@@ -83,6 +83,8 @@ func Action(err error) ErrAction {
 			return AttemptNewUpload
 		}
 		return ReAuthenticate
+	case 408:
+		return AttemptNewUpload
 	case 429, 500, 503:
 		return Retry
 	}

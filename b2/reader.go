@@ -76,6 +76,14 @@ func (r *Reader) setErr(err error) {
 	}
 }
 
+func (r *Reader) setErrNoCancel(err error) {
+	r.emux.Lock()
+	defer r.emux.Unlock()
+	if r.err == nil {
+		r.err = err
+	}
+}
+
 func (r *Reader) getErr() error {
 	r.emux.RLock()
 	defer r.emux.RUnlock()
@@ -205,10 +213,14 @@ func (r *Reader) initFunc() {
 }
 
 func (r *Reader) Read(p []byte) (int, error) {
+	if err := r.getErr(); err != nil {
+		return 0, err
+	}
 	// TODO: check the SHA1 hash here and verify it on Close.
 	r.init.Do(r.initFunc)
 	chunk, err := r.curChunk()
 	if err != nil {
+		r.setErrNoCancel(err)
 		return 0, err
 	}
 	n, err := chunk.Read(p)
@@ -216,6 +228,7 @@ func (r *Reader) Read(p []byte) (int, error) {
 	if err == io.EOF {
 		if int64(r.read) >= r.size-r.offset {
 			close(r.chbuf)
+			r.setErrNoCancel(err)
 			return n, err
 		}
 		r.chrid++
@@ -223,6 +236,7 @@ func (r *Reader) Read(p []byte) (int, error) {
 		r.chbuf <- chunk
 		err = nil
 	}
+	r.setErrNoCancel(err)
 	return n, err
 }
 

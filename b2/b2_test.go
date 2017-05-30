@@ -461,6 +461,35 @@ func TestBackoffWithoutRetryAfter(t *testing.T) {
 	}
 }
 
+func TestReaderDoubleClose(t *testing.T) {
+	ctx := context.Background()
+
+	client := &Client{
+		backend: &beRoot{
+			b2i: &testRoot{
+				bucketMap: make(map[string]map[string]string),
+				errs:      &errCont{},
+			},
+		},
+	}
+	bucket, err := client.NewBucket(ctx, "bucket", &BucketAttrs{Type: Private})
+	if err != nil {
+		t.Fatal(err)
+	}
+	o, _, err := writeFile(ctx, bucket, "file", 10, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := o.NewReader(ctx)
+	// Read to EOF, and then read some more.
+	if _, err := io.Copy(ioutil.Discard, r); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.Copy(ioutil.Discard, r); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestReadWrite(t *testing.T) {
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)

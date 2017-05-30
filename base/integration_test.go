@@ -167,9 +167,9 @@ func TestStorage(t *testing.T) {
 	}
 
 	// b2_upload_part
-	largeFile := io.LimitReader(zReader{}, 2*1e8) // 200M
+	largeFile := io.LimitReader(zReader{}, 10e6) // 10M
 	for i := 0; i < 2; i++ {
-		r := io.LimitReader(largeFile, 1e8) // 100M
+		r := io.LimitReader(largeFile, 5e6) // 5M
 		hash := sha1.New()
 		buf := &bytes.Buffer{}
 		w := io.MultiWriter(hash, buf)

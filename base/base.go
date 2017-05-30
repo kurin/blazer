@@ -207,6 +207,17 @@ func millitime(t int64) time.Time {
 	return time.Unix(t/1000, t%1000*1e6)
 }
 
+type b2Options struct {
+	transport http.RoundTripper
+}
+
+func (o *b2Options) getTransport() http.RoundTripper {
+	if o.transport == nil {
+		return http.DefaultTransport
+	}
+	return o.transport
+}
+
 // B2 holds account information for Backblaze.
 type B2 struct {
 	accountID   string
@@ -214,6 +225,7 @@ type B2 struct {
 	apiURI      string
 	downloadURI string
 	minPartSize int
+	opts        *b2Options
 }
 
 // Update replaces the B2 object with a new one, in-place.
@@ -223,6 +235,7 @@ func (b *B2) Update(n *B2) {
 	b.apiURI = n.apiURI
 	b.downloadURI = n.downloadURI
 	b.minPartSize = n.minPartSize
+	b.opts = n.opts
 }
 
 type httpReply struct {
@@ -230,10 +243,10 @@ type httpReply struct {
 	err  error
 }
 
-func makeNetRequest(req *http.Request) <-chan httpReply {
+func makeNetRequest(req *http.Request, rt http.RoundTripper) <-chan httpReply {
 	ch := make(chan httpReply)
 	go func() {
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := rt.RoundTrip(req)
 		ch <- httpReply{resp, err}
 		close(ch)
 	}()
@@ -275,7 +288,7 @@ var (
 
 var reqID int64
 
-func makeRequest(ctx context.Context, method, verb, url string, b2req, b2resp interface{}, headers map[string]string, body *requestBody) error {
+func (o *b2Options) makeRequest(ctx context.Context, method, verb, url string, b2req, b2resp interface{}, headers map[string]string, body *requestBody) error {
 	var args []byte
 	if b2req != nil {
 		enc, err := json.Marshal(b2req)
@@ -310,7 +323,7 @@ func makeRequest(ctx context.Context, method, verb, url string, b2req, b2resp in
 	cancel := make(chan struct{})
 	req.Cancel = cancel
 	logRequest(req, args)
-	ch := makeNetRequest(req)
+	ch := makeNetRequest(req, o.getTransport())
 	var reply httpReply
 	select {
 	case reply = <-ch:
@@ -350,13 +363,17 @@ func makeRequest(ctx context.Context, method, verb, url string, b2req, b2resp in
 }
 
 // AuthorizeAccount wraps b2_authorize_account.
-func AuthorizeAccount(ctx context.Context, account, key string) (*B2, error) {
+func AuthorizeAccount(ctx context.Context, account, key string, opts ...AuthOption) (*B2, error) {
 	auth := base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", account, key)))
 	b2resp := &b2types.AuthorizeAccountResponse{}
 	headers := map[string]string{
 		"Authorization": fmt.Sprintf("Basic %s", auth),
 	}
-	if err := makeRequest(ctx, "b2_authorize_account", "GET", APIBase+b2types.V1api+"b2_authorize_account", nil, b2resp, headers, nil); err != nil {
+	b2opts := &b2Options{}
+	for _, f := range opts {
+		f(b2opts)
+	}
+	if err := b2opts.makeRequest(ctx, "b2_authorize_account", "GET", APIBase+b2types.V1api+"b2_authorize_account", nil, b2resp, headers, nil); err != nil {
 		return nil, err
 	}
 	return &B2{
@@ -365,7 +382,16 @@ func AuthorizeAccount(ctx context.Context, account, key string) (*B2, error) {
 		apiURI:      b2resp.URI,
 		downloadURI: b2resp.DownloadURI,
 		minPartSize: b2resp.MinPartSize,
+		opts:        b2opts,
 	}, nil
+}
+
+type AuthOption func(*b2Options)
+
+func Transport(rt http.RoundTripper) AuthOption {
+	return func(o *b2Options) {
+		o.transport = rt
+	}
 }
 
 type LifecycleRule struct {
@@ -398,7 +424,7 @@ func (b *B2) CreateBucket(ctx context.Context, name, btype string, info map[stri
 	headers := map[string]string{
 		"Authorization": b.authToken,
 	}
-	if err := makeRequest(ctx, "b2_create_bucket", "POST", b.apiURI+b2types.V1api+"b2_create_bucket", b2req, b2resp, headers, nil); err != nil {
+	if err := b.opts.makeRequest(ctx, "b2_create_bucket", "POST", b.apiURI+b2types.V1api+"b2_create_bucket", b2req, b2resp, headers, nil); err != nil {
 		return nil, err
 	}
 	var respRules []LifecycleRule
@@ -428,7 +454,7 @@ func (b *Bucket) DeleteBucket(ctx context.Context) error {
 	headers := map[string]string{
 		"Authorization": b.b2.authToken,
 	}
-	return makeRequest(ctx, "b2_delete_bucket", "POST", b.b2.apiURI+b2types.V1api+"b2_delete_bucket", b2req, nil, headers, nil)
+	return b.b2.opts.makeRequest(ctx, "b2_delete_bucket", "POST", b.b2.apiURI+b2types.V1api+"b2_delete_bucket", b2req, nil, headers, nil)
 }
 
 // Bucket holds B2 bucket details.
@@ -465,7 +491,7 @@ func (b *Bucket) Update(ctx context.Context) (*Bucket, error) {
 		"Authorization": b.b2.authToken,
 	}
 	b2resp := &b2types.UpdateBucketResponse{}
-	if err := makeRequest(ctx, "b2_update_bucket", "POST", b.b2.apiURI+b2types.V1api+"b2_update_bucket", b2req, b2resp, headers, nil); err != nil {
+	if err := b.b2.opts.makeRequest(ctx, "b2_update_bucket", "POST", b.b2.apiURI+b2types.V1api+"b2_update_bucket", b2req, b2resp, headers, nil); err != nil {
 		return nil, err
 	}
 	var respRules []LifecycleRule
@@ -500,7 +526,7 @@ func (b *B2) ListBuckets(ctx context.Context) ([]*Bucket, error) {
 	headers := map[string]string{
 		"Authorization": b.authToken,
 	}
-	if err := makeRequest(ctx, "b2_list_buckets", "POST", b.apiURI+b2types.V1api+"b2_list_buckets", b2req, b2resp, headers, nil); err != nil {
+	if err := b.opts.makeRequest(ctx, "b2_list_buckets", "POST", b.apiURI+b2types.V1api+"b2_list_buckets", b2req, b2resp, headers, nil); err != nil {
 		return nil, err
 	}
 	var buckets []*Bucket
@@ -555,7 +581,7 @@ func (b *Bucket) GetUploadURL(ctx context.Context) (*URL, error) {
 	headers := map[string]string{
 		"Authorization": b.b2.authToken,
 	}
-	if err := makeRequest(ctx, "b2_get_upload_url", "POST", b.b2.apiURI+b2types.V1api+"b2_get_upload_url", b2req, b2resp, headers, nil); err != nil {
+	if err := b.b2.opts.makeRequest(ctx, "b2_get_upload_url", "POST", b.b2.apiURI+b2types.V1api+"b2_get_upload_url", b2req, b2resp, headers, nil); err != nil {
 		return nil, err
 	}
 	return &URL{
@@ -589,7 +615,7 @@ func (url *URL) UploadFile(ctx context.Context, r io.Reader, size int, name, con
 		headers[fmt.Sprintf("X-Bz-Info-%s", k)] = v
 	}
 	b2resp := &b2types.UploadFileResponse{}
-	if err := makeRequest(ctx, "b2_upload_file", "POST", url.uri, nil, b2resp, headers, &requestBody{body: r, size: int64(size)}); err != nil {
+	if err := url.b2.opts.makeRequest(ctx, "b2_upload_file", "POST", url.uri, nil, b2resp, headers, &requestBody{body: r, size: int64(size)}); err != nil {
 		return nil, err
 	}
 	return &File{
@@ -611,7 +637,7 @@ func (f *File) DeleteFileVersion(ctx context.Context) error {
 	headers := map[string]string{
 		"Authorization": f.b2.authToken,
 	}
-	return makeRequest(ctx, "b2_delete_file_version", "POST", f.b2.apiURI+b2types.V1api+"b2_delete_file_version", b2req, nil, headers, nil)
+	return f.b2.opts.makeRequest(ctx, "b2_delete_file_version", "POST", f.b2.apiURI+b2types.V1api+"b2_delete_file_version", b2req, nil, headers, nil)
 }
 
 // LargeFile holds information necessary to implement B2 large file support.
@@ -636,7 +662,7 @@ func (b *Bucket) StartLargeFile(ctx context.Context, name, contentType string, i
 	headers := map[string]string{
 		"Authorization": b.b2.authToken,
 	}
-	if err := makeRequest(ctx, "b2_start_large_file", "POST", b.b2.apiURI+b2types.V1api+"b2_start_large_file", b2req, b2resp, headers, nil); err != nil {
+	if err := b.b2.opts.makeRequest(ctx, "b2_start_large_file", "POST", b.b2.apiURI+b2types.V1api+"b2_start_large_file", b2req, b2resp, headers, nil); err != nil {
 		return nil, err
 	}
 	return &LargeFile{
@@ -654,7 +680,7 @@ func (l *LargeFile) CancelLargeFile(ctx context.Context) error {
 	headers := map[string]string{
 		"Authorization": l.b2.authToken,
 	}
-	return makeRequest(ctx, "b2_cancel_large_file", "POST", l.b2.apiURI+b2types.V1api+"b2_cancel_large_file", b2req, nil, headers, nil)
+	return l.b2.opts.makeRequest(ctx, "b2_cancel_large_file", "POST", l.b2.apiURI+b2types.V1api+"b2_cancel_large_file", b2req, nil, headers, nil)
 }
 
 // FilePart is a piece of a started, but not finished, large file upload.
@@ -675,7 +701,7 @@ func (f *File) ListParts(ctx context.Context, next, count int) ([]*FilePart, int
 	headers := map[string]string{
 		"Authorization": f.b2.authToken,
 	}
-	if err := makeRequest(ctx, "b2_list_parts", "POST", f.b2.apiURI+b2types.V1api+"b2_list_parts", b2req, b2resp, headers, nil); err != nil {
+	if err := f.b2.opts.makeRequest(ctx, "b2_list_parts", "POST", f.b2.apiURI+b2types.V1api+"b2_list_parts", b2req, b2resp, headers, nil); err != nil {
 		return nil, 0, err
 	}
 	var parts []*FilePart
@@ -730,7 +756,7 @@ func (l *LargeFile) GetUploadPartURL(ctx context.Context) (*FileChunk, error) {
 	headers := map[string]string{
 		"Authorization": l.b2.authToken,
 	}
-	if err := makeRequest(ctx, "b2_get_upload_part_url", "POST", l.b2.apiURI+b2types.V1api+"b2_get_upload_part_url", b2req, b2resp, headers, nil); err != nil {
+	if err := l.b2.opts.makeRequest(ctx, "b2_get_upload_part_url", "POST", l.b2.apiURI+b2types.V1api+"b2_get_upload_part_url", b2req, b2resp, headers, nil); err != nil {
 		return nil, err
 	}
 	return &FileChunk{
@@ -759,7 +785,7 @@ func (fc *FileChunk) UploadPart(ctx context.Context, r io.Reader, sha1 string, s
 		"Content-Length":    fmt.Sprintf("%d", size),
 		"X-Bz-Content-Sha1": sha1,
 	}
-	if err := makeRequest(ctx, "b2_upload_part", "POST", fc.url, nil, nil, headers, &requestBody{body: r, size: int64(size)}); err != nil {
+	if err := fc.file.b2.opts.makeRequest(ctx, "b2_upload_part", "POST", fc.url, nil, nil, headers, &requestBody{body: r, size: int64(size)}); err != nil {
 		return 0, err
 	}
 	fc.file.mu.Lock()
@@ -784,7 +810,7 @@ func (l *LargeFile) FinishLargeFile(ctx context.Context) (*File, error) {
 	headers := map[string]string{
 		"Authorization": l.b2.authToken,
 	}
-	if err := makeRequest(ctx, "b2_finish_large_file", "POST", l.b2.apiURI+b2types.V1api+"b2_finish_large_file", b2req, b2resp, headers, nil); err != nil {
+	if err := l.b2.opts.makeRequest(ctx, "b2_finish_large_file", "POST", l.b2.apiURI+b2types.V1api+"b2_finish_large_file", b2req, b2resp, headers, nil); err != nil {
 		return nil, err
 	}
 	return &File{
@@ -810,7 +836,7 @@ func (b *Bucket) ListFileNames(ctx context.Context, count int, continuation, pre
 	headers := map[string]string{
 		"Authorization": b.b2.authToken,
 	}
-	if err := makeRequest(ctx, "b2_list_file_names", "POST", b.b2.apiURI+b2types.V1api+"b2_list_file_names", b2req, b2resp, headers, nil); err != nil {
+	if err := b.b2.opts.makeRequest(ctx, "b2_list_file_names", "POST", b.b2.apiURI+b2types.V1api+"b2_list_file_names", b2req, b2resp, headers, nil); err != nil {
 		return nil, "", err
 	}
 	cont := b2resp.Continuation
@@ -842,7 +868,7 @@ func (b *Bucket) ListFileVersions(ctx context.Context, count int, startName, sta
 	headers := map[string]string{
 		"Authorization": b.b2.authToken,
 	}
-	if err := makeRequest(ctx, "b2_list_file_versions", "POST", b.b2.apiURI+b2types.V1api+"b2_list_file_versions", b2req, b2resp, headers, nil); err != nil {
+	if err := b.b2.opts.makeRequest(ctx, "b2_list_file_versions", "POST", b.b2.apiURI+b2types.V1api+"b2_list_file_versions", b2req, b2resp, headers, nil); err != nil {
 		return nil, "", "", err
 	}
 	var files []*File
@@ -870,7 +896,7 @@ func (b *Bucket) GetDownloadAuthorization(ctx context.Context, prefix string, va
 	headers := map[string]string{
 		"Authorization": b.b2.authToken,
 	}
-	if err := makeRequest(ctx, "b2_get_download_authorization", "POST", b.b2.apiURI+b2types.V1api+"b2_get_download_authorization", b2req, b2resp, headers, nil); err != nil {
+	if err := b.b2.opts.makeRequest(ctx, "b2_get_download_authorization", "POST", b.b2.apiURI+b2types.V1api+"b2_get_download_authorization", b2req, b2resp, headers, nil); err != nil {
 		return "", err
 	}
 	return b2resp.Token, nil
@@ -912,7 +938,7 @@ func (b *Bucket) DownloadFileByName(ctx context.Context, name string, offset, si
 	cancel := make(chan struct{})
 	req.Cancel = cancel
 	logRequest(req, nil)
-	ch := makeNetRequest(req)
+	ch := makeNetRequest(req, b.b2.opts.getTransport())
 	var reply httpReply
 	select {
 	case reply = <-ch:
@@ -959,7 +985,7 @@ func (b *Bucket) HideFile(ctx context.Context, name string) (*File, error) {
 	headers := map[string]string{
 		"Authorization": b.b2.authToken,
 	}
-	if err := makeRequest(ctx, "b2_hide_file", "POST", b.b2.apiURI+b2types.V1api+"b2_hide_file", b2req, b2resp, headers, nil); err != nil {
+	if err := b.b2.opts.makeRequest(ctx, "b2_hide_file", "POST", b.b2.apiURI+b2types.V1api+"b2_hide_file", b2req, b2resp, headers, nil); err != nil {
 		return nil, err
 	}
 	return &File{
@@ -991,7 +1017,7 @@ func (f *File) GetFileInfo(ctx context.Context) (*FileInfo, error) {
 	headers := map[string]string{
 		"Authorization": f.b2.authToken,
 	}
-	if err := makeRequest(ctx, "b2_get_file_info", "POST", f.b2.apiURI+b2types.V1api+"b2_get_file_info", b2req, b2resp, headers, nil); err != nil {
+	if err := f.b2.opts.makeRequest(ctx, "b2_get_file_info", "POST", f.b2.apiURI+b2types.V1api+"b2_get_file_info", b2req, b2resp, headers, nil); err != nil {
 		return nil, err
 	}
 	f.Status = b2resp.Action

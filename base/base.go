@@ -386,8 +386,10 @@ func AuthorizeAccount(ctx context.Context, account, key string, opts ...AuthOpti
 	}, nil
 }
 
+// An AuthOption allows callers to choose per-session settings.
 type AuthOption func(*b2Options)
 
+// Transport returns an AuthOption that sets the underlying HTTP mechanism.
 func Transport(rt http.RoundTripper) AuthOption {
 	return func(o *b2Options) {
 		o.transport = rt

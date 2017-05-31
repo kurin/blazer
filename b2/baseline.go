@@ -27,7 +27,7 @@ import (
 // the only file in b2 that imports base.
 
 type b2RootInterface interface {
-	authorizeAccount(context.Context, string, string) error
+	authorizeAccount(context.Context, string, string, ...ClientOption) error
 	transient(error) bool
 	backoff(error) time.Duration
 	reauth(error) bool
@@ -129,8 +129,16 @@ type b2FilePart struct {
 	b *base.FilePart
 }
 
-func (b *b2Root) authorizeAccount(ctx context.Context, account, key string) error {
-	nb, err := base.AuthorizeAccount(ctx, account, key)
+func (b *b2Root) authorizeAccount(ctx context.Context, account, key string, opts ...ClientOption) error {
+	c := &clientOptions{}
+	for _, f := range opts {
+		f(c)
+	}
+	var aopts []base.AuthOption
+	if c.transport != nil {
+		aopts = append(aopts, base.Transport(c.transport))
+	}
+	nb, err := base.AuthorizeAccount(ctx, account, key, aopts...)
 	if err != nil {
 		return err
 	}

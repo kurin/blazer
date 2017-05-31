@@ -20,7 +20,9 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net/http"
 	"sort"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -68,7 +70,7 @@ type testRoot struct {
 	bucketMap map[string]map[string]string
 }
 
-func (t *testRoot) authorizeAccount(context.Context, string, string) error {
+func (t *testRoot) authorizeAccount(context.Context, string, string, ...ClientOption) error {
 	t.auths++
 	return nil
 }
@@ -458,6 +460,29 @@ func TestBackoffWithoutRetryAfter(t *testing.T) {
 	}
 	if len(calls) != 2 {
 		t.Errorf("wrong number of backoff calls; got %d, want 2", len(calls))
+	}
+}
+
+type badTransport struct{}
+
+func (badTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	return &http.Response{
+		Status:     "700 What",
+		StatusCode: 700,
+		Body:       ioutil.NopCloser(bytes.NewBufferString("{}")),
+		Request:    r,
+	}, nil
+}
+
+func TestCustomTransport(t *testing.T) {
+	ctx := context.Background()
+	// Sorta fragile but...
+	_, err := NewClient(ctx, "abcd", "efgh", Transport(badTransport{}))
+	if err == nil {
+		t.Error("NewClient returned successfully, expected an error")
+	}
+	if !strings.Contains(err.Error(), "700") {
+		t.Errorf("Expected nonsense error code 700, got %v", err)
 	}
 }
 

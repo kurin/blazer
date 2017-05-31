@@ -29,7 +29,7 @@ type beRootInterface interface {
 	reauth(error) bool
 	transient(error) bool
 	reupload(error) bool
-	authorizeAccount(context.Context, string, string) error
+	authorizeAccount(context.Context, string, string, ...ClientOption) error
 	reauthorizeAccount(context.Context) error
 	createBucket(ctx context.Context, name, btype string, info map[string]string, rules []LifecycleRule) (beBucketInterface, error)
 	listBuckets(context.Context) ([]beBucketInterface, error)
@@ -147,9 +147,9 @@ func (r *beRoot) reauth(err error) bool           { return r.b2i.reauth(err) }
 func (r *beRoot) reupload(err error) bool         { return r.b2i.reupload(err) }
 func (r *beRoot) transient(err error) bool        { return r.b2i.transient(err) }
 
-func (r *beRoot) authorizeAccount(ctx context.Context, account, key string) error {
+func (r *beRoot) authorizeAccount(ctx context.Context, account, key string, opts ...ClientOption) error {
 	f := func() error {
-		if err := r.b2i.authorizeAccount(ctx, account, key); err != nil {
+		if err := r.b2i.authorizeAccount(ctx, account, key, opts...); err != nil {
 			return err
 		}
 		r.account = account

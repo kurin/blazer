@@ -31,6 +31,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"net/http"
 	"regexp"
 	"strconv"
 	"sync"
@@ -50,16 +51,31 @@ type Client struct {
 
 // NewClient creates and returns a new Client with valid B2 service account
 // tokens.
-func NewClient(ctx context.Context, account, key string) (*Client, error) {
+func NewClient(ctx context.Context, account, key string, opts ...ClientOption) (*Client, error) {
 	c := &Client{
 		backend: &beRoot{
 			b2i: &b2Root{},
 		},
 	}
-	if err := c.backend.authorizeAccount(ctx, account, key); err != nil {
+	if err := c.backend.authorizeAccount(ctx, account, key, opts...); err != nil {
 		return nil, err
 	}
 	return c, nil
+}
+
+type clientOptions struct {
+	transport http.RoundTripper
+}
+
+// A ClientOption allows callers to adjust various per-client settings.
+type ClientOption func(*clientOptions)
+
+// Transport sets the underlying HTTP transport mechanism.  If unset,
+// http.DefaultTransport is used.
+func Transport(rt http.RoundTripper) ClientOption {
+	return func(c *clientOptions) {
+		c.transport = rt
+	}
 }
 
 // Bucket is a reference to a B2 bucket.

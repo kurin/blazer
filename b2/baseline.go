@@ -16,6 +16,7 @@ package b2
 
 import (
 	"io"
+	"net/http"
 	"time"
 
 	"github.com/kurin/blazer/base"
@@ -303,6 +304,9 @@ func (b *b2Bucket) listFileVersions(ctx context.Context, count int, nextName, ne
 func (b *b2Bucket) downloadFileByName(ctx context.Context, name string, offset, size int64) (b2FileReaderInterface, error) {
 	fr, err := b.b.DownloadFileByName(ctx, name, offset, size)
 	if err != nil {
+		if code, _ := base.Code(err); code == http.StatusRequestedRangeNotSatisfiable {
+			return nil, errNoMoreContent
+		}
 		return nil, err
 	}
 	return &b2FileReader{fr}, nil

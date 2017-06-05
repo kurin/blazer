@@ -28,7 +28,6 @@
 package b2
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"net/http"
@@ -403,7 +402,7 @@ func (o *Object) NewRangeReader(ctx context.Context, offset, length int64) *Read
 		cancel: cancel,
 		o:      o,
 		name:   o.name,
-		chunks: make(map[int]*bytes.Buffer),
+		chunks: make(map[int]*rchunk),
 		length: length,
 		offset: offset,
 	}

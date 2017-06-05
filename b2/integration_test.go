@@ -418,12 +418,12 @@ func TestRangeReaderLive(t *testing.T) {
 			continue
 		}
 		if read != e.size {
-			t.Errorf("read %d bytes, wanted %d bytes", read, e.size)
+			t.Errorf("NewRangeReader(_, %d, %d): read %d bytes, wanted %d bytes", e.offset, e.length, read, e.size)
 		}
 		got := fmt.Sprintf("%x", hr.Sum(nil))
 		want := fmt.Sprintf("%x", hw.Sum(nil))
 		if got != want {
-			t.Errorf("bad hash, got %q, want %q", got, want)
+			t.Errorf("NewRangeReader(_, %d, %d): got %q, want %q", e.offset, e.length, got, want)
 		}
 	}
 }

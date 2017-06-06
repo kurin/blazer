@@ -25,8 +25,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kurin/blazer/base"
-
 	"golang.org/x/net/context"
 )
 
@@ -36,16 +34,6 @@ const (
 
 	errVar = "B2_TRANSIENT_ERRORS"
 )
-
-func init() {
-	fail := os.Getenv(errVar)
-	switch fail {
-	case "", "0", "false":
-		return
-	}
-	base.FailSomeUploads = true
-	base.ExpireSomeAuthTokens = true
-}
 
 func TestReadWriteLive(t *testing.T) {
 	ctx := context.Background()
@@ -661,7 +649,7 @@ func startLiveTest(ctx context.Context, t *testing.T) (*Bucket, func()) {
 		t.Skipf("B2_ACCOUNT_ID or B2_SECRET_KEY unset; skipping integration tests")
 		return nil, nil
 	}
-	client, err := NewClient(ctx, id, key)
+	client, err := NewClient(ctx, id, key, FailSomeUploads(), ExpireSomeAuthTokens())
 	if err != nil {
 		t.Fatal(err)
 		return nil, nil

@@ -63,7 +63,10 @@ func NewClient(ctx context.Context, account, key string, opts ...ClientOption) (
 }
 
 type clientOptions struct {
-	transport http.RoundTripper
+	transport       http.RoundTripper
+	failSomeUploads bool
+	expireTokens    bool
+	capExceeded     bool
 }
 
 // A ClientOption allows callers to adjust various per-client settings.
@@ -74,6 +77,30 @@ type ClientOption func(*clientOptions)
 func Transport(rt http.RoundTripper) ClientOption {
 	return func(c *clientOptions) {
 		c.transport = rt
+	}
+}
+
+// FailSomeUploads requests intermittent upload failures from the B2 service.
+// This is mostly useful for testing.
+func FailSomeUploads() ClientOption {
+	return func(c *clientOptions) {
+		c.failSomeUploads = true
+	}
+}
+
+// ExpireSomeAuthTokens requests intermittent authentication failures from the
+// B2 service.
+func ExpireSomeAuthTokens() ClientOption {
+	return func(c *clientOptions) {
+		c.expireTokens = true
+	}
+}
+
+// ForceCapExceeded requests a cap limit from the B2 service.  This causes all
+// uploads to be treated as if they would exceed the configure B2 capacity.
+func ForceCapExceeded() ClientOption {
+	return func(c *clientOptions) {
+		c.capExceeded = true
 	}
 }
 

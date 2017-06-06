@@ -141,6 +141,15 @@ func (b *b2Root) authorizeAccount(ctx context.Context, account, key string, opts
 	if c.transport != nil {
 		aopts = append(aopts, base.Transport(c.transport))
 	}
+	if c.failSomeUploads {
+		aopts = append(aopts, base.FailSomeUploads())
+	}
+	if c.expireTokens {
+		aopts = append(aopts, base.ExpireSomeAuthTokens())
+	}
+	if c.capExceeded {
+		aopts = append(aopts, base.ForceCapExceeded())
+	}
 	nb, err := base.AuthorizeAccount(ctx, account, key, aopts...)
 	if err != nil {
 		return err

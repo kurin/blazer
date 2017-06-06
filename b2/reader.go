@@ -128,7 +128,7 @@ func (r *Reader) thread() {
 				r.chunks[chunkID] = buf
 				r.rmux.Unlock()
 				r.rcond.Broadcast()
-				continue
+				return
 			}
 			if err != nil {
 				r.setErr(err)

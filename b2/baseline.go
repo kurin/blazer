@@ -51,6 +51,7 @@ type b2BucketInterface interface {
 	hideFile(context.Context, string) (b2FileInterface, error)
 	getDownloadAuthorization(context.Context, string, time.Duration) (string, error)
 	baseURL() string
+	file(string) b2FileInterface
 }
 
 type b2URLInterface interface {
@@ -82,6 +83,7 @@ type b2FileChunkInterface interface {
 type b2FileReaderInterface interface {
 	io.ReadCloser
 	stats() (int, string, string, map[string]string)
+	id() string
 }
 
 type b2FileInfoInterface interface {
@@ -328,6 +330,8 @@ func (b *b2Bucket) baseURL() string {
 	return b.b.BaseURL()
 }
 
+func (b *b2Bucket) file(id string) b2FileInterface { return &b2File{b.b.File(id)} }
+
 func (b *b2URL) uploadFile(ctx context.Context, r io.Reader, size int, name, contentType, sha1 string, info map[string]string) (b2FileInterface, error) {
 	file, err := b.b.UploadFile(ctx, r, size, name, contentType, sha1, info)
 	if err != nil {
@@ -419,6 +423,8 @@ func (b *b2FileReader) Close() error {
 func (b *b2FileReader) stats() (int, string, string, map[string]string) {
 	return b.b.ContentLength, b.b.ContentType, b.b.SHA1, b.b.Info
 }
+
+func (b *b2FileReader) id() string { return b.b.ID }
 
 func (b *b2FileInfo) stats() (string, string, int64, string, map[string]string, string, time.Time) {
 	return b.b.Name, b.b.SHA1, b.b.Size, b.b.ContentType, b.b.Info, b.b.Status, b.b.Timestamp

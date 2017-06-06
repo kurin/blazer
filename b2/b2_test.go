@@ -207,6 +207,7 @@ func (t *testBucket) downloadFileByName(_ context.Context, name string, offset, 
 	return &testFileReader{
 		b: ioutil.NopCloser(bytes.NewBufferString(f[offset:end])),
 		s: end - int(offset),
+		n: name,
 	}, nil
 }
 
@@ -214,7 +215,8 @@ func (t *testBucket) hideFile(context.Context, string) (b2FileInterface, error) 
 func (t *testBucket) getDownloadAuthorization(context.Context, string, time.Duration) (string, error) {
 	return "", nil
 }
-func (t *testBucket) baseURL() string { return "" }
+func (t *testBucket) baseURL() string                { return "" }
+func (t *testBucket) file(id string) b2FileInterface { return nil }
 
 type testURL struct {
 	files map[string]string
@@ -320,11 +322,13 @@ func (t *testFile) deleteFileVersion(context.Context) error {
 type testFileReader struct {
 	b io.ReadCloser
 	s int
+	n string
 }
 
 func (t *testFileReader) Read(p []byte) (int, error)                      { return t.b.Read(p) }
 func (t *testFileReader) Close() error                                    { return nil }
 func (t *testFileReader) stats() (int, string, string, map[string]string) { return t.s, "", "", nil }
+func (t *testFileReader) id() string                                      { return t.n }
 
 type zReader struct{}
 

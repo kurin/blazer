@@ -305,9 +305,11 @@ func (o *Object) Name() string {
 
 // Attrs returns an object's attributes.
 func (o *Object) Attrs(ctx context.Context) (*Attrs, error) {
-	if err := o.ensure(ctx); err != nil {
+	f, err := o.b.b.downloadFileByName(ctx, o.name, 0, 1)
+	if err != nil {
 		return nil, err
 	}
+	o.f = o.b.b.file(f.id())
 	fi, err := o.f.getFileInfo(ctx)
 	if err != nil {
 		return nil, err

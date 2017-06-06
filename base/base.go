@@ -604,6 +604,12 @@ type File struct {
 	b2        *B2
 }
 
+// File returns a bare File struct, but with the appropriate id and b2
+// interfaces.
+func (b *Bucket) File(id string) *File {
+	return &File{id: id, b2: b.b2}
+}
+
 // UploadFile wraps b2_upload_file.
 func (url *URL) UploadFile(ctx context.Context, r io.Reader, size int, name, contentType, sha1 string, info map[string]string) (*File, error) {
 	headers := map[string]string{
@@ -910,6 +916,7 @@ type FileReader struct {
 	ContentLength int
 	ContentType   string
 	SHA1          string
+	ID            string
 	Info          map[string]string
 }
 
@@ -971,6 +978,7 @@ func (b *Bucket) DownloadFileByName(ctx context.Context, name string, offset, si
 	return &FileReader{
 		ReadCloser:    reply.resp.Body,
 		SHA1:          reply.resp.Header.Get("X-Bz-Content-Sha1"),
+		ID:            reply.resp.Header.Get("X-Bz-File-Id"),
 		ContentType:   reply.resp.Header.Get("Content-Type"),
 		ContentLength: int(clen),
 		Info:          info,

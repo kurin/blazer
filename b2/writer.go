@@ -134,15 +134,15 @@ func (w *Writer) completeChunk(id int) {
 var gid int32
 
 func (w *Writer) thread() {
+	w.wg.Add(1)
 	go func() {
+		defer w.wg.Done()
 		id := atomic.AddInt32(&gid, 1)
 		fc, err := w.file.getUploadPartURL(w.ctx)
 		if err != nil {
 			w.setErr(err)
 			return
 		}
-		w.wg.Add(1)
-		defer w.wg.Done()
 		for {
 			chunk, ok := <-w.ready
 			if !ok {

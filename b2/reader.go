@@ -116,8 +116,12 @@ func (r *Reader) thread() {
 			r.rmux.Unlock()
 			offset := int64(chunkID*r.csize) + r.offset
 			size := int64(r.csize)
-			if r.length > 0 && size > r.length {
-				size = r.length
+			if r.length > 0 {
+				if size > r.length {
+					buf.final = true
+					size = r.length
+				}
+				r.length -= size
 			}
 		redo:
 			fr, err := r.o.b.b.downloadFileByName(r.ctx, r.name, offset, size)
@@ -223,7 +227,7 @@ func (r *Reader) Read(p []byte) (int, error) {
 	n, err := chunk.Read(p)
 	r.read += n
 	if err == io.EOF {
-		if (r.length > 0 && int64(r.read) >= r.length) || chunk.final {
+		if chunk.final {
 			close(r.chbuf)
 			r.setErrNoCancel(err)
 			return n, err

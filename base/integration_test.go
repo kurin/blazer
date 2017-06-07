@@ -20,9 +20,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/url"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -389,25 +389,25 @@ type testCase struct {
 }
 
 func TestEscapes(t *testing.T) {
-	dec := json.NewDecoder(bytes.NewBufferString(testCases))
+	dec := json.NewDecoder(strings.NewReader(testCases))
 	var tcs []testCase
 	if err := dec.Decode(&tcs); err != nil {
 		t.Fatal(err)
 	}
 	for _, tc := range tcs {
-		en := url.PathEscape(tc.Raw)
+		en := escape(tc.Raw)
 		if !(en == tc.Full || en == tc.Min) {
 			t.Errorf("encode %q: got %q, want %q or %q", tc.Raw, en, tc.Min, tc.Full)
 		}
 
-		m, err := url.PathUnescape(tc.Min)
+		m, err := unescape(tc.Min)
 		if err != nil {
 			t.Errorf("decode %q: %v", tc.Min, err)
 		}
 		if m != tc.Raw {
 			t.Errorf("decode %q: got %q, want %q", tc.Min, m, tc.Raw)
 		}
-		f, err := url.PathUnescape(tc.Full)
+		f, err := unescape(tc.Full)
 		if err != nil {
 			t.Errorf("decode %q: %v", tc.Full, err)
 		}

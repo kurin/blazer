@@ -224,6 +224,7 @@ func TestAttrs(t *testing.T) {
 			Info: map[string]string{
 				"spaces":  "string with spaces",
 				"unicode": "日本語",
+				"special": "&/!@_.~",
 			},
 		},
 	}

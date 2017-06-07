@@ -29,7 +29,6 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
-	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -298,7 +297,7 @@ func (o *b2Options) makeRequest(ctx context.Context, method, verb, uri string, b
 	req.ContentLength = body.getSize()
 	for k, v := range headers {
 		if strings.HasPrefix(k, "X-Bz-Info") || strings.HasPrefix(k, "X-Bz-File-Name") {
-			v = url.PathEscape(v)
+			v = escape(v)
 		}
 		req.Header.Set(k, v)
 	}
@@ -991,12 +990,12 @@ func (b *Bucket) DownloadFileByName(ctx context.Context, name string, offset, si
 		if !strings.HasPrefix(key, "X-Bz-Info-") {
 			continue
 		}
-		name, err := url.PathUnescape(strings.TrimPrefix(key, "X-Bz-Info-"))
+		name, err := unescape(strings.TrimPrefix(key, "X-Bz-Info-"))
 		if err != nil {
 			reply.resp.Body.Close()
 			return nil, err
 		}
-		val, err := url.PathUnescape(reply.resp.Header.Get(key))
+		val, err := unescape(reply.resp.Header.Get(key))
 		if err != nil {
 			reply.resp.Body.Close()
 			return nil, err

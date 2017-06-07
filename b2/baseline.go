@@ -378,6 +378,9 @@ func (b *b2File) status() string {
 }
 
 func (b *b2File) getFileInfo(ctx context.Context) (b2FileInfoInterface, error) {
+	if b.b.Info != nil {
+		return &b2FileInfo{b.b.Info}, nil
+	}
 	fi, err := b.b.GetFileInfo(ctx)
 	if err != nil {
 		return nil, err

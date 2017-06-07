@@ -617,6 +617,7 @@ type File struct {
 	Size      int64
 	Status    string
 	Timestamp time.Time
+	Info      *FileInfo
 	id        string
 	b2        *B2
 }
@@ -872,8 +873,17 @@ func (b *Bucket) ListFileNames(ctx context.Context, count int, continuation, pre
 			Size:      f.Size,
 			Status:    f.Action,
 			Timestamp: millitime(f.Timestamp),
-			id:        f.FileID,
-			b2:        b.b2,
+			Info: &FileInfo{
+				Name:        f.Name,
+				SHA1:        f.SHA1,
+				Size:        f.Size,
+				ContentType: f.ContentType,
+				Info:        f.Info,
+				Status:      f.Action,
+				Timestamp:   millitime(f.Timestamp),
+			},
+			id: f.FileID,
+			b2: b.b2,
 		})
 	}
 	return files, cont, nil
@@ -903,8 +913,17 @@ func (b *Bucket) ListFileVersions(ctx context.Context, count int, startName, sta
 			Size:      f.Size,
 			Status:    f.Action,
 			Timestamp: millitime(f.Timestamp),
-			id:        f.FileID,
-			b2:        b.b2,
+			Info: &FileInfo{
+				Name:        f.Name,
+				SHA1:        f.SHA1,
+				Size:        f.Size,
+				ContentType: f.ContentType,
+				Info:        f.Info,
+				Status:      f.Action,
+				Timestamp:   millitime(f.Timestamp),
+			},
+			id: f.FileID,
+			b2: b.b2,
 		})
 	}
 	return files, b2resp.NextName, b2resp.NextID, nil
@@ -1060,7 +1079,7 @@ func (f *File) GetFileInfo(ctx context.Context) (*FileInfo, error) {
 	f.Status = b2resp.Action
 	f.Name = b2resp.Name
 	f.Timestamp = millitime(b2resp.Timestamp)
-	return &FileInfo{
+	f.Info = &FileInfo{
 		Name:        b2resp.Name,
 		SHA1:        b2resp.SHA1,
 		Size:        b2resp.Size,
@@ -1068,5 +1087,6 @@ func (f *File) GetFileInfo(ctx context.Context) (*FileInfo, error) {
 		Info:        b2resp.Info,
 		Status:      b2resp.Action,
 		Timestamp:   millitime(b2resp.Timestamp),
-	}, nil
+	}
+	return f.Info, nil
 }

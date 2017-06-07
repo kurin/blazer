@@ -315,8 +315,12 @@ func (b *b2Bucket) listFileVersions(ctx context.Context, count int, nextName, ne
 func (b *b2Bucket) downloadFileByName(ctx context.Context, name string, offset, size int64) (b2FileReaderInterface, error) {
 	fr, err := b.b.DownloadFileByName(ctx, name, offset, size)
 	if err != nil {
-		if code, _ := base.Code(err); code == http.StatusRequestedRangeNotSatisfiable {
+		code, _ := base.Code(err)
+		switch code {
+		case http.StatusRequestedRangeNotSatisfiable:
 			return nil, errNoMoreContent
+		case http.StatusNotFound:
+			return nil, b2err{err: err, notFoundErr: true}
 		}
 		return nil, err
 	}

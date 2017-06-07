@@ -615,6 +615,19 @@ func TestDuelingBuckets(t *testing.T) {
 	}
 }
 
+func TestNotExist(t *testing.T) {
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	defer cancel()
+
+	bucket, done := startLiveTest(ctx, t)
+	defer done()
+
+	if _, err := bucket.Object("not there").Attrs(ctx); !IsNotExist(err) {
+		t.Errorf("IsNotExist() on nonexistent object returned false (%v)", err)
+	}
+}
+
 type object struct {
 	o   *Object
 	err error

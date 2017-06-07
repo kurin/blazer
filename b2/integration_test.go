@@ -132,6 +132,21 @@ func TestHideShowLive(t *testing.T) {
 	}
 }
 
+type cancelReader struct {
+	r    io.Reader
+	n, l int
+	c    func()
+}
+
+func (c *cancelReader) Read(p []byte) (int, error) {
+	n, err := c.r.Read(p)
+	c.n += n
+	if c.n >= c.l {
+		c.c()
+	}
+	return n, err
+}
+
 func TestResumeWriter(t *testing.T) {
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
@@ -139,18 +154,11 @@ func TestResumeWriter(t *testing.T) {
 
 	w := bucket.Object("foo").NewWriter(ctx)
 	w.ChunkSize = 5e6
-	r := io.LimitReader(zReader{}, 15e6)
-	go func() {
-		// Cancel the context after the first chunk has been written.
-		ticker := time.NewTicker(time.Second)
-		defer ticker.Stop()
-		defer cancel()
-		for range ticker.C {
-			if w.cidx > 1 {
-				return
-			}
-		}
-	}()
+	r := &cancelReader{
+		r: io.LimitReader(zReader{}, 15e6),
+		l: 6e6,
+		c: cancel,
+	}
 	if _, err := io.Copy(w, r); err != context.Canceled {
 		t.Fatalf("io.Copy: wanted canceled context, got: %v", err)
 	}

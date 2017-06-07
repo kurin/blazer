@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"os"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -636,6 +637,60 @@ func TestNotExist(t *testing.T) {
 	}
 }
 
+type rtCounter struct {
+	rt    http.RoundTripper
+	trips int
+	sync.Mutex
+}
+
+func (rt *rtCounter) RoundTrip(r *http.Request) (*http.Response, error) {
+	rt.Lock()
+	defer rt.Unlock()
+	rt.trips++
+	return rt.rt.RoundTrip(r)
+}
+
+func TestAttrsNoRoundtrip(t *testing.T) {
+	rt := &rtCounter{rt: transport}
+	transport = rt
+	defer func() {
+		transport = rt.rt
+	}()
+
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	defer cancel()
+
+	bucket, done := startLiveTest(ctx, t)
+	defer done()
+
+	_, _, err := writeFile(ctx, bucket, smallFileName, 1e6+42, 1e8)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	objs, _, err := bucket.ListObjects(ctx, 1, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(objs) != 1 {
+		t.Fatal("unexpected objects: got %d, want 1", len(objs))
+	}
+
+	trips := rt.trips
+	attrs, err := objs[0].Attrs(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if attrs.Name != smallFileName {
+		t.Errorf("got the wrong object: got %q, want %q", attrs.Name, smallFileName)
+	}
+
+	if trips != rt.trips {
+		t.Errorf("Attrs() should not have caused any net traffic, but it did: old %d, new %d", trips, rt.trips)
+	}
+}
+
 type object struct {
 	o   *Object
 	err error
@@ -676,6 +731,8 @@ func listObjects(ctx context.Context, f func(context.Context, int, *Cursor) ([]*
 	return ch
 }
 
+var transport = http.DefaultTransport
+
 func startLiveTest(ctx context.Context, t *testing.T) (*Bucket, func()) {
 	id := os.Getenv(apiID)
 	key := os.Getenv(apiKey)
@@ -683,7 +740,7 @@ func startLiveTest(ctx context.Context, t *testing.T) (*Bucket, func()) {
 		t.Skipf("B2_ACCOUNT_ID or B2_SECRET_KEY unset; skipping integration tests")
 		return nil, nil
 	}
-	client, err := NewClient(ctx, id, key, FailSomeUploads(), ExpireSomeAuthTokens())
+	client, err := NewClient(ctx, id, key, FailSomeUploads(), ExpireSomeAuthTokens(), Transport(transport))
 	if err != nil {
 		t.Fatal(err)
 		return nil, nil

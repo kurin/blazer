@@ -423,16 +423,16 @@ type meteredReader struct {
 }
 
 func (mr *meteredReader) Read(p []byte) (int, error) {
-	mux.Lock()
-	defer mux.Unlock()
+	mr.mux.Lock()
+	defer mr.mux.Unlock()
 	n, err := mr.r.Read(p)
 	mr.read += int64(n)
 	return n, err
 }
 
 func (mr *meteredReader) Seek(offset int64, whence int) (int64, error) {
-	mux.Lock()
-	defer mux.Unlock()
+	mr.mux.Lock()
+	defer mr.mux.Unlock()
 	mr.read = offset
 	return mr.r.Seek(offset, whence)
 }

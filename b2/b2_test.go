@@ -36,7 +36,7 @@ const (
 	largeFileName = "BigBytes"
 )
 
-var mux = &sync.Mutex{}
+var gmux = &sync.Mutex{}
 
 type testError struct {
 	retry    bool
@@ -169,8 +169,8 @@ func (t *testBucket) startLargeFile(_ context.Context, name, _ string, _ map[str
 
 func (t *testBucket) listFileNames(ctx context.Context, count int, cont, pfx, del string) ([]b2FileInterface, string, error) {
 	var f []string
-	mux.Lock()
-	defer mux.Unlock()
+	gmux.Lock()
+	defer gmux.Unlock()
 	for name := range t.files {
 		f = append(f, name)
 	}
@@ -200,8 +200,8 @@ func (t *testBucket) listFileVersions(ctx context.Context, count int, a, b, c, d
 }
 
 func (t *testBucket) downloadFileByName(_ context.Context, name string, offset, size int64) (b2FileReaderInterface, error) {
-	mux.Lock()
-	defer mux.Unlock()
+	gmux.Lock()
+	defer gmux.Unlock()
 	f := t.files[name]
 	end := int(offset + size)
 	if end >= len(f) {
@@ -235,8 +235,8 @@ func (t *testURL) uploadFile(_ context.Context, r io.Reader, _ int, name, _, _ s
 	if _, err := io.Copy(buf, r); err != nil {
 		return nil, err
 	}
-	mux.Lock()
-	defer mux.Unlock()
+	gmux.Lock()
+	defer gmux.Unlock()
 	t.files[name] = buf.String()
 	return &testFile{
 		n:     name,
@@ -254,8 +254,8 @@ type testLargeFile struct {
 
 func (t *testLargeFile) finishLargeFile(context.Context) (b2FileInterface, error) {
 	var total []byte
-	mux.Lock()
-	defer mux.Unlock()
+	gmux.Lock()
+	defer gmux.Unlock()
 	for i := 1; i <= len(t.parts); i++ {
 		total = append(total, t.parts[i]...)
 	}
@@ -268,8 +268,8 @@ func (t *testLargeFile) finishLargeFile(context.Context) (b2FileInterface, error
 }
 
 func (t *testLargeFile) getUploadPartURL(context.Context) (b2FileChunkInterface, error) {
-	mux.Lock()
-	defer mux.Unlock()
+	gmux.Lock()
+	defer gmux.Unlock()
 	return &testFileChunk{
 		parts: t.parts,
 		errs:  t.errs,
@@ -292,8 +292,8 @@ func (t *testFileChunk) uploadPart(_ context.Context, r io.Reader, _ string, _, 
 	if err != nil {
 		return int(i), err
 	}
-	mux.Lock()
-	defer mux.Unlock()
+	gmux.Lock()
+	defer gmux.Unlock()
 	t.parts[index] = buf.Bytes()
 	return int(i), nil
 }
@@ -324,8 +324,8 @@ func (t *testFile) listParts(context.Context, int, int) ([]b2FilePartInterface, 
 }
 
 func (t *testFile) deleteFileVersion(context.Context) error {
-	mux.Lock()
-	defer mux.Unlock()
+	gmux.Lock()
+	defer gmux.Unlock()
 	delete(t.files, t.n)
 	return nil
 }

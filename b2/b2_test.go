@@ -32,7 +32,7 @@ import (
 
 const (
 	bucketName    = "b2-tests"
-	smallFileName = "TeenyTiny"
+	smallFileName = "Teeny Tiny"
 	largeFileName = "BigBytes"
 )
 

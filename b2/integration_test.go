@@ -219,6 +219,13 @@ func TestAttrs(t *testing.T) {
 			LastModified: time.Unix(1464370149, 142000000),
 			Info:         map[string]string{}, // can't be nil
 		},
+		&Attrs{
+			ContentType: "arbitrarystring",
+			Info: map[string]string{
+				"spaces":  "string with spaces",
+				"unicode": "日本語",
+			},
+		},
 	}
 
 	table := []struct {

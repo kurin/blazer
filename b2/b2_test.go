@@ -582,6 +582,46 @@ func TestReadWrite(t *testing.T) {
 	}
 }
 
+func TestReadRangeReturnsRight(t *testing.T) {
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	client := &Client{
+		backend: &beRoot{
+			b2i: &testRoot{
+				bucketMap: make(map[string]map[string]string),
+				errs:      &errCont{},
+			},
+		},
+	}
+
+	bucket, err := client.NewBucket(ctx, bucketName, &BucketAttrs{Type: Private})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := bucket.Delete(ctx); err != nil {
+			t.Error(err)
+		}
+	}()
+
+	obj, _, err := writeFile(ctx, bucket, "file", 1e6+42, 1e8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := obj.NewRangeReader(ctx, 200, 1400)
+	r.ChunkSize = 1000
+
+	i, err := io.Copy(ioutil.Discard, r)
+	if err != nil {
+		t.Error(err)
+	}
+	if i != 1400 {
+		t.Errorf("NewRangeReader(_, 200, 1400): want 1400, got %d", i)
+	}
+}
+
 func TestWriterReturnsError(t *testing.T) {
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)

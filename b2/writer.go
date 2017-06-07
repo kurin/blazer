@@ -419,16 +419,21 @@ type meteredReader struct {
 	read int64
 	size int
 	r    io.ReadSeeker
+	mux  sync.Mutex
 }
 
 func (mr *meteredReader) Read(p []byte) (int, error) {
+	mux.Lock()
+	defer mux.Unlock()
 	n, err := mr.r.Read(p)
-	atomic.AddInt64(&mr.read, int64(n))
+	mr.read += int64(n)
 	return n, err
 }
 
 func (mr *meteredReader) Seek(offset int64, whence int) (int64, error) {
-	atomic.StoreInt64(&mr.read, offset)
+	mux.Lock()
+	defer mux.Unlock()
+	mr.read = offset
 	return mr.r.Seek(offset, whence)
 }
 

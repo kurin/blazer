@@ -29,6 +29,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -277,7 +278,7 @@ func (rb *requestBody) getBody() io.Reader {
 
 var reqID int64
 
-func (o *b2Options) makeRequest(ctx context.Context, method, verb, url string, b2req, b2resp interface{}, headers map[string]string, body *requestBody) error {
+func (o *b2Options) makeRequest(ctx context.Context, method, verb, uri string, b2req, b2resp interface{}, headers map[string]string, body *requestBody) error {
 	var args []byte
 	if b2req != nil {
 		enc, err := json.Marshal(b2req)
@@ -290,12 +291,15 @@ func (o *b2Options) makeRequest(ctx context.Context, method, verb, url string, b
 			size: int64(len(enc)),
 		}
 	}
-	req, err := http.NewRequest(verb, url, body.getBody())
+	req, err := http.NewRequest(verb, uri, body.getBody())
 	if err != nil {
 		return err
 	}
 	req.ContentLength = body.getSize()
 	for k, v := range headers {
+		if strings.HasPrefix(k, "X-Bz-Info") || strings.HasPrefix(k, "X-Bz-File-Name") {
+			v = url.PathEscape(v)
+		}
 		req.Header.Set(k, v)
 	}
 	req.Header.Set("X-Blazer-Request-ID", fmt.Sprintf("%d", atomic.AddInt64(&reqID, 1)))
@@ -322,6 +326,7 @@ func (o *b2Options) makeRequest(ctx context.Context, method, verb, url string, b
 	}
 	if reply.err != nil {
 		// Connection errors are retryable.
+		blog.V(2).Infof(">> %s uri: %v err: %v", method, req.URL, reply.err)
 		return b2err{
 			msg:   reply.err.Error(),
 			retry: 1,
@@ -624,9 +629,9 @@ func (b *Bucket) File(id string) *File {
 }
 
 // UploadFile wraps b2_upload_file.
-func (url *URL) UploadFile(ctx context.Context, r io.Reader, size int, name, contentType, sha1 string, info map[string]string) (*File, error) {
+func (u *URL) UploadFile(ctx context.Context, r io.Reader, size int, name, contentType, sha1 string, info map[string]string) (*File, error) {
 	headers := map[string]string{
-		"Authorization":     url.token,
+		"Authorization":     u.token,
 		"X-Bz-File-Name":    name,
 		"Content-Type":      contentType,
 		"Content-Length":    fmt.Sprintf("%d", size),
@@ -636,7 +641,7 @@ func (url *URL) UploadFile(ctx context.Context, r io.Reader, size int, name, con
 		headers[fmt.Sprintf("X-Bz-Info-%s", k)] = v
 	}
 	b2resp := &b2types.UploadFileResponse{}
-	if err := url.b2.opts.makeRequest(ctx, "b2_upload_file", "POST", url.uri, nil, b2resp, headers, &requestBody{body: r, size: int64(size)}); err != nil {
+	if err := u.b2.opts.makeRequest(ctx, "b2_upload_file", "POST", u.uri, nil, b2resp, headers, &requestBody{body: r, size: int64(size)}); err != nil {
 		return nil, err
 	}
 	return &File{
@@ -645,7 +650,7 @@ func (url *URL) UploadFile(ctx context.Context, r io.Reader, size int, name, con
 		Timestamp: millitime(b2resp.Timestamp),
 		Status:    b2resp.Action,
 		id:        b2resp.FileID,
-		b2:        url.b2,
+		b2:        u.b2,
 	}, nil
 }
 
@@ -945,8 +950,8 @@ func mkRange(offset, size int64) string {
 
 // DownloadFileByName wraps b2_download_file_by_name.
 func (b *Bucket) DownloadFileByName(ctx context.Context, name string, offset, size int64) (*FileReader, error) {
-	url := fmt.Sprintf("%s/file/%s/%s", b.b2.downloadURI, b.Name, name)
-	req, err := http.NewRequest("GET", url, nil)
+	uri := fmt.Sprintf("%s/file/%s/%s", b.b2.downloadURI, b.Name, name)
+	req, err := http.NewRequest("GET", uri, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -978,6 +983,7 @@ func (b *Bucket) DownloadFileByName(ctx context.Context, name string, offset, si
 	}
 	clen, err := strconv.ParseInt(reply.resp.Header.Get("Content-Length"), 10, 64)
 	if err != nil {
+		reply.resp.Body.Close()
 		return nil, err
 	}
 	info := make(map[string]string)
@@ -985,8 +991,17 @@ func (b *Bucket) DownloadFileByName(ctx context.Context, name string, offset, si
 		if !strings.HasPrefix(key, "X-Bz-Info-") {
 			continue
 		}
-		name := strings.TrimPrefix(key, "X-Bz-Info-")
-		info[name] = reply.resp.Header.Get(key)
+		name, err := url.PathUnescape(strings.TrimPrefix(key, "X-Bz-Info-"))
+		if err != nil {
+			reply.resp.Body.Close()
+			return nil, err
+		}
+		val, err := url.PathUnescape(reply.resp.Header.Get(key))
+		if err != nil {
+			reply.resp.Body.Close()
+			return nil, err
+		}
+		info[name] = val
 	}
 	return &FileReader{
 		ReadCloser:    reply.resp.Body,

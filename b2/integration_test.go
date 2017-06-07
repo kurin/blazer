@@ -388,6 +388,11 @@ func TestRangeReaderLive(t *testing.T) {
 			length: 2e6,
 			size:   1e6,
 		},
+		{
+			offset: 0,
+			length: 4e6,
+			size:   3e6,
+		},
 	}
 
 	for _, e := range table {

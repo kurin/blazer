@@ -107,7 +107,7 @@ func (w *Writer) setErr(err error) {
 	w.emux.Lock()
 	defer w.emux.Unlock()
 	if w.err == nil {
-		blog.V(0).Infof("error writing %s: %v", w.name, err)
+		blog.V(1).Infof("error writing %s: %v", w.name, err)
 		w.err = err
 		w.cancel()
 	}

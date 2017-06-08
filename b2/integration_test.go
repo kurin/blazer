@@ -637,6 +637,20 @@ func TestNotExist(t *testing.T) {
 	}
 }
 
+func TestWriteEmpty(t *testing.T) {
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	defer cancel()
+
+	bucket, done := startLiveTest(ctx, t)
+	defer done()
+
+	_, _, err := writeFile(ctx, bucket, smallFileName, 0, 1e8)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 type rtCounter struct {
 	rt    http.RoundTripper
 	trips int

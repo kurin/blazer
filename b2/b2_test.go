@@ -221,8 +221,8 @@ func (t *testBucket) hideFile(context.Context, string) (b2FileInterface, error) 
 func (t *testBucket) getDownloadAuthorization(context.Context, string, time.Duration) (string, error) {
 	return "", nil
 }
-func (t *testBucket) baseURL() string                { return "" }
-func (t *testBucket) file(id string) b2FileInterface { return nil }
+func (t *testBucket) baseURL() string                      { return "" }
+func (t *testBucket) file(id, name string) b2FileInterface { return nil }
 
 type testURL struct {
 	files map[string]string

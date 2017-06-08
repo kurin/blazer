@@ -624,8 +624,8 @@ type File struct {
 
 // File returns a bare File struct, but with the appropriate id and b2
 // interfaces.
-func (b *Bucket) File(id string) *File {
-	return &File{id: id, b2: b.b2}
+func (b *Bucket) File(id, name string) *File {
+	return &File{id: id, b2: b.b2, Name: name}
 }
 
 // UploadFile wraps b2_upload_file.

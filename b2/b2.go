@@ -590,7 +590,7 @@ func (b *Bucket) getObject(ctx context.Context, name string) (*Object, error) {
 	fr.Close()
 	return &Object{
 		name: name,
-		f:    b.b.file(fr.id()),
+		f:    b.b.file(fr.id(), name),
 		b:    b,
 	}, nil
 }

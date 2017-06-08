@@ -691,6 +691,24 @@ func TestAttrsNoRoundtrip(t *testing.T) {
 	}
 }
 
+func TestDeleteWithoutName(t *testing.T) {
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	defer cancel()
+
+	bucket, done := startLiveTest(ctx, t)
+	defer done()
+
+	_, _, err := writeFile(ctx, bucket, smallFileName, 1e6+42, 1e8)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := bucket.Object(smallFileName).Delete(ctx); err != nil {
+		t.Fatal(err)
+	}
+}
+
 type object struct {
 	o   *Object
 	err error

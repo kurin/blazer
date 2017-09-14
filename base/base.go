@@ -42,8 +42,9 @@ import (
 	"golang.org/x/net/context"
 )
 
-var (
-	APIBase = "https://api.backblazeb2.com"
+const (
+	APIBase          = "https://api.backblazeb2.com"
+	DefaultUserAgent = "blazer/0.1.1"
 )
 
 type b2err struct {
@@ -218,6 +219,22 @@ type b2Options struct {
 	failSomeUploads bool
 	expireTokens    bool
 	capExceeded     bool
+	apiBase         string
+	userAgent       string
+}
+
+func (o *b2Options) getAPIBase() string {
+	if o.apiBase != "" {
+		return o.apiBase
+	}
+	return APIBase
+}
+
+func (o *b2Options) getUserAgent() string {
+	if o.userAgent != "" {
+		return fmt.Sprintf("%s %s", o.userAgent, DefaultUserAgent)
+	}
+	return DefaultUserAgent
 }
 
 func (o *b2Options) getTransport() http.RoundTripper {
@@ -307,6 +324,7 @@ func (o *b2Options) makeRequest(ctx context.Context, method, verb, uri string, b
 		}
 		req.Header.Set(k, v)
 	}
+	req.Header.Set("User-Agent", o.getUserAgent())
 	req.Header.Set("X-Blazer-Request-ID", fmt.Sprintf("%d", atomic.AddInt64(&reqID, 1)))
 	req.Header.Set("X-Blazer-Method", method)
 	if o.failSomeUploads {
@@ -372,7 +390,7 @@ func AuthorizeAccount(ctx context.Context, account, key string, opts ...AuthOpti
 	for _, f := range opts {
 		f(b2opts)
 	}
-	if err := b2opts.makeRequest(ctx, "b2_authorize_account", "GET", APIBase+b2types.V1api+"b2_authorize_account", nil, b2resp, headers, nil); err != nil {
+	if err := b2opts.makeRequest(ctx, "b2_authorize_account", "GET", b2opts.getAPIBase()+b2types.V1api+"b2_authorize_account", nil, b2resp, headers, nil); err != nil {
 		return nil, err
 	}
 	return &B2{
@@ -387,6 +405,19 @@ func AuthorizeAccount(ctx context.Context, account, key string, opts ...AuthOpti
 
 // An AuthOption allows callers to choose per-session settings.
 type AuthOption func(*b2Options)
+
+// UserAgent sets the User-Agent HTTP header.  The default header is
+// "blazer/<version>"; the value set here will be prepended to that.  This can
+// be set multiple times.
+func UserAgent(agent string) AuthOption {
+	return func(o *b2Options) {
+		if o.userAgent == "" {
+			o.userAgent = agent
+			return
+		}
+		o.userAgent = fmt.Sprintf("%s %s", agent, o.userAgent)
+	}
+}
 
 // Transport returns an AuthOption that sets the underlying HTTP mechanism.
 func Transport(rt http.RoundTripper) AuthOption {

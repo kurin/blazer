@@ -67,10 +67,22 @@ type clientOptions struct {
 	failSomeUploads bool
 	expireTokens    bool
 	capExceeded     bool
+	userAgents      []string
 }
 
 // A ClientOption allows callers to adjust various per-client settings.
 type ClientOption func(*clientOptions)
+
+// UserAgent sets the User-Agent HTTP header.  The default header is
+// "blazer/<version>"; the value set here will be prepended to that.  This can
+// be set multiple times.
+//
+// A user agent is generally of the form "<product>/<version> (<comments>)".
+func UserAgent(agent string) ClientOption {
+	return func(o *clientOptions) {
+		o.userAgents = append(o.userAgents, agent)
+	}
+}
 
 // Transport sets the underlying HTTP transport mechanism.  If unset,
 // http.DefaultTransport is used.

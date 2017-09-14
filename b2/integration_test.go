@@ -772,7 +772,7 @@ func startLiveTest(ctx context.Context, t *testing.T) (*Bucket, func()) {
 		t.Skipf("B2_ACCOUNT_ID or B2_SECRET_KEY unset; skipping integration tests")
 		return nil, nil
 	}
-	client, err := NewClient(ctx, id, key, FailSomeUploads(), ExpireSomeAuthTokens(), Transport(transport))
+	client, err := NewClient(ctx, id, key, FailSomeUploads(), ExpireSomeAuthTokens(), Transport(transport), UserAgent("b2-test"), UserAgent("integration-test"))
 	if err != nil {
 		t.Fatal(err)
 		return nil, nil

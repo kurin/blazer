@@ -15,6 +15,7 @@
 package b2
 
 import (
+	"crypto/sha1"
 	"errors"
 	"fmt"
 	"hash"
@@ -202,8 +203,7 @@ func (w *Writer) thread() {
 	}()
 }
 
-// Write satisfies the io.Writer interface.
-func (w *Writer) Write(p []byte) (int, error) {
+func (w *Writer) init() {
 	w.start.Do(func() {
 		w.everStarted = true
 		w.smux.Lock()
@@ -221,6 +221,11 @@ func (w *Writer) Write(p []byte) (int, error) {
 		}
 		w.w = v
 	})
+}
+
+// Write satisfies the io.Writer interface.
+func (w *Writer) Write(p []byte) (int, error) {
+	w.init()
 	if err := w.getErr(); err != nil {
 		return 0, err
 	}
@@ -277,6 +282,37 @@ redo:
 	}
 	w.o.f = f
 	return nil
+}
+
+func (w *Writer) simpleWriteFromReader(rs io.ReadSeeker, size int64) (int64, error) {
+	ue, err := w.o.b.b.getUploadURL(w.ctx)
+	if err != nil {
+		return 0, err
+	}
+	ctype := w.contentType
+	if ctype == "" {
+		ctype = "application/octet-stream"
+	}
+	hr := &hashReader{h: sha1.New(), r: rs}
+	mr := &meteredReader{r: hr, size: int(size + 40)}
+	w.registerChunk(1, mr)
+	defer w.completeChunk(1)
+redo:
+	f, err := ue.uploadFile(w.ctx, mr, int(size+40), w.name, ctype, "hex_digits_at_end", w.info)
+	if err != nil {
+		if w.o.b.r.reupload(err) {
+			blog.V(2).Infof("b2 writer: %v; retrying", err)
+			u, err := w.o.b.b.getUploadURL(w.ctx)
+			if err != nil {
+				return mr.read, err
+			}
+			ue = u
+			goto redo
+		}
+		return mr.read, err
+	}
+	w.o.f = f
+	return mr.read, nil
 }
 
 func (w *Writer) getLargeFile() (beLargeFileInterface, error) {
@@ -364,6 +400,7 @@ func (w *Writer) sendChunk() error {
 
 // ReadFrom
 func (w *Writer) ReadFrom(r io.Reader) (int64, error) {
+	w.init()
 	rs, ok := r.(io.ReadSeeker)
 	if !ok {
 		return copyContext(w.ctx, w, r)
@@ -373,7 +410,10 @@ func (w *Writer) ReadFrom(r io.Reader) (int64, error) {
 		return 0, err
 	}
 	if size < int64(w.ChunkSize) {
-		// b2_upload_file, plus hex at end
+		if _, err := rs.Seek(0, io.SeekStart); err != nil {
+			return 0, err
+		}
+		return w.simpleWriteFromReader(rs, size)
 	}
 	// large file upload, with hex at end
 	return 0, nil
@@ -477,7 +517,7 @@ func (mr *meteredReader) done() float64 {
 // A hashReader will read until io.EOF, and then append its own hash.
 type hashReader struct {
 	h hash.Hash
-	r io.Reader
+	r io.ReadSeeker
 
 	isEOF bool
 	buf   *strings.Reader
@@ -494,4 +534,13 @@ func (h *hashReader) Read(p []byte) (int, error) {
 		h.buf = strings.NewReader(fmt.Sprintf("%x", h.h.Sum(nil)))
 	}
 	return n, err
+}
+
+func (h *hashReader) Seek(offset int64, whence int) (int64, error) {
+	// This will break if offset or whence aren't 0, but they never[1] aren't.
+	//
+	// [1] Let's see how many commits it takes before this isn't true.
+	h.h.Reset()
+	h.isEOF = false
+	return h.r.Seek(offset, whence)
 }

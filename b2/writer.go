@@ -17,7 +17,9 @@ package b2
 import (
 	"errors"
 	"fmt"
+	"hash"
 	"io"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -470,4 +472,26 @@ func (mr *meteredReader) done() float64 {
 	}
 	read := float64(atomic.LoadInt64(&mr.read))
 	return read / float64(mr.size)
+}
+
+// A hashReader will read until io.EOF, and then append its own hash.
+type hashReader struct {
+	h hash.Hash
+	r io.Reader
+
+	isEOF bool
+	buf   *strings.Reader
+}
+
+func (h *hashReader) Read(p []byte) (int, error) {
+	if h.isEOF {
+		return h.buf.Read(p)
+	}
+	n, err := io.TeeReader(h.r, h.h).Read(p)
+	if err == io.EOF {
+		err = nil
+		h.isEOF = true
+		h.buf = strings.NewReader(fmt.Sprintf("%x", h.h.Sum(nil)))
+	}
+	return n, err
 }

@@ -696,6 +696,28 @@ func TestFileBuffer(t *testing.T) {
 	}
 }
 
+func TestHashReader(t *testing.T) {
+	table := []string{
+		"a string",
+	}
+
+	for _, s := range table {
+		hr := &hashReader{
+			h: sha1.New(),
+			r: strings.NewReader(s),
+		}
+		want := fmt.Sprintf("%s%x", s, sha1.Sum([]byte(s)))
+		got, err := ioutil.ReadAll(hr)
+		if err != nil {
+			t.Errorf("ioutil.ReadAll(%#v): %v", hr, err)
+			continue
+		}
+		if want != string(got) {
+			t.Errorf("ioutil.ReadAll(%#v): got %q, want %q", hr, string(got), want)
+		}
+	}
+}
+
 func writeFile(ctx context.Context, bucket *Bucket, name string, size int64, csize int) (*Object, string, error) {
 	r := io.LimitReader(zReader{}, size)
 	o := bucket.Object(name)

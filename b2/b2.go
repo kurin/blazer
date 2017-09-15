@@ -130,6 +130,7 @@ const (
 	UnknownType BucketType = ""
 	Private                = "allPrivate"
 	Public                 = "allPublic"
+	Snapshot               = "snapshot"
 )
 
 // BucketAttrs holds a bucket's metadata attributes.

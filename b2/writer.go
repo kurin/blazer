@@ -263,7 +263,7 @@ redo:
 	f, err := ue.uploadFile(w.ctx, mr, int(w.w.Len()), w.name, ctype, sha1, w.info)
 	if err != nil {
 		if w.o.b.r.reupload(err) {
-			blog.V(1).Infof("b2 writer: %v; retrying", err)
+			blog.V(2).Infof("b2 writer: %v; retrying", err)
 			u, err := w.o.b.b.getUploadURL(w.ctx)
 			if err != nil {
 				return err
@@ -385,7 +385,12 @@ func (w *Writer) Close() error {
 			return
 		}
 		defer w.o.b.c.removeWriter(w)
-		defer w.w.Close() // TODO: log error
+		defer func() {
+			if err := w.w.Close(); err != nil {
+				// this is non-fatal, but alarming
+				blog.V(1).Infof("close %s: %v", w.name, err)
+			}
+		}()
 		if w.cidx == 0 {
 			w.setErr(w.simpleWriteFile())
 			return

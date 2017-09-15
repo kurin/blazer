@@ -360,6 +360,23 @@ func (w *Writer) sendChunk() error {
 	return nil
 }
 
+// ReadFrom
+func (w *Writer) ReadFrom(r io.Reader) (int64, error) {
+	rs, ok := r.(io.ReadSeeker)
+	if !ok {
+		return copyContext(w.ctx, w, r)
+	}
+	size, err := rs.Seek(0, io.SeekEnd)
+	if err != nil {
+		return 0, err
+	}
+	if size < int64(w.ChunkSize) {
+		// b2_upload_file, plus hex at end
+	}
+	// large file upload, with hex at end
+	return 0, nil
+}
+
 // Close satisfies the io.Closer interface.  It is critical to check the return
 // value of Close on all writers.
 func (w *Writer) Close() error {

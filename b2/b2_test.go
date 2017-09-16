@@ -790,14 +790,7 @@ func TestNonBuffer(t *testing.T) {
 }
 
 func writeFile(ctx context.Context, bucket *Bucket, name string, size int64, csize int) (*Object, string, error) {
-	return writeFileReader(ctx, io.LimitReader(zReader{}, size), bucket, name, size, csize)
-}
-
-func writeFileSeeker(ctx context.Context, bucket *Bucket, name string, size int64, csize int) (*Object, string, error) {
-	return writeFileReader(ctx, &zReadSeeker{size: size}, bucket, name, size, csize)
-}
-
-func writeFileReader(ctx context.Context, r io.Reader, bucket *Bucket, name string, size int64, csize int) (*Object, string, error) {
+	r := io.LimitReader(zReader{}, size)
 	o := bucket.Object(name)
 	f := o.NewWriter(ctx)
 	h := sha1.New()

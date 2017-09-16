@@ -28,6 +28,13 @@ func (r *readerAt) ReadAt(p []byte, off int64) (int, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	// ReadAt is supposed to preserve the offset.
+	cur, err := r.rs.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { r.rs.Seek(cur, io.SeekStart) }()
+
 	if _, err := r.rs.Seek(off, io.SeekStart); err != nil {
 		return 0, err
 	}

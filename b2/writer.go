@@ -385,7 +385,12 @@ func (w *Writer) ReadFrom(r io.Reader) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	ra := enReaderAt(rs)
+	var ra io.ReaderAt
+	if rat, ok := r.(io.ReaderAt); ok {
+		ra = rat
+	} else {
+		ra = enReaderAt(rs)
+	}
 	var offset int64
 	var wrote int64
 	w.newBuffer = func() (writeBuffer, error) {

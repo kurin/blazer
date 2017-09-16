@@ -55,7 +55,7 @@ type nonBuffer struct {
 	buf   *strings.Reader
 }
 
-func (nb *nonBuffer) Len() int                       { return nb.size }
+func (nb *nonBuffer) Len() int                       { return nb.size + 40 }
 func (nb *nonBuffer) Hash() string                   { return "hex_digits_at_end" }
 func (nb *nonBuffer) Close() error                   { return nil }
 func (nb *nonBuffer) Reader() (io.ReadSeeker, error) { return nb, nil }

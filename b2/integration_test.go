@@ -92,12 +92,25 @@ func TestReaderFromLive(t *testing.T) {
 		csize, writers int
 	}{
 		{
+			// that it works at all
 			size: 10,
 		},
 		{
+			// large uploads
 			size:    15e6 + 10,
 			csize:   5e6,
 			writers: 2,
+		},
+		{
+			// an excess of writers
+			size:    50e6,
+			csize:   5e6,
+			writers: 12,
+		},
+		{
+			// with offset, seeks back to start after turning it into a ReaderAt
+			size: 250,
+			pos:  50,
 		},
 	}
 
@@ -111,7 +124,7 @@ func TestReaderFromLive(t *testing.T) {
 		if err != nil {
 			t.Errorf("ReadFrom(): %v", err)
 		}
-		if n != e.size-e.pos {
+		if n != e.size {
 			t.Errorf("ReadFrom(): got %d bytes, wanted %d bytes", n, e.size)
 		}
 		if err := w.Close(); err != nil {

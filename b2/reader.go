@@ -140,7 +140,7 @@ func (r *Reader) thread() {
 				return
 			}
 			rsize, _, _, _ := fr.stats()
-			mr := &meteredReader{r: &fakeSeeker{fr}, size: int(rsize)}
+			mr := &meteredReader{r: noopResetter{fr}, size: int(rsize)}
 			r.smux.Lock()
 			r.smap[chunkID] = mr
 			r.smux.Unlock()
@@ -290,11 +290,8 @@ func copyContext(ctx context.Context, dst io.Writer, src io.Reader) (written int
 	return written, err
 }
 
-// fakeSeeker exists so that we can wrap the http response body (an io.Reader
-// but not an io.Seeker) into a meteredReader, which will allow us to keep tabs
-// on how much of the chunk we've read so far.
-type fakeSeeker struct {
+type noopResetter struct {
 	io.Reader
 }
 
-func (fs *fakeSeeker) Seek(int64, int) (int64, error) { return 0, nil }
+func (noopResetter) Reset() error { return nil }

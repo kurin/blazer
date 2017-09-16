@@ -490,7 +490,7 @@ func (w *Writer) status() *WriterStatus {
 type meteredReader struct {
 	read int64
 	size int
-	r    io.ReadSeeker
+	r    readResetter
 	mux  sync.Mutex
 }
 
@@ -502,11 +502,11 @@ func (mr *meteredReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
-func (mr *meteredReader) Seek(offset int64, whence int) (int64, error) {
+func (mr *meteredReader) Reset() error {
 	mr.mux.Lock()
 	defer mr.mux.Unlock()
-	mr.read = offset
-	return mr.r.Seek(offset, whence)
+	mr.read = 0
+	return mr.r.Reset()
 }
 
 func (mr *meteredReader) done() float64 {

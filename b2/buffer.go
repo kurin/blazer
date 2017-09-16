@@ -17,11 +17,13 @@ package b2
 import (
 	"bytes"
 	"crypto/sha1"
+	"errors"
 	"fmt"
 	"hash"
 	"io"
 	"io/ioutil"
 	"os"
+	"strings"
 	"sync"
 )
 
@@ -31,6 +33,53 @@ type writeBuffer interface {
 	Reader() (io.ReadSeeker, error)
 	Hash() string // sha1 or whatever it is
 	Close() error
+}
+
+// nonBuffer doesn't buffer anything, but passes values directly from the
+// source readseeker.  Many nonBuffers can point at different parts of the same
+// underlying source, and be accessed by multiple goroutines simultaneously.
+func newNonBuffer(rs io.ReaderAt, offset, size int64) writeBuffer {
+	return &nonBuffer{
+		r:    io.NewSectionReader(rs, offset, size),
+		size: int(size),
+		hsh:  sha1.New(),
+	}
+}
+
+type nonBuffer struct {
+	r    *io.SectionReader
+	size int
+	hsh  hash.Hash
+
+	isEOF bool
+	buf   *strings.Reader
+}
+
+func (nb *nonBuffer) Len() int                       { return nb.size }
+func (nb *nonBuffer) Hash() string                   { return "hex_digits_at_end" }
+func (nb *nonBuffer) Close() error                   { return nil }
+func (nb *nonBuffer) Reader() (io.ReadSeeker, error) { return nb, nil }
+func (nb *nonBuffer) Write([]byte) (int, error)      { return 0, errors.New("writes not supported") }
+
+func (nb *nonBuffer) Read(p []byte) (int, error) {
+	if nb.isEOF {
+		return nb.buf.Read(p)
+	}
+	n, err := io.TeeReader(nb.r, nb.hsh).Read(p)
+	if err == io.EOF {
+		err = nil
+		nb.isEOF = true
+		nb.buf = strings.NewReader(fmt.Sprintf("%x", nb.hsh.Sum(nil)))
+	}
+	return n, err
+}
+
+func (nb *nonBuffer) Seek(offset int64, whence int) (int64, error) {
+	// TODO: instead of using Seek to restart a bad upload, maybe just have like
+	// a Reset() instead.
+	nb.hsh.Reset()
+	nb.isEOF = false
+	return nb.r.Seek(offset, whence)
 }
 
 type memoryBuffer struct {

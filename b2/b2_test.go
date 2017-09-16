@@ -727,24 +727,48 @@ func TestFileBuffer(t *testing.T) {
 	}
 }
 
-func TestHashReader(t *testing.T) {
-	table := []string{
-		"a string",
+func TestNonBuffer(t *testing.T) {
+	table := []struct {
+		str  string
+		off  int64
+		len  int64
+		want string
+	}{
+		{
+			str:  "a string",
+			off:  0,
+			len:  3,
+			want: "a s",
+		},
+		{
+			str:  "a string",
+			off:  3,
+			len:  1,
+			want: "t",
+		},
+		{
+			str:  "a string",
+			off:  3,
+			len:  5,
+			want: "tring",
+		},
 	}
 
-	for _, s := range table {
-		hr := &hashReader{
-			h: sha1.New(),
-			r: strings.NewReader(s),
-		}
-		want := fmt.Sprintf("%s%x", s, sha1.Sum([]byte(s)))
-		got, err := ioutil.ReadAll(hr)
+	for _, e := range table {
+		nb := newNonBuffer(strings.NewReader(e.str), e.off, e.len)
+		want := fmt.Sprintf("%s%x", e.want, sha1.Sum([]byte(e.str[int(e.off):int(e.off+e.len)])))
+		r, err := nb.Reader()
 		if err != nil {
-			t.Errorf("ioutil.ReadAll(%#v): %v", hr, err)
+			t.Error(err)
+			continue
+		}
+		got, err := ioutil.ReadAll(r)
+		if err != nil {
+			t.Errorf("ioutil.ReadAll(%#v): %v", e, err)
 			continue
 		}
 		if want != string(got) {
-			t.Errorf("ioutil.ReadAll(%#v): got %q, want %q", hr, string(got), want)
+			t.Errorf("ioutil.ReadAll(%#v): got %q, want %q", e, string(got), want)
 		}
 	}
 }

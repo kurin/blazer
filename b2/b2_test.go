@@ -352,6 +352,37 @@ func (zReader) Read(p []byte) (int, error) {
 	return len(p), nil
 }
 
+type zReadSeeker struct {
+	size int64
+	pos  int64
+}
+
+func (rs *zReadSeeker) Read(p []byte) (int, error) {
+	for i := rs.pos; ; i++ {
+		j := int(i - rs.pos)
+		if j >= len(p) || i >= rs.size {
+			var rtn error
+			if i >= rs.size {
+				rtn = io.EOF
+			}
+			rs.pos = i
+			return j, rtn
+		}
+		f := int(i) % len(pattern)
+		p[j] = pattern[f]
+	}
+}
+
+func (rs *zReadSeeker) Seek(offset int64, whence int) (int64, error) {
+	switch whence {
+	case io.SeekStart:
+		rs.pos = offset
+	case io.SeekEnd:
+		rs.pos = rs.size + offset
+	}
+	return rs.pos, nil
+}
+
 func TestReauth(t *testing.T) {
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -719,15 +750,26 @@ func TestHashReader(t *testing.T) {
 }
 
 func writeFile(ctx context.Context, bucket *Bucket, name string, size int64, csize int) (*Object, string, error) {
-	r := io.LimitReader(zReader{}, size)
+	return writeFileReader(ctx, io.LimitReader(zReader{}, size), bucket, name, size, csize)
+}
+
+func writeFileSeeker(ctx context.Context, bucket *Bucket, name string, size int64, csize int) (*Object, string, error) {
+	return writeFileReader(ctx, &zReadSeeker{size: size}, bucket, name, size, csize)
+}
+
+func writeFileReader(ctx context.Context, r io.Reader, bucket *Bucket, name string, size int64, csize int) (*Object, string, error) {
 	o := bucket.Object(name)
 	f := o.NewWriter(ctx)
 	h := sha1.New()
 	w := io.MultiWriter(f, h)
 	f.ConcurrentUploads = 5
 	f.ChunkSize = csize
-	if _, err := io.Copy(w, r); err != nil {
+	n, err := io.Copy(w, r)
+	if err != nil {
 		return nil, "", err
+	}
+	if n != size {
+		return nil, "", fmt.Errorf("io.Copy(): wrote %d bytes; wanted %d bytes", n, size)
 	}
 	if err := f.Close(); err != nil {
 		return nil, "", err

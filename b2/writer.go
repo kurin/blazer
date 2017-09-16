@@ -15,12 +15,9 @@
 package b2
 
 import (
-	"crypto/sha1"
 	"errors"
 	"fmt"
-	"hash"
 	"io"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -78,6 +75,7 @@ type Writer struct {
 	file        beLargeFileInterface
 	seen        map[int]string
 	everStarted bool
+	newBuffer   func() (writeBuffer, error)
 
 	o    *Object
 	name string
@@ -95,13 +93,6 @@ type Writer struct {
 type chunk struct {
 	id  int
 	buf writeBuffer
-}
-
-func (w *Writer) getBuffer() (writeBuffer, error) {
-	if !w.UseFileBuffer {
-		return newMemoryBuffer(), nil
-	}
-	return newFileBuffer(w.FileBufferDir)
 }
 
 func (w *Writer) setErr(err error) {
@@ -214,7 +205,13 @@ func (w *Writer) init() {
 		if w.csize == 0 {
 			w.csize = 1e8
 		}
-		v, err := w.getBuffer()
+		if w.newBuffer == nil {
+			w.newBuffer = func() (writeBuffer, error) { return newMemoryBuffer(), nil }
+			if w.UseFileBuffer {
+				w.newBuffer = func() (writeBuffer, error) { return newFileBuffer(w.FileBufferDir) }
+			}
+		}
+		v, err := w.newBuffer()
 		if err != nil {
 			w.setErr(err)
 			return
@@ -282,37 +279,6 @@ redo:
 	}
 	w.o.f = f
 	return nil
-}
-
-func (w *Writer) simpleWriteFromReader(rs io.ReadSeeker, size int64) (int64, error) {
-	ue, err := w.o.b.b.getUploadURL(w.ctx)
-	if err != nil {
-		return 0, err
-	}
-	ctype := w.contentType
-	if ctype == "" {
-		ctype = "application/octet-stream"
-	}
-	hr := &hashReader{h: sha1.New(), r: rs}
-	mr := &meteredReader{r: hr, size: int(size + 40)}
-	w.registerChunk(1, mr)
-	defer w.completeChunk(1)
-redo:
-	f, err := ue.uploadFile(w.ctx, mr, int(size+40), w.name, ctype, "hex_digits_at_end", w.info)
-	if err != nil {
-		if w.o.b.r.reupload(err) {
-			blog.V(2).Infof("b2 writer: %v; retrying", err)
-			u, err := w.o.b.b.getUploadURL(w.ctx)
-			if err != nil {
-				return mr.read, err
-			}
-			ue = u
-			goto redo
-		}
-		return mr.read, err
-	}
-	w.o.f = f
-	return mr.read, nil
 }
 
 func (w *Writer) getLargeFile() (beLargeFileInterface, error) {
@@ -390,7 +356,7 @@ func (w *Writer) sendChunk() error {
 		return w.ctx.Err()
 	}
 	w.cidx++
-	v, err := w.getBuffer()
+	v, err := w.newBuffer()
 	if err != nil {
 		return err
 	}
@@ -400,7 +366,6 @@ func (w *Writer) sendChunk() error {
 
 // ReadFrom
 func (w *Writer) ReadFrom(r io.Reader) (int64, error) {
-	w.init()
 	rs, ok := r.(io.ReadSeeker)
 	if !ok {
 		return copyContext(w.ctx, w, r)
@@ -409,14 +374,36 @@ func (w *Writer) ReadFrom(r io.Reader) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	if size < int64(w.ChunkSize) {
-		if _, err := rs.Seek(0, io.SeekStart); err != nil {
-			return 0, err
+	ra := enReaderAt(rs)
+	var offset int64
+	var wrote int64
+	w.newBuffer = func() (writeBuffer, error) {
+		left := size - offset
+		if left <= 0 {
+			return nil, io.EOF
 		}
-		return w.simpleWriteFromReader(rs, size)
+		csize := int64(w.csize)
+		if left < csize {
+			csize = left
+		}
+		nb := newNonBuffer(ra, offset, csize)
+		wrote += csize // TODO: this is kind of a total lie
+		offset += csize
+		return nb, nil
 	}
-	// large file upload, with hex at end
-	return 0, nil
+	w.init()
+	if size < int64(w.csize) {
+		// the magic happens on w.Close()
+		return size, nil
+	}
+	for {
+		if err := w.sendChunk(); err != nil {
+			if err != io.EOF {
+				return wrote, err
+			}
+			return wrote, nil
+		}
+	}
 }
 
 // Close satisfies the io.Closer interface.  It is critical to check the return
@@ -512,37 +499,4 @@ func (mr *meteredReader) done() float64 {
 	}
 	read := float64(atomic.LoadInt64(&mr.read))
 	return read / float64(mr.size)
-}
-
-// A hashReader will read until io.EOF, and then append its own hash.
-type hashReader struct {
-	h hash.Hash
-	r io.ReadSeeker
-
-	isEOF bool
-	buf   *strings.Reader
-}
-
-func (h *hashReader) Read(p []byte) (int, error) {
-	if h.isEOF {
-		return h.buf.Read(p)
-	}
-	n, err := io.TeeReader(h.r, h.h).Read(p)
-	if err == io.EOF {
-		err = nil
-		h.isEOF = true
-		h.buf = strings.NewReader(fmt.Sprintf("%x", h.h.Sum(nil)))
-	}
-	return n, err
-}
-
-func (h *hashReader) Seek(offset int64, whence int) (int64, error) {
-	// This will break if offset or whence aren't 0, but they never[1] aren't.
-	//
-	// [1] Let's see how many commits it takes before this isn't true.  TODO:
-	// instead of using Seek to restart a bad upload, maybe just have like a
-	// Reset() instead.
-	h.h.Reset()
-	h.isEOF = false
-	return h.r.Seek(offset, whence)
 }

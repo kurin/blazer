@@ -364,10 +364,21 @@ func (w *Writer) sendChunk() error {
 	return nil
 }
 
-// ReadFrom
+// ReadFrom reads all of r into w, returning the first error or no error if r
+// returns io.EOF.  If r is also an io.Seeker, ReadFrom will stream r directly
+// over the wire instead of buffering it locally.  This reduces memory usage.
+//
+// Do not issue multiple calls to ReadFrom, or mix ReadFrom and Write.  If you
+// have multiple readers you want to concatenate into the same B2 object, use
+// an io.MultiReader.
+//
+// Note that io.Copy will automatically choose to use ReadFrom.
+//
+// ReadFrom currently doesn't handle w.Resume; if w.Resume is true, ReadFrom
+// will act as if r is not an io.Seeker.
 func (w *Writer) ReadFrom(r io.Reader) (int64, error) {
 	rs, ok := r.(io.ReadSeeker)
-	if !ok {
+	if !ok || w.Resume {
 		return copyContext(w.ctx, w, r)
 	}
 	size, err := rs.Seek(0, io.SeekEnd)
@@ -411,7 +422,7 @@ func (w *Writer) ReadFrom(r io.Reader) (int64, error) {
 }
 
 // Close satisfies the io.Closer interface.  It is critical to check the return
-// value of Close on all writers.
+// value of Close for all writers.
 func (w *Writer) Close() error {
 	w.done.Do(func() {
 		if !w.everStarted {

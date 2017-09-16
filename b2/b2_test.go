@@ -609,6 +609,22 @@ func TestReadWrite(t *testing.T) {
 		t.Error(err)
 	}
 
+	// Same test, with a readseeker
+	sobjS, wshaS, err := writeFileSeeker(ctx, bucket, smallFileName+"seek", 1e6+42, 1e8)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer func() {
+		if err := sobjS.Delete(ctx); err != nil {
+			t.Error(err)
+		}
+	}()
+
+	if err := readFile(ctx, sobjS, wshaS, 1e5, 10); err != nil {
+		t.Error(err)
+	}
+
 	lobj, wshaL, err := writeFile(ctx, bucket, largeFileName, 1e6-1e5, 1e4)
 	if err != nil {
 		t.Fatal(err)

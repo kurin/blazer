@@ -539,7 +539,9 @@ func (h *hashReader) Read(p []byte) (int, error) {
 func (h *hashReader) Seek(offset int64, whence int) (int64, error) {
 	// This will break if offset or whence aren't 0, but they never[1] aren't.
 	//
-	// [1] Let's see how many commits it takes before this isn't true.
+	// [1] Let's see how many commits it takes before this isn't true.  TODO:
+	// instead of using Seek to restart a bad upload, maybe just have like a
+	// Reset() instead.
 	h.h.Reset()
 	h.isEOF = false
 	return h.r.Seek(offset, whence)

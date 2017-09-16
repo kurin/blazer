@@ -298,6 +298,34 @@ func (rb *requestBody) getBody() io.Reader {
 	return rb.body
 }
 
+type keepFinalBytes struct {
+	r      io.Reader
+	remain int
+	sha    [40]byte
+}
+
+func (k *keepFinalBytes) Read(p []byte) (int, error) {
+	n, err := k.r.Read(p)
+	if k.remain-n > 40 {
+		k.remain -= n
+		return n, err
+	}
+	// This was a whole lot harder than it looks.
+	pi := -40 + k.remain
+	if pi < 0 {
+		pi = 0
+	}
+	pe := n
+	ki := 40 - k.remain
+	if ki < 0 {
+		ki = 0
+	}
+	ke := n - k.remain + 40
+	copy(k.sha[ki:ke], p[pi:pe])
+	k.remain -= n
+	return n, err
+}
+
 var reqID int64
 
 func (o *b2Options) makeRequest(ctx context.Context, method, verb, uri string, b2req, b2resp interface{}, headers map[string]string, body *requestBody) error {
@@ -848,10 +876,16 @@ func (fc *FileChunk) UploadPart(ctx context.Context, r io.Reader, sha1 string, s
 		"Content-Length":    fmt.Sprintf("%d", size),
 		"X-Bz-Content-Sha1": sha1,
 	}
+	if sha1 == "hex_digits_at_end" {
+		r = &keepFinalBytes{r: r, remain: size}
+	}
 	if err := fc.file.b2.opts.makeRequest(ctx, "b2_upload_part", "POST", fc.url, nil, nil, headers, &requestBody{body: r, size: int64(size)}); err != nil {
 		return 0, err
 	}
 	fc.file.mu.Lock()
+	if sha1 == "hex_digits_at_end" {
+		sha1 = string(r.(*keepFinalBytes).sha[:])
+	}
 	fc.file.hashes[index] = sha1
 	fc.file.size += int64(size)
 	fc.file.mu.Unlock()

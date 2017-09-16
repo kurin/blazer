@@ -383,6 +383,51 @@ func (rs *zReadSeeker) Seek(offset int64, whence int) (int64, error) {
 	return rs.pos, nil
 }
 
+func TestReaderFrom(t *testing.T) {
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	table := []struct {
+		size, pos int64
+	}{
+		{
+			size: 10,
+		},
+	}
+
+	for _, e := range table {
+		client := &Client{
+			backend: &beRoot{
+				b2i: &testRoot{
+					bucketMap: make(map[string]map[string]string),
+					errs:      &errCont{},
+				},
+			},
+		}
+
+		bucket, err := client.NewBucket(ctx, bucketName, &BucketAttrs{Type: Private})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() {
+			if err := bucket.Delete(ctx); err != nil {
+				t.Error(err)
+			}
+		}()
+
+		r := &zReadSeeker{pos: e.pos, size: e.size}
+		w := bucket.Object("writer").NewWriter(ctx)
+		n, err := w.ReadFrom(r)
+		if err != nil {
+			t.Errorf("ReadFrom(): %v", err)
+		}
+		if n != e.size {
+			t.Errorf("ReadFrom(): got %d bytes, wanted %d bytes", n, e.size)
+		}
+	}
+}
+
 func TestReauth(t *testing.T) {
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -606,22 +651,6 @@ func TestReadWrite(t *testing.T) {
 	}()
 
 	if err := readFile(ctx, sobj, wsha, 1e5, 10); err != nil {
-		t.Error(err)
-	}
-
-	// Same test, with a readseeker
-	sobjS, wshaS, err := writeFileSeeker(ctx, bucket, smallFileName+"seek", 1e6+42, 1e8)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	defer func() {
-		if err := sobjS.Delete(ctx); err != nil {
-			t.Error(err)
-		}
-	}()
-
-	if err := readFile(ctx, sobjS, wshaS, 1e5, 10); err != nil {
 		t.Error(err)
 	}
 

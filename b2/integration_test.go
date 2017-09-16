@@ -79,6 +79,73 @@ func TestReadWriteLive(t *testing.T) {
 	}
 }
 
+func TestReaderFromLive(t *testing.T) {
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	defer cancel()
+
+	bucket, done := startLiveTest(ctx, t)
+	defer done()
+
+	table := []struct {
+		size, pos      int64
+		csize, writers int
+	}{
+		{
+			size: 10,
+		},
+		{
+			size:    15e6 + 10,
+			csize:   5e6,
+			writers: 2,
+		},
+	}
+
+	for i, e := range table {
+		rs := &zReadSeeker{pos: e.pos, size: e.size}
+		o := bucket.Object(fmt.Sprintf("writer.%d", i))
+		w := o.NewWriter(ctx)
+		w.ChunkSize = e.csize
+		w.ConcurrentUploads = e.writers
+		n, err := w.ReadFrom(rs)
+		if err != nil {
+			t.Errorf("ReadFrom(): %v", err)
+		}
+		if n != e.size-e.pos {
+			t.Errorf("ReadFrom(): got %d bytes, wanted %d bytes", n, e.size)
+		}
+		if err := w.Close(); err != nil {
+			t.Errorf("w.Close(): %v", err)
+			continue
+		}
+
+		r := o.NewReader(ctx)
+		h := sha1.New()
+		rn, err := io.Copy(h, r)
+		if err != nil {
+			t.Errorf("Read from B2: %v", err)
+		}
+		if rn != n {
+			t.Errorf("Read from B2: got %d bytes, want %d bytes", rn, n)
+		}
+		if err := r.Close(); err != nil {
+			t.Errorf("r.Close(): %v", err)
+		}
+
+		hex := fmt.Sprintf("%x", h.Sum(nil))
+		attrs, err := o.Attrs(ctx)
+		if err != nil {
+			t.Errorf("Attrs(): %v", err)
+			continue
+		}
+		if attrs.SHA1 == "none" {
+			continue
+		}
+		if hex != attrs.SHA1 {
+			t.Errorf("SHA1: got %q, want %q", hex, attrs.SHA1)
+		}
+	}
+}
 func TestHideShowLive(t *testing.T) {
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)

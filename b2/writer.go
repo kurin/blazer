@@ -15,6 +15,7 @@
 package b2
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -23,8 +24,6 @@ import (
 	"time"
 
 	"github.com/kurin/blazer/internal/blog"
-
-	"golang.org/x/net/context"
 )
 
 // Writer writes data into Backblaze.  It automatically switches to the large

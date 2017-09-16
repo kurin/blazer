@@ -28,6 +28,7 @@
 package b2
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -35,8 +36,6 @@ import (
 	"strconv"
 	"sync"
 	"time"
-
-	"golang.org/x/net/context"
 )
 
 // Client is a Backblaze B2 client.

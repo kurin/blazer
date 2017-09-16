@@ -23,6 +23,7 @@ package base
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -38,8 +39,6 @@ import (
 
 	"github.com/kurin/blazer/internal/b2types"
 	"github.com/kurin/blazer/internal/blog"
-
-	"golang.org/x/net/context"
 )
 
 const (

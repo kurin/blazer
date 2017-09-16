@@ -15,13 +15,12 @@
 package b2
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"time"
 
 	"github.com/kurin/blazer/base"
-
-	"golang.org/x/net/context"
 )
 
 // This file wraps the base package in a thin layer, for testing.  It should be

@@ -16,13 +16,12 @@ package b2
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"sync"
 
 	"github.com/kurin/blazer/internal/blog"
-
-	"golang.org/x/net/context"
 )
 
 var errNoMoreContent = errors.New("416: out of content")

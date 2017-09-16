@@ -15,11 +15,10 @@
 package b2
 
 import (
+	"context"
 	"io"
 	"math/rand"
 	"time"
-
-	"golang.org/x/net/context"
 )
 
 // This file wraps the baseline interfaces with backoff and retry semantics.

@@ -381,6 +381,7 @@ func (w *Writer) ReadFrom(r io.Reader) (int64, error) {
 	if !ok || w.Resume {
 		return copyContext(w.ctx, w, r)
 	}
+	blog.V(2).Info("streaming without buffer")
 	size, err := rs.Seek(0, io.SeekEnd)
 	if err != nil {
 		return 0, err

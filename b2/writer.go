@@ -96,7 +96,7 @@ type chunk struct {
 }
 
 func (w *Writer) setErr(err error) {
-	if err == nil {
+	if err == nil || err == io.EOF {
 		return
 	}
 	w.emux.Lock()
@@ -380,6 +380,10 @@ func (w *Writer) ReadFrom(r io.Reader) (int64, error) {
 	w.newBuffer = func() (writeBuffer, error) {
 		left := size - offset
 		if left <= 0 {
+			// We're done sending real chunks; send empty chunks from now on so that
+			// Close() works.
+			w.newBuffer = func() (writeBuffer, error) { return newMemoryBuffer(), nil }
+			w.w = newMemoryBuffer()
 			return nil, io.EOF
 		}
 		csize := int64(w.csize)

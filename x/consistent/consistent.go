@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package atomic implements an experimental interface for using B2 as a
+// Package consistent implements an experimental interface for using B2 as a
 // coordination primitive.
-package atomic
+package consistent
 
 import (
 	"bytes"
@@ -37,7 +37,7 @@ var (
 	errNotInGroup     = errors.New("not in group")
 )
 
-// NewGroup creates a new atomic Group for the given bucket.
+// NewGroup creates a new consistent Group for the given bucket.
 func NewGroup(bucket *b2.Bucket, name string) *Group {
 	return &Group{
 		name: name,
@@ -45,10 +45,10 @@ func NewGroup(bucket *b2.Bucket, name string) *Group {
 	}
 }
 
-// Group represents a collection of B2 objects that can be modified atomically.
-// Objects in the same group contend with each other for updates, but there can
-// only be so many (maximum of 10; fewer if there are other bucket attributes
-// set) groups in a given bucket.
+// Group represents a collection of B2 objects that can be modified in a
+// consistent way.  Objects in the same group contend with each other for
+// updates, but there can only be so many (maximum of 10; fewer if there are
+// other bucket attributes set) groups in a given bucket.
 type Group struct {
 	name string
 	b    *b2.Bucket
@@ -124,19 +124,19 @@ func (w Writer) Close() error {
 	}
 	// TODO: maybe see if you can cut down on calls to info()
 	for {
-		ai, err := w.g.info(w.ctx)
+		ci, err := w.g.info(w.ctx)
 		if err != nil {
 			// Replacement failed; delete the new version.
 			w.g.b.Object(w.name + "/" + w.suffix).Delete(w.ctx)
 			return err
 		}
-		old, ok := ai.Locations[w.name]
+		old, ok := ci.Locations[w.name]
 		if ok && old != w.key {
 			w.g.b.Object(w.name + "/" + w.suffix).Delete(w.ctx)
 			return errUpdateConflict
 		}
-		ai.Locations[w.name] = w.suffix
-		if err := w.g.save(w.ctx, ai); err != nil {
+		ci.Locations[w.name] = w.suffix
+		if err := w.g.save(w.ctx, ci); err != nil {
 			if err == errUpdateConflict {
 				continue
 			}
@@ -178,11 +178,11 @@ func (g *Group) NewWriter(ctx context.Context, key, name string) (Writer, error)
 // NewReader creates a Reader with the current version of the object, as well
 // as that object's update key.
 func (g *Group) NewReader(ctx context.Context, name string) (Reader, error) {
-	ai, err := g.info(ctx)
+	ci, err := g.info(ctx)
 	if err != nil {
 		return Reader{}, err
 	}
-	suffix, ok := ai.Locations[name]
+	suffix, ok := ci.Locations[name]
 	if !ok {
 		return Reader{}, errNotInGroup
 	}
@@ -192,7 +192,7 @@ func (g *Group) NewReader(ctx context.Context, name string) (Reader, error) {
 	}, nil
 }
 
-func (g *Group) info(ctx context.Context) (*atomicInfo, error) {
+func (g *Group) info(ctx context.Context) (*consistentInfo, error) {
 	attrs, err := g.b.Attrs(ctx)
 	if err != nil {
 		return nil, err
@@ -204,7 +204,7 @@ func (g *Group) info(ctx context.Context) (*atomicInfo, error) {
 	}
 	enc, ok := imap[metaKey+"-"+g.name]
 	if !ok {
-		return &atomicInfo{
+		return &consistentInfo{
 			Version:   1,
 			Locations: make(map[string]string),
 		}, nil
@@ -213,19 +213,19 @@ func (g *Group) info(ctx context.Context) (*atomicInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	ai := &atomicInfo{}
-	if err := json.Unmarshal(b, ai); err != nil {
+	ci := &consistentInfo{}
+	if err := json.Unmarshal(b, ci); err != nil {
 		return nil, err
 	}
-	if ai.Locations == nil {
-		ai.Locations = make(map[string]string)
+	if ci.Locations == nil {
+		ci.Locations = make(map[string]string)
 	}
-	return ai, nil
+	return ci, nil
 }
 
-func (g *Group) save(ctx context.Context, ai *atomicInfo) error {
-	ai.Serial++
-	b, err := json.Marshal(ai)
+func (g *Group) save(ctx context.Context, ci *consistentInfo) error {
+	ci.Serial++
+	b, err := json.Marshal(ci)
 	if err != nil {
 		return err
 	}
@@ -236,7 +236,7 @@ func (g *Group) save(ctx context.Context, ai *atomicInfo) error {
 		if err != nil {
 			return err
 		}
-		if oldAI.Serial != ai.Serial-1 {
+		if oldAI.Serial != ci.Serial-1 {
 			return errUpdateConflict
 		}
 		if g.ba.Info == nil {
@@ -256,18 +256,18 @@ func (g *Group) save(ctx context.Context, ai *atomicInfo) error {
 
 // List returns a list of all the group objects.
 func (g *Group) List(ctx context.Context) ([]string, error) {
-	ai, err := g.info(ctx)
+	ci, err := g.info(ctx)
 	if err != nil {
 		return nil, err
 	}
 	var l []string
-	for name := range ai.Locations {
+	for name := range ci.Locations {
 		l = append(l, name)
 	}
 	return l, nil
 }
 
-type atomicInfo struct {
+type consistentInfo struct {
 	Version int
 
 	// Serial is incremented for every version saved.  If we ensure that

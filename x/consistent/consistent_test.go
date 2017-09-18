@@ -1,4 +1,4 @@
-package atomic
+package consistent
 
 import (
 	"context"
@@ -15,7 +15,7 @@ import (
 const (
 	apiID      = "B2_ACCOUNT_ID"
 	apiKey     = "B2_SECRET_KEY"
-	bucketName = "atomobucket"
+	bucketName = "consistobucket"
 )
 
 func TestOperationLive(t *testing.T) {

@@ -18,9 +18,11 @@ package atomic
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 
 	"github.com/kurin/blazer/b2"
@@ -37,32 +39,106 @@ type Group struct {
 	ba   *b2.BucketAttrs
 }
 
-func (g *Group) info(ctx context.Context) (atomicInfo, error) {
-	var ai atomicInfo
+type Writer struct {
+	ctx    context.Context
+	wc     io.WriteCloser
+	name   string
+	suffix string
+	key    string
+	g      *Group
+}
+
+func (w Writer) Write(p []byte) (int, error) { return w.wc.Write(p) }
+
+func (w Writer) Close() error {
+	if err := w.wc.Close(); err != nil {
+		return err
+	}
+	// TODO: maybe see if you can cut down on calls to info()
+	for {
+		ai, err := w.g.info(w.ctx)
+		if err != nil {
+			return err
+		}
+		old, ok := ai.Locations[w.name]
+		if ok && old != w.key {
+			return errUpdateConflict
+		}
+		ai.Locations[w.name] = w.suffix
+		if err := w.g.save(w.ctx, ai); err != nil {
+			if err == errUpdateConflict {
+				continue
+			}
+			return err
+		}
+		return nil
+	}
+}
+
+type Reader struct {
+	io.ReadCloser
+	Key string
+}
+
+func (g *Group) NewWriter(ctx context.Context, key, name string) (Writer, error) {
+	suffix, err := random()
+	if err != nil {
+		return Writer{}, err
+	}
+	return Writer{
+		ctx:    ctx,
+		wc:     g.b.Object(name + "/" + suffix).NewWriter(ctx),
+		name:   name,
+		suffix: suffix,
+		key:    key,
+		g:      g,
+	}, nil
+}
+
+func (g *Group) NewReader(ctx context.Context, name string) (Reader, error) {
+	ai, err := g.info(ctx)
+	if err != nil {
+		return Reader{}, err
+	}
+	suffix, ok := ai.Locations[name]
+	if !ok {
+		return Reader{}, fmt.Errorf("%s: not found", name)
+	}
+	return Reader{
+		ReadCloser: g.b.Object(name + "/" + suffix).NewReader(ctx),
+		Key:        suffix,
+	}, nil
+}
+
+func (g *Group) info(ctx context.Context) (*atomicInfo, error) {
 	attrs, err := g.b.Attrs(ctx)
 	if err != nil {
-		return ai, err
+		return nil, err
 	}
 	g.ba = attrs
 	imap := attrs.Info
 	if imap == nil {
-		return ai, nil
+		return nil, nil
 	}
 	enc, ok := imap[metaKey]
 	if !ok {
-		return ai, nil
+		return nil, nil
 	}
 	b, err := base64.StdEncoding.DecodeString(enc)
 	if err != nil {
-		return ai, err
+		return nil, err
 	}
+	var ai atomicInfo
 	if err := json.Unmarshal(b, &ai); err != nil {
-		return ai, err
+		return nil, err
 	}
-	return ai, nil
+	if ai.Locations == nil {
+		ai.Locations = make(map[string]string)
+	}
+	return &ai, nil
 }
 
-func (g *Group) save(ctx context.Context, ai atomicInfo) error {
+func (g *Group) save(ctx context.Context, ai *atomicInfo) error {
 	ai.Serial++
 
 	b, err := json.Marshal(ai)
@@ -106,16 +182,29 @@ func (g *Group) List(ctx context.Context) ([]string, error) {
 	return l, nil
 }
 
-func (g *Group) NewWriter(ctx context.Context, name string) (io.WriteCloser, error) {
-	return nil, nil
-}
-
-func (g *Group) NewReader(ctx context.Context, name string) (io.ReadCloser, error) {
-	return nil, nil
-}
-
 type atomicInfo struct {
-	Version   int
+	Version int
+
+	// Serial is incremented for every version saved.  If we ensure that
+	// current.Serial = 1 + previous.Serial, and that the bucket metadata is
+	// updated cleanly, then we know that the version we saved is the direct
+	// successor to the version we had.  If the bucket metadata doesn't update
+	// cleanly, but the serial relation holds true for the new AI struct, then we
+	// can retry without bothering the user.  However, if the serial relation no
+	// longer holds true, it means someone else has updated AI and we have to ask
+	// the user to redo everything they've done.
+	//
+	// However, it is still necessary for higher level constructs to confirm that
+	// the serial number they expect is good.  The writer does this, for example,
+	// but comparing the "key" of the file it is replacing.
 	Serial    int
 	Locations map[string]string
+}
+
+func random() (string, error) {
+	b := make([]byte, 20)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%x", b), nil
 }

@@ -32,30 +32,55 @@ import (
 
 const metaKey = "blazer-meta-key-no-touchie"
 
-var errUpdateConflict = errors.New("update conflict")
+var (
+	errUpdateConflict = errors.New("update conflict")
+	errNotInGroup     = errors.New("not in group")
+)
 
-func NewGroup(bucket *b2.Bucket) *Group {
+// NewGroup creates a new atomic Group for the given bucket.
+func NewGroup(bucket *b2.Bucket, name string) *Group {
 	return &Group{
-		b: bucket,
+		name: name,
+		b:    bucket,
 	}
 }
 
 // Group represents a collection of B2 objects that can be modified atomically.
+// Objects in the same group contend with each other for updates, but there can
+// only be so many (maximum of 10; fewer if there are other bucket attributes
+// set) groups in a given bucket.
 type Group struct {
-	b  *b2.Bucket
-	ba *b2.BucketAttrs
+	name string
+	b    *b2.Bucket
+	ba   *b2.BucketAttrs
 }
 
+// TODO: consider OperateStream(ctx context.Context, name string, f func(io.Reader) (io.Reader, error)
+
+// Operate calls f with the contents of the group object given by name, and
+// updates that object with the output of f if f returns no error.  Operate
+// guarantees that no other callers have modified the contents of name in the
+// meantime (as long as all other callers are using this package).  It may call
+// f any number of times.
 func (g *Group) Operate(ctx context.Context, name string, f func([]byte) ([]byte, error)) error {
 	for {
+		var b []byte
 		r, err := g.NewReader(ctx, name)
 		if err != nil {
+			if err == errNotInGroup {
+				goto call
+			}
 			return err
 		}
-		b, err := ioutil.ReadAll(r)
+		b, err = ioutil.ReadAll(r)
+		r.Close()
+		if b2.IsNotExist(err) {
+			goto call
+		}
 		if err != nil {
 			return err
 		}
+	call:
 		o, err := f(b)
 		if err != nil {
 			return err
@@ -65,6 +90,9 @@ func (g *Group) Operate(ctx context.Context, name string, f func([]byte) ([]byte
 			return err
 		}
 		if _, err := io.Copy(w, bytes.NewReader(o)); err != nil {
+			return err
+		}
+		if err := w.Close(); err != nil {
 			if err == errUpdateConflict {
 				continue
 			}
@@ -74,6 +102,7 @@ func (g *Group) Operate(ctx context.Context, name string, f func([]byte) ([]byte
 	}
 }
 
+// Writer is an io.ReadCloser.
 type Writer struct {
 	ctx    context.Context
 	wc     io.WriteCloser
@@ -83,8 +112,12 @@ type Writer struct {
 	g      *Group
 }
 
+// Write implements io.Write.
 func (w Writer) Write(p []byte) (int, error) { return w.wc.Write(p) }
 
+// Close writes any remaining data into B2 and updates the group to reflect the
+// contents of the new object.  If the group object has been modified, Close()
+// will fail.
 func (w Writer) Close() error {
 	if err := w.wc.Close(); err != nil {
 		return err
@@ -93,10 +126,13 @@ func (w Writer) Close() error {
 	for {
 		ai, err := w.g.info(w.ctx)
 		if err != nil {
+			// Replacement failed; delete the new version.
+			w.g.b.Object(w.name + "/" + w.suffix).Delete(w.ctx)
 			return err
 		}
 		old, ok := ai.Locations[w.name]
 		if ok && old != w.key {
+			w.g.b.Object(w.name + "/" + w.suffix).Delete(w.ctx)
 			return errUpdateConflict
 		}
 		ai.Locations[w.name] = w.suffix
@@ -104,17 +140,26 @@ func (w Writer) Close() error {
 			if err == errUpdateConflict {
 				continue
 			}
+			w.g.b.Object(w.name + "/" + w.suffix).Delete(w.ctx)
 			return err
 		}
+		// Replacement successful; delete the old version.
+		w.g.b.Object(w.name + "/" + w.key).Delete(w.ctx)
 		return nil
 	}
 }
 
+// Reader is an io.ReadCloser.  Key must be passed to NewWriter.
 type Reader struct {
 	io.ReadCloser
 	Key string
 }
 
+// NewWriter creates a Writer and prepares it to be updated.  The key argument
+// should come from the Key field of a Reader; if Writer.Close() returns with
+// no error, then the underlying group object was successfully updated from the
+// data available from the Reader with no intervening writes.  New objects can
+// be created with an empty key.
 func (g *Group) NewWriter(ctx context.Context, key, name string) (Writer, error) {
 	suffix, err := random()
 	if err != nil {
@@ -130,6 +175,8 @@ func (g *Group) NewWriter(ctx context.Context, key, name string) (Writer, error)
 	}, nil
 }
 
+// NewReader creates a Reader with the current version of the object, as well
+// as that object's update key.
 func (g *Group) NewReader(ctx context.Context, name string) (Reader, error) {
 	ai, err := g.info(ctx)
 	if err != nil {
@@ -137,7 +184,7 @@ func (g *Group) NewReader(ctx context.Context, name string) (Reader, error) {
 	}
 	suffix, ok := ai.Locations[name]
 	if !ok {
-		return Reader{}, fmt.Errorf("%s: not found", name)
+		return Reader{}, errNotInGroup
 	}
 	return Reader{
 		ReadCloser: g.b.Object(name + "/" + suffix).NewReader(ctx),
@@ -155,27 +202,29 @@ func (g *Group) info(ctx context.Context) (*atomicInfo, error) {
 	if imap == nil {
 		return nil, nil
 	}
-	enc, ok := imap[metaKey]
+	enc, ok := imap[metaKey+"-"+g.name]
 	if !ok {
-		return nil, nil
+		return &atomicInfo{
+			Version:   1,
+			Locations: make(map[string]string),
+		}, nil
 	}
 	b, err := base64.StdEncoding.DecodeString(enc)
 	if err != nil {
 		return nil, err
 	}
-	var ai atomicInfo
-	if err := json.Unmarshal(b, &ai); err != nil {
+	ai := &atomicInfo{}
+	if err := json.Unmarshal(b, ai); err != nil {
 		return nil, err
 	}
 	if ai.Locations == nil {
 		ai.Locations = make(map[string]string)
 	}
-	return &ai, nil
+	return ai, nil
 }
 
 func (g *Group) save(ctx context.Context, ai *atomicInfo) error {
 	ai.Serial++
-
 	b, err := json.Marshal(ai)
 	if err != nil {
 		return err
@@ -193,7 +242,7 @@ func (g *Group) save(ctx context.Context, ai *atomicInfo) error {
 		if g.ba.Info == nil {
 			g.ba.Info = make(map[string]string)
 		}
-		g.ba.Info[metaKey] = s
+		g.ba.Info[metaKey+"-"+g.name] = s
 		err = g.b.Update(ctx, g.ba)
 		if err == nil {
 			return nil
@@ -205,6 +254,7 @@ func (g *Group) save(ctx context.Context, ai *atomicInfo) error {
 	}
 }
 
+// List returns a list of all the group objects.
 func (g *Group) List(ctx context.Context) ([]string, error) {
 	ai, err := g.info(ctx)
 	if err != nil {

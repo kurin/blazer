@@ -17,6 +17,7 @@
 package atomic
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
@@ -24,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 
 	"github.com/kurin/blazer/b2"
 )
@@ -32,11 +34,44 @@ const metaKey = "blazer-meta-key-no-touchie"
 
 var errUpdateConflict = errors.New("update conflict")
 
+func NewGroup(bucket *b2.Bucket) *Group {
+	return &Group{
+		b: bucket,
+	}
+}
+
 // Group represents a collection of B2 objects that can be modified atomically.
 type Group struct {
-	name string
-	b    *b2.Bucket
-	ba   *b2.BucketAttrs
+	b  *b2.Bucket
+	ba *b2.BucketAttrs
+}
+
+func (g *Group) Operate(ctx context.Context, name string, f func([]byte) ([]byte, error)) error {
+	for {
+		r, err := g.NewReader(ctx, name)
+		if err != nil {
+			return err
+		}
+		b, err := ioutil.ReadAll(r)
+		if err != nil {
+			return err
+		}
+		o, err := f(b)
+		if err != nil {
+			return err
+		}
+		w, err := g.NewWriter(ctx, r.Key, name)
+		if err != nil {
+			return err
+		}
+		if _, err := io.Copy(w, bytes.NewReader(o)); err != nil {
+			if err == errUpdateConflict {
+				continue
+			}
+			return err
+		}
+		return nil
+	}
 }
 
 type Writer struct {

@@ -42,7 +42,6 @@ func TestOperationLive(t *testing.T) {
 						}
 						n = i
 					}
-					t.Logf("thread %d on cycle %d: %d++", i, j, n)
 					return []byte(strconv.Itoa(n + 1)), nil
 				}); err != nil {
 					t.Error(err)

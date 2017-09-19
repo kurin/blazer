@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"reflect"
 
 	"github.com/kurin/blazer/b2"
 )
@@ -55,41 +56,34 @@ type Group struct {
 	ba   *b2.BucketAttrs
 }
 
-// TODO: consider OperateStream(ctx context.Context, name string, f func(io.Reader) (io.Reader, error)
-
 // Operate calls f with the contents of the group object given by name, and
 // updates that object with the output of f if f returns no error.  Operate
 // guarantees that no other callers have modified the contents of name in the
 // meantime (as long as all other callers are using this package).  It may call
-// f any number of times.
-func (g *Group) Operate(ctx context.Context, name string, f func([]byte) ([]byte, error)) error {
+// f any number of times and, as a result, the potential data transfer is
+// unbounded.  Callers should have f fail after a given number of attempts if
+// this is unacceptable.
+//
+// The io.Reader that f returns is guaranteed to be read until at least the
+// first error.  Callers must ensure that this is sufficient for the reader to
+// clean up after itself.
+func (g *Group) OperateStream(ctx context.Context, name string, f func(io.Reader) (io.Reader, error)) error {
 	for {
-		var b []byte
 		r, err := g.NewReader(ctx, name)
-		if err != nil {
-			if err == errNotInGroup {
-				goto call
-			}
+		if err != nil && err != errNotInGroup {
 			return err
 		}
-		b, err = ioutil.ReadAll(r)
+		out, err := f(r)
 		r.Close()
-		if b2.IsNotExist(err) {
-			goto call
-		}
 		if err != nil {
 			return err
 		}
-	call:
-		o, err := f(b)
-		if err != nil {
-			return err
-		}
+		defer io.Copy(ioutil.Discard, out) // ensure the reader is read
 		w, err := g.NewWriter(ctx, r.Key, name)
 		if err != nil {
 			return err
 		}
-		if _, err := io.Copy(w, bytes.NewReader(o)); err != nil {
+		if _, err := io.Copy(w, out); err != nil {
 			return err
 		}
 		if err := w.Close(); err != nil {
@@ -100,6 +94,66 @@ func (g *Group) Operate(ctx context.Context, name string, f func([]byte) ([]byte
 		}
 		return nil
 	}
+}
+
+// Operate uses OperateStream to act on byte slices.
+func (g *Group) Operate(ctx context.Context, name string, f func([]byte) ([]byte, error)) error {
+	return g.OperateStream(ctx, name, func(r io.Reader) (io.Reader, error) {
+		b, err := ioutil.ReadAll(r)
+		if b2.IsNotExist(err) {
+			b = nil
+			err = nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		bs, err := f(b)
+		if err != nil {
+			return nil, err
+		}
+		return bytes.NewReader(bs), nil
+	})
+}
+
+// OperateJSON is a convenience function for transforming JSON data in B2 in a
+// consistent way.  Callers should pass a function f which accepts a pointer to
+// a struct of a given type and transforms it into another struct (ideally but
+// not necessarily of the same type).  Callers should also pass an example
+// struct, t, or a pointer to it, that is the same type.  t will not be
+// altered.  If there is no existing file, f will be called with an pointer to
+// an empty struct of type t.  Otherwise, it will be called with a pointer to a
+// struct filled out with the given JSON.
+func (g *Group) OperateJSON(ctx context.Context, name string, t interface{}, f func(interface{}) (interface{}, error)) error {
+	jsonType := reflect.TypeOf(t)
+	for jsonType.Kind() == reflect.Ptr {
+		jsonType = jsonType.Elem()
+	}
+	return g.OperateStream(ctx, name, func(r io.Reader) (io.Reader, error) {
+		in := reflect.New(jsonType).Interface()
+		if err := json.NewDecoder(r).Decode(in); err != nil && err != io.EOF && !b2.IsNotExist(err) {
+			return nil, err
+		}
+		out, err := f(in)
+		if err != nil {
+			return nil, err
+		}
+		pr, pw := io.Pipe()
+		go func() { pw.CloseWithError(json.NewEncoder(pw).Encode(out)) }()
+		return closeAfterReading{rc: pr}, nil
+	})
+}
+
+// closeAfterReading closes the underlying reader on the first non-nil error
+type closeAfterReading struct {
+	rc io.ReadCloser
+}
+
+func (car closeAfterReading) Read(p []byte) (int, error) {
+	n, err := car.rc.Read(p)
+	if err != nil {
+		car.rc.Close()
+	}
+	return n, err
 }
 
 // Writer is an io.ReadCloser.
@@ -151,8 +205,22 @@ func (w Writer) Close() error {
 
 // Reader is an io.ReadCloser.  Key must be passed to NewWriter.
 type Reader struct {
-	io.ReadCloser
+	r   io.ReadCloser
 	Key string
+}
+
+func (r Reader) Read(p []byte) (int, error) {
+	if r.r == nil {
+		return 0, io.EOF
+	}
+	return r.r.Read(p)
+}
+
+func (r Reader) Close() error {
+	if r.r == nil {
+		return nil
+	}
+	return r.r.Close()
 }
 
 // NewWriter creates a Writer and prepares it to be updated.  The key argument
@@ -187,8 +255,8 @@ func (g *Group) NewReader(ctx context.Context, name string) (Reader, error) {
 		return Reader{}, errNotInGroup
 	}
 	return Reader{
-		ReadCloser: g.b.Object(name + "/" + suffix).NewReader(ctx),
-		Key:        suffix,
+		r:   g.b.Object(name + "/" + suffix).NewReader(ctx),
+		Key: suffix,
 	}, nil
 }
 

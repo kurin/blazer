@@ -70,6 +70,60 @@ func TestOperationLive(t *testing.T) {
 	}
 }
 
+type jsonThing struct {
+	Boop   int `json:"boop_field"`
+	Thread int `json:"thread_id"`
+}
+
+func TestOperationJSONLive(t *testing.T) {
+	ctx := context.Background()
+	bucket, done := startLiveTest(ctx, t)
+	defer done()
+
+	g := NewGroup(bucket, "tester")
+	name := "some_kinda_json/thing.json"
+
+	var wg sync.WaitGroup
+	for i := 0; i < 4; i++ {
+		wg.Add(1)
+		i := i
+		go func() {
+			var n int
+			defer wg.Done()
+			for j := 0; j < 4; j++ {
+				// Pass both a struct and a pointer to a struct.
+				var face interface{}
+				face = jsonThing{}
+				if j%2 == 0 {
+					face = &jsonThing{}
+				}
+				if err := g.OperateJSON(ctx, name, face, func(j interface{}) (interface{}, error) {
+					jt := j.(*jsonThing)
+					n = jt.Boop
+					return &jsonThing{
+						Boop:   jt.Boop + 1,
+						Thread: i,
+					}, nil
+				}); err != nil {
+					t.Error(err)
+				}
+				t.Logf("thread %d: successful %d++", i, n)
+			}
+		}()
+	}
+	wg.Wait()
+
+	if err := g.OperateJSON(ctx, name, &jsonThing{}, func(i interface{}) (interface{}, error) {
+		jt := i.(*jsonThing)
+		if jt.Boop != 16 {
+			t.Errorf("got %d boops; want 16", jt.Boop)
+		}
+		return nil, nil
+	}); err != nil {
+		t.Error(err)
+	}
+}
+
 func startLiveTest(ctx context.Context, t *testing.T) (*b2.Bucket, func()) {
 	id := os.Getenv(apiID)
 	key := os.Getenv(apiKey)

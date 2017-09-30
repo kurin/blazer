@@ -594,11 +594,19 @@ func (b *Bucket) Reveal(ctx context.Context, name string) error {
 	return obj.Delete(ctx)
 }
 
+// I don't want to import all of ioutil for this.
+type discard struct{}
+
+func (discard) Write(p []byte) (int, error) {
+	return len(p), nil
+}
+
 func (b *Bucket) getObject(ctx context.Context, name string) (*Object, error) {
 	fr, err := b.b.downloadFileByName(ctx, name, 0, 1)
 	if err != nil {
 		return nil, err
 	}
+	io.Copy(discard{}, fr)
 	fr.Close()
 	return &Object{
 		name: name,

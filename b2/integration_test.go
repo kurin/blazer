@@ -24,6 +24,7 @@ import (
 	"os"
 	"reflect"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -279,7 +280,6 @@ func TestResumeWriter(t *testing.T) {
 }
 
 func TestAttrs(t *testing.T) {
-	// TODO: test is flaky
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
@@ -844,6 +844,74 @@ func listObjects(ctx context.Context, f func(context.Context, int, *Cursor) ([]*
 
 var transport = http.DefaultTransport
 
+type eofTripper struct {
+	rt http.RoundTripper
+	t  *testing.T
+}
+
+func (et eofTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	resp, err := et.rt.RoundTrip(req)
+	if err != nil {
+		return nil, err
+	}
+	resp.Body = &eofReadCloser{rc: resp.Body, t: et.t}
+	return resp, nil
+}
+
+type eofReadCloser struct {
+	rc  io.ReadCloser
+	eof bool
+	t   *testing.T
+}
+
+func (eof *eofReadCloser) Read(p []byte) (int, error) {
+	n, err := eof.rc.Read(p)
+	if err == io.EOF {
+		eof.eof = true
+	}
+	return n, err
+}
+
+func (eof *eofReadCloser) Close() error {
+	if !eof.eof {
+		eof.t.Error("http body closed with bytes unread")
+	}
+	return eof.rc.Close()
+}
+
+// Checks that close is called.
+type ccTripper struct {
+	t     *testing.T
+	rt    http.RoundTripper
+	trips int64
+}
+
+func (cc *ccTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	resp, err := cc.rt.RoundTrip(req)
+	if err != nil {
+		return nil, err
+	}
+	atomic.AddInt64(&cc.trips, 1)
+	resp.Body = &ccRC{ReadCloser: resp.Body, c: &cc.trips}
+	return resp, err
+}
+
+func (cc *ccTripper) done() {
+	if cc.trips != 0 {
+		cc.t.Errorf("failed to close %d HTTP bodies", cc.trips)
+	}
+}
+
+type ccRC struct {
+	io.ReadCloser
+	c *int64
+}
+
+func (cc *ccRC) Close() error {
+	atomic.AddInt64(cc.c, -1)
+	return cc.ReadCloser.Close()
+}
+
 func startLiveTest(ctx context.Context, t *testing.T) (*Bucket, func()) {
 	id := os.Getenv(apiID)
 	key := os.Getenv(apiKey)
@@ -851,7 +919,9 @@ func startLiveTest(ctx context.Context, t *testing.T) (*Bucket, func()) {
 		t.Skipf("B2_ACCOUNT_ID or B2_SECRET_KEY unset; skipping integration tests")
 		return nil, nil
 	}
-	client, err := NewClient(ctx, id, key, FailSomeUploads(), ExpireSomeAuthTokens(), Transport(transport), UserAgent("b2-test"), UserAgent("integration-test"))
+	ccport := &ccTripper{rt: transport, t: t}
+	tport := eofTripper{rt: ccport, t: t}
+	client, err := NewClient(ctx, id, key, FailSomeUploads(), ExpireSomeAuthTokens(), Transport(tport), UserAgent("b2-test"), UserAgent("integration-test"))
 	if err != nil {
 		t.Fatal(err)
 		return nil, nil
@@ -862,6 +932,7 @@ func startLiveTest(ctx context.Context, t *testing.T) (*Bucket, func()) {
 		return nil, nil
 	}
 	f := func() {
+		defer ccport.done()
 		for c := range listObjects(ctx, bucket.ListObjects) {
 			if c.err != nil {
 				continue

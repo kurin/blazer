@@ -1067,35 +1067,36 @@ func (b *Bucket) DownloadFileByName(ctx context.Context, name string, offset, si
 	resp := reply.resp
 	logResponse(resp, nil)
 	if resp.StatusCode != 200 && resp.StatusCode != 206 {
+		defer resp.Body.Close()
 		return nil, mkErr(resp)
 	}
-	clen, err := strconv.ParseInt(reply.resp.Header.Get("Content-Length"), 10, 64)
+	clen, err := strconv.ParseInt(resp.Header.Get("Content-Length"), 10, 64)
 	if err != nil {
-		reply.resp.Body.Close()
+		resp.Body.Close()
 		return nil, err
 	}
 	info := make(map[string]string)
-	for key := range reply.resp.Header {
+	for key := range resp.Header {
 		if !strings.HasPrefix(key, "X-Bz-Info-") {
 			continue
 		}
 		name, err := unescape(strings.TrimPrefix(key, "X-Bz-Info-"))
 		if err != nil {
-			reply.resp.Body.Close()
+			resp.Body.Close()
 			return nil, err
 		}
-		val, err := unescape(reply.resp.Header.Get(key))
+		val, err := unescape(resp.Header.Get(key))
 		if err != nil {
-			reply.resp.Body.Close()
+			resp.Body.Close()
 			return nil, err
 		}
 		info[name] = val
 	}
 	return &FileReader{
-		ReadCloser:    reply.resp.Body,
-		SHA1:          reply.resp.Header.Get("X-Bz-Content-Sha1"),
-		ID:            reply.resp.Header.Get("X-Bz-File-Id"),
-		ContentType:   reply.resp.Header.Get("Content-Type"),
+		ReadCloser:    resp.Body,
+		SHA1:          resp.Header.Get("X-Bz-Content-Sha1"),
+		ID:            resp.Header.Get("X-Bz-File-Id"),
+		ContentType:   resp.Header.Get("Content-Type"),
 		ContentLength: int(clen),
 		Info:          info,
 	}, nil

@@ -144,6 +144,7 @@ func (r *Reader) thread() {
 			r.smap[chunkID] = mr
 			r.smux.Unlock()
 			i, err := copyContext(r.ctx, buf, mr)
+			fr.Close()
 			r.smux.Lock()
 			r.smap[chunkID] = nil
 			r.smux.Unlock()

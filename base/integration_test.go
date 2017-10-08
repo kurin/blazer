@@ -533,3 +533,76 @@ func TestEscapes(t *testing.T) {
 		}
 	}
 }
+
+func TestUploadDownloadFilenameEscaping(t *testing.T) {
+	filename := "file%foo.txt"
+
+	id := os.Getenv(apiID)
+	key := os.Getenv(apiKey)
+
+	if id == "" || key == "" {
+		t.Skipf("B2_ACCOUNT_ID or B2_SECRET_KEY unset; skipping integration tests")
+	}
+	ctx := context.Background()
+
+	// b2_authorize_account
+	b2, err := AuthorizeAccount(ctx, id, key, UserAgent("blazer-base-test"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// b2_create_bucket
+	bname := id + "-" + bucketName
+	bucket, err := b2.CreateBucket(ctx, bname, "", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer func() {
+		// b2_delete_bucket
+		if err := bucket.DeleteBucket(ctx); err != nil {
+			t.Error(err)
+		}
+	}()
+
+	if err != nil {
+		t.Fatalf("error unescaping string: %s\n", err)
+	}
+
+	// b2_get_upload_url
+	ue, err := bucket.GetUploadURL(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// b2_upload_file
+	smallFile := io.LimitReader(zReader{}, 128)
+	hash := sha1.New()
+	buf := &bytes.Buffer{}
+	w := io.MultiWriter(hash, buf)
+	if _, err := io.Copy(w, smallFile); err != nil {
+		t.Error(err)
+	}
+	smallSHA1 := fmt.Sprintf("%x", hash.Sum(nil))
+	file, err := ue.UploadFile(ctx, buf, buf.Len(), filename, "application/octet-stream", smallSHA1, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer func() {
+		// b2_delete_file_version
+		if err := file.DeleteFileVersion(ctx); err != nil {
+			t.Error(err)
+		}
+	}()
+
+	// b2_download_file_by_name
+	fr, err := bucket.DownloadFileByName(ctx, filename, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lbuf := &bytes.Buffer{}
+	if _, err := io.Copy(lbuf, fr); err != nil {
+		t.Fatal(err)
+	}
+}

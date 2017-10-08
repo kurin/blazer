@@ -1038,7 +1038,7 @@ func mkRange(offset, size int64) string {
 
 // DownloadFileByName wraps b2_download_file_by_name.
 func (b *Bucket) DownloadFileByName(ctx context.Context, name string, offset, size int64) (*FileReader, error) {
-	uri := fmt.Sprintf("%s/file/%s/%s", b.b2.downloadURI, b.Name, name)
+	uri := fmt.Sprintf("%s/file/%s/%s", b.b2.downloadURI, b.Name, escape(name))
 	req, err := http.NewRequest("GET", uri, nil)
 	if err != nil {
 		return nil, err

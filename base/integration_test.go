@@ -565,10 +565,6 @@ func TestUploadDownloadFilenameEscaping(t *testing.T) {
 		}
 	}()
 
-	if err != nil {
-		t.Fatalf("error unescaping string: %s\n", err)
-	}
-
 	// b2_get_upload_url
 	ue, err := bucket.GetUploadURL(ctx)
 	if err != nil {

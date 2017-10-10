@@ -381,7 +381,7 @@ func TestBadUpload(t *testing.T) {
 		}
 	}
 	if Action(err) != AttemptNewUpload {
-		t.Error("Action(%v): got %v, want AttemptNewUpload", err, Action(err))
+		t.Errorf("Action(%v): got %v, want AttemptNewUpload", err, Action(err))
 	}
 }
 

@@ -1,8 +1,8 @@
 package base
 
 import (
-	"testing"
 	"fmt"
+	"testing"
 )
 
 func TestEncodeDecode(t *testing.T) {

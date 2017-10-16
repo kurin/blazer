@@ -229,6 +229,19 @@ type b2Options struct {
 	userAgent       string
 }
 
+func (o *b2Options) addHeaders(req *http.Request) {
+	if o.failSomeUploads {
+		req.Header.Add("X-Bz-Test-Mode", "fail_some_uploads")
+	}
+	if o.expireTokens {
+		req.Header.Add("X-Bz-Test-Mode", "expire_some_account_authorization_tokens")
+	}
+	if o.capExceeded {
+		req.Header.Add("X-Bz-Test-Mode", "force_cap_exceeded")
+	}
+	req.Header.Set("User-Agent", o.getUserAgent())
+}
+
 func (o *b2Options) getAPIBase() string {
 	if o.apiBase != "" {
 		return o.apiBase
@@ -358,18 +371,9 @@ func (o *b2Options) makeRequest(ctx context.Context, method, verb, uri string, b
 		}
 		req.Header.Set(k, v)
 	}
-	req.Header.Set("User-Agent", o.getUserAgent())
 	req.Header.Set("X-Blazer-Request-ID", fmt.Sprintf("%d", atomic.AddInt64(&reqID, 1)))
 	req.Header.Set("X-Blazer-Method", method)
-	if o.failSomeUploads {
-		req.Header.Add("X-Bz-Test-Mode", "fail_some_uploads")
-	}
-	if o.expireTokens {
-		req.Header.Add("X-Bz-Test-Mode", "expire_some_account_authorization_tokens")
-	}
-	if o.capExceeded {
-		req.Header.Add("X-Bz-Test-Mode", "force_cap_exceeded")
-	}
+	o.addHeaders(req)
 	cancel := make(chan struct{})
 	req.Cancel = cancel
 	logRequest(req, args)
@@ -1053,6 +1057,7 @@ func (b *Bucket) DownloadFileByName(ctx context.Context, name string, offset, si
 	req.Header.Set("Authorization", b.b2.authToken)
 	req.Header.Set("X-Blazer-Request-ID", fmt.Sprintf("%d", atomic.AddInt64(&reqID, 1)))
 	req.Header.Set("X-Blazer-Method", "b2_download_file_by_name")
+	b.b2.opts.addHeaders(req)
 	rng := mkRange(offset, size)
 	if rng != "" {
 		req.Header.Set("Range", rng)

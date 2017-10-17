@@ -11,6 +11,7 @@ import (
 	"github.com/google/subcommands"
 
 	_ "github.com/kurin/blazer/bin/b2/authorizeaccount"
+	_ "github.com/kurin/blazer/bin/b2/listbuckets"
 )
 
 func main() {

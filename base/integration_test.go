@@ -287,7 +287,9 @@ func (w *wonkyNetConn) Write(b []byte) (int, error) {
 		select {}
 	}
 	n, err := w.Conn.Write(b)
-	w.i += n
+	if w.ctx.Err() != nil {
+		w.i += n
+	}
 	return n, err
 }
 
@@ -382,6 +384,119 @@ func TestBadUpload(t *testing.T) {
 	}
 	if Action(err) != AttemptNewUpload {
 		t.Errorf("Action(%v): got %v, want AttemptNewUpload", err, Action(err))
+	}
+}
+
+func TestCancelledContextCancelsHTTPRequest(t *testing.T) {
+	id := os.Getenv(apiID)
+	key := os.Getenv(apiKey)
+	if id == "" || key == "" {
+		t.Skipf("B2_ACCOUNT_ID or B2_SECRET_KEY unset; skipping integration tests")
+	}
+	ctx := context.Background()
+
+	octx, ocancel := context.WithCancel(ctx)
+	defer ocancel()
+
+	badTransport := &http.Transport{
+		Proxy:                 http.ProxyFromEnvironment,
+		DialContext:           makeBadDialContext(octx),
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
+
+	b2, err := AuthorizeAccount(ctx, id, key, Transport(badTransport))
+	if err != nil {
+		t.Fatal(err)
+	}
+	bname := id + "-" + bucketName
+	bucket, err := b2.CreateBucket(ctx, bname, "", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := bucket.DeleteBucket(ctx); err != nil {
+			t.Error(err)
+		}
+	}()
+	ue, err := bucket.GetUploadURL(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	smallFile := io.LimitReader(zReader{}, 1024*50) // 50k
+	hash := sha1.New()
+	buf := &bytes.Buffer{}
+	w := io.MultiWriter(hash, buf)
+	if _, err := io.Copy(w, smallFile); err != nil {
+		t.Error(err)
+	}
+	smallSHA1 := fmt.Sprintf("%x", hash.Sum(nil))
+	ocancel()
+	cctx, cancel := context.WithCancel(ctx)
+	go func() {
+		time.Sleep(1)
+		cancel()
+	}()
+	if _, err := ue.UploadFile(cctx, buf, buf.Len(), smallFileName, "application/octet-stream", smallSHA1, nil); err != context.Canceled {
+		t.Errorf("expected canceled context, but got %v", err)
+	}
+}
+
+func TestDeadlineExceededContextCancelsHTTPRequest(t *testing.T) {
+	id := os.Getenv(apiID)
+	key := os.Getenv(apiKey)
+	if id == "" || key == "" {
+		t.Skipf("B2_ACCOUNT_ID or B2_SECRET_KEY unset; skipping integration tests")
+	}
+	ctx := context.Background()
+
+	octx, ocancel := context.WithCancel(ctx)
+	defer ocancel()
+
+	badTransport := &http.Transport{
+		Proxy:                 http.ProxyFromEnvironment,
+		DialContext:           makeBadDialContext(octx),
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
+
+	b2, err := AuthorizeAccount(ctx, id, key, Transport(badTransport))
+	if err != nil {
+		t.Fatal(err)
+	}
+	bname := id + "-" + bucketName
+	bucket, err := b2.CreateBucket(ctx, bname, "", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := bucket.DeleteBucket(ctx); err != nil {
+			t.Error(err)
+		}
+	}()
+	ue, err := bucket.GetUploadURL(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	smallFile := io.LimitReader(zReader{}, 1024*50) // 50k
+	hash := sha1.New()
+	buf := &bytes.Buffer{}
+	w := io.MultiWriter(hash, buf)
+	if _, err := io.Copy(w, smallFile); err != nil {
+		t.Error(err)
+	}
+	smallSHA1 := fmt.Sprintf("%x", hash.Sum(nil))
+	ocancel()
+	cctx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	if _, err := ue.UploadFile(cctx, buf, buf.Len(), smallFileName, "application/octet-stream", smallSHA1, nil); err != context.DeadlineExceeded {
+		t.Errorf("expected deadline exceeded error, but got %v", err)
 	}
 }
 

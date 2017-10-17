@@ -396,10 +396,11 @@ func (o *b2Options) makeRequest(ctx context.Context, method, verb, uri string, b
 		}
 		replyArgs = rbuf.Bytes()
 	} else {
-		replyArgs, err = ioutil.ReadAll(resp.Body)
+		ra, err = ioutil.ReadAll(resp.Body)
 		if err != nil {
-			return err
+			blog.V(1).Infof("%s: couldn't read response: %v", method, err)
 		}
+		replyArgs = ra
 	}
 	logResponse(resp, replyArgs)
 	return nil

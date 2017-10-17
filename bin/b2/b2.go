@@ -9,6 +9,8 @@ import (
 	"os"
 
 	"github.com/google/subcommands"
+
+	_ "github.com/kurin/blazer/bin/b2/authorizeaccount"
 )
 
 func main() {

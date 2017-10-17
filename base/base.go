@@ -289,8 +289,14 @@ type httpReply struct {
 }
 
 func makeNetRequest(ctx context.Context, req *http.Request, rt http.RoundTripper) (*http.Response, error) {
+	req = req.WithContext(ctx)
 	resp, err := rt.RoundTrip(req)
-	if err != nil {
+	switch err {
+	case nil:
+		return resp, nil
+	case context.Canceled, context.DeadlineExceeded:
+		return nil, err
+	default:
 		method := req.Header.Get("X-Blazer-Method")
 		blog.V(2).Infof(">> %s uri: %v err: %v", method, req.URL, err)
 		return nil, b2err{
@@ -298,7 +304,6 @@ func makeNetRequest(ctx context.Context, req *http.Request, rt http.RoundTripper
 			retry: 1,
 		}
 	}
-	return resp, nil
 }
 
 type requestBody struct {
@@ -396,7 +401,7 @@ func (o *b2Options) makeRequest(ctx context.Context, method, verb, uri string, b
 		}
 		replyArgs = rbuf.Bytes()
 	} else {
-		ra, err = ioutil.ReadAll(resp.Body)
+		ra, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
 			blog.V(1).Infof("%s: couldn't read response: %v", method, err)
 		}

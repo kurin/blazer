@@ -12,6 +12,7 @@ import (
 
 	_ "github.com/kurin/blazer/bin/b2/authorizeaccount"
 	_ "github.com/kurin/blazer/bin/b2/listbuckets"
+	_ "github.com/kurin/blazer/bin/b2/listfilenames"
 )
 
 func main() {

@@ -1,10 +1,13 @@
-package listbuckets
+package listfilenames
+
+// The tool I'm copying has a lot of 1-1 correspondence with the API.
 
 import (
 	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -14,14 +17,14 @@ import (
 )
 
 func init() {
-	subcommands.Register(command{}, "bucket")
+	subcommands.Register(command{}, "file")
 }
 
 type command struct{}
 
-func (command) Name() string           { return "list-buckets" }
-func (command) Synopsis() string       { return "List B2 buckets." }
-func (command) Usage() string          { return "list-buckets\n" }
+func (command) Name() string           { return "list-file-names" }
+func (command) Synopsis() string       { return "List file names." }
+func (command) Usage() string          { return "list-file-names <bucketName> [<startFileName>] [<maxToShow>]\n" }
 func (command) SetFlags(*flag.FlagSet) {}
 
 func (command) Execute(ctx context.Context, f *flag.FlagSet, _ ...interface{}) subcommands.ExitStatus {
@@ -38,20 +41,38 @@ func (command) Execute(ctx context.Context, f *flag.FlagSet, _ ...interface{}) s
 		return subcommands.ExitFailure
 	}
 
+	args := f.Args()
+	if len(args) < 1 {
+		f.Usage()
+		return subcommands.ExitUsageError
+	}
+
 	client, err := b2.NewClient(ctx, ai.AuthID, ai.AuthKey)
 	if err != nil {
 		fmt.Println(err)
 		return subcommands.ExitFailure
 	}
-	buckets, err := client.ListBuckets(ctx)
+	bucket, err := client.Bucket(ctx, args[0])
 	if err != nil {
 		fmt.Println(err)
 		return subcommands.ExitFailure
 	}
-	for _, bucket := range buckets {
-		fmt.Println(bucket.Name())
+
+	cur := &b2.Cursor{}
+	for {
+		objs, nc, err := bucket.ListCurrentObjects(ctx, 1000, cur)
+		if err != io.EOF && err != nil {
+			fmt.Println(err)
+			return subcommands.ExitFailure
+		}
+		for _, obj := range objs {
+			fmt.Println(obj.Name())
+		}
+		if err == io.EOF {
+			return subcommands.ExitSuccess
+		}
+		cur = nc
 	}
-	return subcommands.ExitSuccess
 }
 
 type authInfo struct {

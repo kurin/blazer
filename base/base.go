@@ -288,14 +288,17 @@ type httpReply struct {
 	err  error
 }
 
-func makeNetRequest(req *http.Request, rt http.RoundTripper) <-chan httpReply {
-	ch := make(chan httpReply)
-	go func() {
-		resp, err := rt.RoundTrip(req)
-		ch <- httpReply{resp, err}
-		close(ch)
-	}()
-	return ch
+func makeNetRequest(ctx context.Context, req *http.Request, rt http.RoundTripper) (*http.Response, error) {
+	resp, err := rt.RoundTrip(req)
+	if err != nil {
+		method := req.Header.Get("X-Blazer-Method")
+		blog.V(2).Infof(">> %s uri: %v err: %v", method, req.URL, err)
+		return nil, b2err{
+			msg:   err.Error(),
+			retry: 1,
+		}
+	}
+	return resp, nil
 }
 
 type requestBody struct {
@@ -374,26 +377,11 @@ func (o *b2Options) makeRequest(ctx context.Context, method, verb, uri string, b
 	req.Header.Set("X-Blazer-Request-ID", fmt.Sprintf("%d", atomic.AddInt64(&reqID, 1)))
 	req.Header.Set("X-Blazer-Method", method)
 	o.addHeaders(req)
-	cancel := make(chan struct{})
-	req.Cancel = cancel
 	logRequest(req, args)
-	ch := makeNetRequest(req, o.getTransport())
-	var reply httpReply
-	select {
-	case reply = <-ch:
-	case <-ctx.Done():
-		close(cancel)
-		return ctx.Err()
+	resp, err := makeNetRequest(ctx, req, o.getTransport())
+	if err != nil {
+		return err
 	}
-	if reply.err != nil {
-		// Connection errors are retryable.
-		blog.V(2).Infof(">> %s uri: %v err: %v", method, req.URL, reply.err)
-		return b2err{
-			msg:   reply.err.Error(),
-			retry: 1,
-		}
-	}
-	resp := reply.resp
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
 		return mkErr(resp)
@@ -1062,21 +1050,11 @@ func (b *Bucket) DownloadFileByName(ctx context.Context, name string, offset, si
 	if rng != "" {
 		req.Header.Set("Range", rng)
 	}
-	cancel := make(chan struct{})
-	req.Cancel = cancel
 	logRequest(req, nil)
-	ch := makeNetRequest(req, b.b2.opts.getTransport())
-	var reply httpReply
-	select {
-	case reply = <-ch:
-	case <-ctx.Done():
-		close(cancel)
-		return nil, ctx.Err()
+	resp, err := makeNetRequest(ctx, req, b.b2.opts.getTransport())
+	if err != nil {
+		return nil, err
 	}
-	if reply.err != nil {
-		return nil, reply.err
-	}
-	resp := reply.resp
 	logResponse(resp, nil)
 	if resp.StatusCode != 200 && resp.StatusCode != 206 {
 		defer resp.Body.Close()

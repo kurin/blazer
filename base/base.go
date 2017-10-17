@@ -133,13 +133,13 @@ func mkErr(resp *http.Response) error {
 	data, err := ioutil.ReadAll(resp.Body)
 	var msgBody string
 	if err != nil {
-		msgBody = fmt.Sprintf("couldn't read message body: %v")
+		msgBody = fmt.Sprintf("couldn't read message body: %v", err)
 	}
 	logResponse(resp, data)
 	msg := &b2types.ErrorMessage{}
 	if err := json.Unmarshal(data, msg); err != nil {
 		if msgBody != "" {
-			msgBody = fmt.Sprintf("couldn't read message body: %v")
+			msgBody = fmt.Sprintf("couldn't read message body: %v", err)
 		}
 	}
 	if msgBody == "" {

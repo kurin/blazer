@@ -767,7 +767,7 @@ func TestAttrsNoRoundtrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(objs) != 1 {
-		t.Fatal("unexpected objects: got %d, want 1", len(objs))
+		t.Fatalf("unexpected objects: got %d, want 1", len(objs))
 	}
 
 	trips := rt.trips

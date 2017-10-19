@@ -24,7 +24,6 @@ import (
 	"math/rand"
 	"net/http"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -52,12 +51,11 @@ type options struct {
 	stall          time.Duration
 	rt             http.RoundTripper
 	msg            string
-	hangAfter      int64
 	trg            *triggerReaderGroup
 }
 
 func (o *options) doRequest(req *http.Request) (*http.Response, error) {
-	if o.trg != nil {
+	if o.trg != nil && req.Body != nil {
 		req.Body = o.trg.new(req.Body)
 	}
 	resp, err := o.rt.RoundTrip(req)
@@ -68,6 +66,7 @@ func (o *options) doRequest(req *http.Request) (*http.Response, error) {
 }
 
 func (o *options) RoundTrip(req *http.Request) (*http.Response, error) {
+	// TODO: fix triggering conditions
 	if rand.Float64() > o.failureRate {
 		return o.doRequest(req)
 	}
@@ -164,7 +163,8 @@ func Trigger(ctx context.Context) FailureOption {
 // AfterNBytes will call effect once (roughly) n bytes have gone over the wire.
 // Both sent and received bytes are counted against the total.  Only bytes in
 // the body of an HTTP request are currently counted; this may change in the
-// future.
+// future.  effect will only be called once, and it will block (allowing
+// callers to simulate connection hangs).
 func AfterNBytes(n int, effect func()) FailureOption {
 	return func(o *options) {
 		o.trg = &triggerReaderGroup{
@@ -175,9 +175,9 @@ func AfterNBytes(n int, effect func()) FailureOption {
 }
 
 type triggerReaderGroup struct {
-	bytes   int64
-	trigger func()
-	once    sync.Once
+	bytes     int64
+	trigger   func()
+	triggered int64
 }
 
 func (rg *triggerReaderGroup) new(rc io.ReadCloser) io.ReadCloser {
@@ -185,21 +185,22 @@ func (rg *triggerReaderGroup) new(rc io.ReadCloser) io.ReadCloser {
 		ReadCloser: rc,
 		bytes:      &rg.bytes,
 		trigger:    rg.trigger,
-		once:       &rg.once,
+		triggered:  &rg.triggered,
 	}
 }
 
 type triggerReader struct {
 	io.ReadCloser
-	bytes   *int64
-	trigger func()
-	once    *sync.Once
+	bytes     *int64
+	trigger   func()
+	triggered *int64
 }
 
 func (r *triggerReader) Read(p []byte) (int, error) {
 	n, err := r.ReadCloser.Read(p)
-	if atomic.AddInt64(r.bytes, -int64(n)) < 0 {
-		r.once.Do(r.trigger)
+	if atomic.AddInt64(r.bytes, -int64(n)) < 0 && atomic.CompareAndSwapInt64(r.triggered, 0, 1) {
+		// Can't use sync.Once because it blocks for *all* callers until Do returns.
+		r.trigger()
 	}
 	return n, err
 }

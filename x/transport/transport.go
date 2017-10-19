@@ -29,7 +29,13 @@ import (
 	"time"
 )
 
+// WithFailures returns an http.RoundTripper that wraps an existing
+// RoundTripper, causing failures according to the options given.  If rt is
+// nil, the http.DefaultTransport is wrapped.
 func WithFailures(rt http.RoundTripper, opts ...FailureOption) http.RoundTripper {
+	if rt == nil {
+		rt = http.DefaultTransport
+	}
 	o := &options{
 		rt: rt,
 	}
@@ -40,14 +46,14 @@ func WithFailures(rt http.RoundTripper, opts ...FailureOption) http.RoundTripper
 }
 
 type options struct {
-	urlSubstrings []string
-	failureRate   float64
-	status        int
-	stall         time.Duration
-	rt            http.RoundTripper
-	msg           string
-	hangAfter     int64
-	trg           *triggerReaderGroup
+	pathSubstrings []string
+	failureRate    float64
+	status         int
+	stall          time.Duration
+	rt             http.RoundTripper
+	msg            string
+	hangAfter      int64
+	trg            *triggerReaderGroup
 }
 
 func (o *options) doRequest(req *http.Request) (*http.Response, error) {
@@ -67,7 +73,10 @@ func (o *options) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 
 	var match bool
-	for _, ss := range o.urlSubstrings {
+	if len(o.pathSubstrings) == 0 {
+		match = true
+	}
+	for _, ss := range o.pathSubstrings {
 		if strings.Contains(req.URL.Path, ss) {
 			match = true
 			break
@@ -96,38 +105,53 @@ func (o *options) RoundTrip(req *http.Request) (*http.Response, error) {
 	return o.doRequest(req)
 }
 
+// A FailureOption specifies the kind of failure that the RoundTripper should
+// display.
 type FailureOption func(*options)
 
-func MatchURLSubstring(s string) FailureOption {
+// MatchPathSubstring restricts the RoundTripper to URLs whose paths contain
+// the given string.  The default behavior is to match all paths.
+func MatchPathSubstring(s string) FailureOption {
 	return func(o *options) {
-		o.urlSubstrings = append(o.urlSubstrings, s)
+		o.pathSubstrings = append(o.pathSubstrings, s)
 	}
 }
 
+// FailureRate causes the RoundTripper to fail a certain percentage of the
+// time.  rate should be a number between 0 and 1, where 0 will never fail and
+// 1 will always fail.  The default is never to fail.
 func FailureRate(rate float64) FailureOption {
 	return func(o *options) {
 		o.failureRate = rate
 	}
 }
 
+// Response simulates a given status code.  The returned http.Response will
+// have its Status, StatusCode, and Body (with any predefined message) set.
 func Response(status int) FailureOption {
 	return func(o *options) {
 		o.status = status
 	}
 }
 
+// Stall simulates a network connection failure by stalling for the given
+// duration.
 func Stall(dur time.Duration) FailureOption {
 	return func(o *options) {
 		o.stall = dur
 	}
 }
 
+// If a specific Response is requested, the body will have the given message
+// set.
 func Body(msg string) FailureOption {
 	return func(o *options) {
 		o.msg = msg
 	}
 }
 
+// Trigger will raise the RoundTripper's failure rate to 100% when the given
+// context is closed.
 func Trigger(ctx context.Context) FailureOption {
 	return func(o *options) {
 		go func() {
@@ -137,10 +161,14 @@ func Trigger(ctx context.Context) FailureOption {
 	}
 }
 
-func AfterNBytes(bytes int, effect func()) FailureOption {
+// AfterNBytes will call effect once (roughly) n bytes have gone over the wire.
+// Both sent and received bytes are counted against the total.  Only bytes in
+// the body of an HTTP request are currently counted; this may change in the
+// future.
+func AfterNBytes(n int, effect func()) FailureOption {
 	return func(o *options) {
 		o.trg = &triggerReaderGroup{
-			bytes:   int64(bytes),
+			bytes:   int64(n),
 			trigger: effect,
 		}
 	}

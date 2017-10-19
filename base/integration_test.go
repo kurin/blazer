@@ -20,8 +20,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
-	"net/http"
 	"os"
 	"reflect"
 	"strings"
@@ -272,49 +270,6 @@ func TestStorage(t *testing.T) {
 	}
 }
 
-// This slow motion train wreck of a type exists to axe a net connection after
-// N bytes have been written.  Because of the specific bug it's built to test,
-// it can't just *close* the connection, so it just sleeps forever.
-type wonkyNetConn struct {
-	net.Conn
-	ctx context.Context // implode once cancelled
-	die *bool           // only implode once
-	n   int             // bytes to allow before imploding, roughly
-	i   int             // bytes written
-}
-
-func (w *wonkyNetConn) Write(b []byte) (int, error) {
-	if w.i > w.n && w.ctx.Err() != nil && *w.die {
-		*w.die = false
-		select {}
-	}
-	n, err := w.Conn.Write(b)
-	if w.ctx.Err() != nil {
-		w.i += n
-	}
-	return n, err
-}
-
-func newWonkyNetConn(ctx context.Context, die *bool, n int, netw, addr string) (net.Conn, error) {
-	conn, err := net.Dial(netw, addr)
-	if err != nil {
-		return nil, err
-	}
-	return &wonkyNetConn{
-		Conn: conn,
-		ctx:  ctx,
-		n:    n,
-		die:  die,
-	}, nil
-}
-
-func makeBadDialContext(ctx context.Context) func(context.Context, string, string) (net.Conn, error) {
-	die := true
-	return func(noCtx context.Context, network, addr string) (net.Conn, error) {
-		return newWonkyNetConn(ctx, &die, 10000, network, addr)
-	}
-}
-
 func TestUploadAuthAfterConnectionHang(t *testing.T) {
 	id := os.Getenv(apiID)
 	key := os.Getenv(apiKey)
@@ -365,9 +320,7 @@ func TestUploadAuthAfterConnectionHang(t *testing.T) {
 		t.Fatal("this ought not to be reachable")
 	}()
 
-	fmt.Println("hanging")
 	<-hung
-	fmt.Println("hanged")
 
 	// Do the whole thing again with the same upload auth, before the remote end
 	// notices we're gone.
@@ -396,19 +349,9 @@ func TestCancelledContextCancelsHTTPRequest(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	octx, ocancel := context.WithCancel(ctx)
-	defer ocancel()
+	tport := transport.WithFailures(nil, transport.MatchPathSubstring("b2_upload_file"), transport.FailureRate(1), transport.Stall(2*time.Second))
 
-	badTransport := &http.Transport{
-		Proxy:                 http.ProxyFromEnvironment,
-		DialContext:           makeBadDialContext(octx),
-		MaxIdleConns:          100,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-	}
-
-	b2, err := AuthorizeAccount(ctx, id, key, Transport(badTransport))
+	b2, err := AuthorizeAccount(ctx, id, key, Transport(tport))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -435,7 +378,6 @@ func TestCancelledContextCancelsHTTPRequest(t *testing.T) {
 		t.Error(err)
 	}
 	smallSHA1 := fmt.Sprintf("%x", hash.Sum(nil))
-	ocancel()
 	cctx, cancel := context.WithCancel(ctx)
 	go func() {
 		time.Sleep(1)
@@ -454,19 +396,8 @@ func TestDeadlineExceededContextCancelsHTTPRequest(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	octx, ocancel := context.WithCancel(ctx)
-	defer ocancel()
-
-	badTransport := &http.Transport{
-		Proxy:                 http.ProxyFromEnvironment,
-		DialContext:           makeBadDialContext(octx),
-		MaxIdleConns:          100,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-	}
-
-	b2, err := AuthorizeAccount(ctx, id, key, Transport(badTransport))
+	tport := transport.WithFailures(nil, transport.MatchPathSubstring("b2_upload_file"), transport.FailureRate(1), transport.Stall(2*time.Second))
+	b2, err := AuthorizeAccount(ctx, id, key, Transport(tport))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -493,7 +424,6 @@ func TestDeadlineExceededContextCancelsHTTPRequest(t *testing.T) {
 		t.Error(err)
 	}
 	smallSHA1 := fmt.Sprintf("%x", hash.Sum(nil))
-	ocancel()
 	cctx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 	if _, err := ue.UploadFile(cctx, buf, buf.Len(), smallFileName, "application/octet-stream", smallSHA1, nil); err != context.DeadlineExceeded {

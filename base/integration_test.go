@@ -28,6 +28,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kurin/blazer/x/transport"
+
 	"context"
 )
 
@@ -313,7 +315,7 @@ func makeBadDialContext(ctx context.Context) func(context.Context, string, strin
 	}
 }
 
-func TestBadUpload(t *testing.T) {
+func TestUploadAuthAfterConnectionHang(t *testing.T) {
 	id := os.Getenv(apiID)
 	key := os.Getenv(apiKey)
 	if id == "" || key == "" {
@@ -321,19 +323,16 @@ func TestBadUpload(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	octx, ocancel := context.WithCancel(ctx)
-	defer ocancel()
+	hung := make(chan struct{})
 
-	badTransport := &http.Transport{
-		Proxy:                 http.ProxyFromEnvironment,
-		DialContext:           makeBadDialContext(octx),
-		MaxIdleConns:          100,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
+	// An http.RoundTripper that dies after sending ~10k bytes.
+	hang := func() {
+		close(hung)
+		select {}
 	}
+	tport := transport.WithFailures(nil, transport.AfterNBytes(10000, hang))
 
-	b2, err := AuthorizeAccount(ctx, id, key, Transport(badTransport))
+	b2, err := AuthorizeAccount(ctx, id, key, Transport(tport))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -360,13 +359,15 @@ func TestBadUpload(t *testing.T) {
 		t.Error(err)
 	}
 	smallSHA1 := fmt.Sprintf("%x", hash.Sum(nil))
-	ocancel()
+
 	go func() {
 		ue.UploadFile(ctx, buf, buf.Len(), smallFileName, "application/octet-stream", smallSHA1, nil)
 		t.Fatal("this ought not to be reachable")
 	}()
 
-	time.Sleep(time.Second) // give this a chance to hang
+	fmt.Println("hanging")
+	<-hung
+	fmt.Println("hanged")
 
 	// Do the whole thing again with the same upload auth, before the remote end
 	// notices we're gone.

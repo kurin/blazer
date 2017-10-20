@@ -90,6 +90,7 @@ func (o *options) RoundTrip(req *http.Request) (*http.Response, error) {
 			Status:     fmt.Sprintf("%d %s", o.status, http.StatusText(o.status)),
 			StatusCode: o.status,
 			Body:       ioutil.NopCloser(strings.NewReader(o.msg)),
+			Request:    req,
 		}
 		return resp, nil
 	}

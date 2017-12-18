@@ -144,7 +144,7 @@ func (w *Writer) thread() {
 			}
 			if sha, ok := w.seen[chunk.id]; ok {
 				if sha != chunk.buf.Hash() {
-					w.setErr(errors.New("resumable upload was requested, but chunks don't match!"))
+					w.setErr(errors.New("resumable upload was requested, but chunks don't match"))
 					return
 				}
 				chunk.buf.Close()

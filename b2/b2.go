@@ -240,7 +240,7 @@ func (c *Client) NewBucket(ctx context.Context, name string, attrs *BucketAttrs)
 	}, err
 }
 
-// ListBucket returns all the available buckets.
+// ListBuckets returns all the available buckets.
 func (c *Client) ListBuckets(ctx context.Context) ([]*Bucket, error) {
 	bs, err := c.backend.listBuckets(ctx)
 	if err != nil {

@@ -698,9 +698,9 @@ func (b *Bucket) File(id, name string) *File {
 }
 
 // UploadFile wraps b2_upload_file.
-func (u *URL) UploadFile(ctx context.Context, r io.Reader, size int, name, contentType, sha1 string, info map[string]string) (*File, error) {
+func (url *URL) UploadFile(ctx context.Context, r io.Reader, size int, name, contentType, sha1 string, info map[string]string) (*File, error) {
 	headers := map[string]string{
-		"Authorization":     u.token,
+		"Authorization":     url.token,
 		"X-Bz-File-Name":    name,
 		"Content-Type":      contentType,
 		"Content-Length":    fmt.Sprintf("%d", size),
@@ -710,7 +710,7 @@ func (u *URL) UploadFile(ctx context.Context, r io.Reader, size int, name, conte
 		headers[fmt.Sprintf("X-Bz-Info-%s", k)] = v
 	}
 	b2resp := &b2types.UploadFileResponse{}
-	if err := u.b2.opts.makeRequest(ctx, "b2_upload_file", "POST", u.uri, nil, b2resp, headers, &requestBody{body: r, size: int64(size)}); err != nil {
+	if err := url.b2.opts.makeRequest(ctx, "b2_upload_file", "POST", url.uri, nil, b2resp, headers, &requestBody{body: r, size: int64(size)}); err != nil {
 		return nil, err
 	}
 	return &File{
@@ -719,7 +719,7 @@ func (u *URL) UploadFile(ctx context.Context, r io.Reader, size int, name, conte
 		Timestamp: millitime(b2resp.Timestamp),
 		Status:    b2resp.Action,
 		id:        b2resp.FileID,
-		b2:        u.b2,
+		b2:        url.b2,
 	}, nil
 }
 

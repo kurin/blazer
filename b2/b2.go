@@ -565,6 +565,37 @@ func (b *Bucket) ListCurrentObjects(ctx context.Context, count int, c *Cursor) (
 	return objects, next, rtnErr
 }
 
+// ListUnfinishedLargeFiles lists any objects that correspond to large file uploads that haven't been completed.
+// This can happen for example when an upload is interrupted.
+func (b *Bucket) ListUnfinishedLargeFiles(ctx context.Context, count int, c *Cursor) ([]*Object, *Cursor, error) {
+	if c == nil {
+		c = &Cursor{}
+	}
+	fs, name, err := b.b.listUnfinishedLargeFiles(ctx, count, c.name)
+	if err != nil {
+		return nil, nil, err
+	}
+	var next *Cursor
+	if name != "" {
+		next = &Cursor{
+			name: name,
+		}
+	}
+	var objects []*Object
+	for _, f := range fs {
+		objects = append(objects, &Object{
+			name: f.name(),
+			f:    f,
+			b:    b,
+		})
+	}
+	var rtnErr error
+	if len(objects) == 0 || next == nil {
+		rtnErr = io.EOF
+	}
+	return objects, next, rtnErr
+}
+
 // Hide hides the object from name-based listing.
 func (o *Object) Hide(ctx context.Context) error {
 	if err := o.ensure(ctx); err != nil {

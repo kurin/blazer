@@ -804,6 +804,26 @@ func TestDeleteWithoutName(t *testing.T) {
 	}
 }
 
+func TestListUnfinishedLargeFiles(t *testing.T) {
+	ctx := context.Background()
+	bucket, done := startLiveTest(ctx, t)
+	defer done()
+
+	w := bucket.Object(largeFileName).NewWriter(ctx)
+	w.ChunkSize = 1e5
+	if _, err := io.Copy(w, io.LimitReader(zReader{}, 1e6)); err != nil {
+		t.Fatal(err)
+	}
+	// Don't close the writer.
+	fs, _, err := bucket.ListUnfinishedLargeFiles(ctx, 10, nil)
+	if err != io.EOF && err != nil {
+		t.Fatal(err)
+	}
+	if len(fs) != 1 {
+		t.Errorf("ListUnfinishedLargeFiles: got %d, want 1", len(fs))
+	}
+}
+
 type object struct {
 	o   *Object
 	err error

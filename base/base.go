@@ -18,7 +18,6 @@
 // It currently lacks support for the following APIs:
 //
 // b2_download_file_by_id
-// b2_list_unfinished_large_files
 package base
 
 import (

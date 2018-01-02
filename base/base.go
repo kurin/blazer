@@ -924,6 +924,39 @@ func (l *LargeFile) FinishLargeFile(ctx context.Context) (*File, error) {
 	}, nil
 }
 
+// ListUnfinishedLargeFiles wraps b2_list_unfinished_large_files.
+func (b *Bucket) ListUnfinishedLargeFiles(ctx context.Context, count int, continuation string) ([]*File, string, error) {
+	b2req := &b2types.ListUnfinishedLargeFilesRequest{
+		BucketID:     b.id,
+		Continuation: continuation,
+		Count:        count,
+	}
+	b2resp := &b2types.ListUnfinishedLargeFilesResponse{}
+	headers := map[string]string{
+		"Authorization": b.b2.authToken,
+	}
+	if err := b.b2.opts.makeRequest(ctx, "b2_list_unfinished_large_files", "POST", b.b2.apiURI+b2types.V1api+"b2_list_unfinished_large_files", b2req, b2resp, headers, nil); err != nil {
+		return nil, "", err
+	}
+	cont := b2resp.Continuation
+	var files []*File
+	for _, f := range b2resp.Files {
+		files = append(files, &File{
+			Name:      f.Name,
+			Timestamp: millitime(f.Timestamp),
+			b2:        b.b2,
+			id:        f.FileID,
+			Info: &FileInfo{
+				Name:        f.Name,
+				ContentType: f.ContentType,
+				Info:        f.Info,
+				Timestamp:   millitime(f.Timestamp),
+			},
+		})
+	}
+	return files, cont, nil
+}
+
 // ListFileNames wraps b2_list_file_names.
 func (b *Bucket) ListFileNames(ctx context.Context, count int, continuation, prefix, delimiter string) ([]*File, string, error) {
 	b2req := &b2types.ListFileNamesRequest{

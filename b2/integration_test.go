@@ -786,6 +786,40 @@ func TestAttrsNoRoundtrip(t *testing.T) {
 	}
 }
 
+func TestAttrsFewRoundtrips(t *testing.T) {
+	rt := &rtCounter{rt: defaultTransport}
+	defaultTransport = rt
+	defer func() {
+		defaultTransport = rt.rt
+	}()
+
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	defer cancel()
+
+	bucket, done := startLiveTest(ctx, t)
+	defer done()
+
+	_, _, err := writeFile(ctx, bucket, smallFileName, 1e6+42, 1e8)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	o := bucket.Object(smallFileName)
+	trips := rt.trips
+	attrs, err := o.Attrs(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if attrs.Name != smallFileName {
+		t.Errorf("got the wrong object: got %q, want %q", attrs.Name, smallFileName)
+	}
+
+	if trips != rt.trips {
+		t.Errorf("Attrs(): too many round trips, got %d, want 1", rt.trips-trips)
+	}
+}
+
 func TestDeleteWithoutName(t *testing.T) {
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)

@@ -1003,6 +1003,16 @@ func (cc *ccRC) Close() error {
 	return cc.ReadCloser.Close()
 }
 
+var uniq string
+
+func init() {
+	b := make([]byte, 4)
+	if _, err := rand.Read(b); err != nil {
+		panic(err)
+	}
+	uniq = hex.EncodeToString(b)
+}
+
 func startLiveTest(ctx context.Context, t *testing.T) (*Bucket, func()) {
 	id := os.Getenv(apiID)
 	key := os.Getenv(apiKey)
@@ -1018,12 +1028,7 @@ func startLiveTest(ctx context.Context, t *testing.T) (*Bucket, func()) {
 		t.Fatal(err)
 		return nil, nil
 	}
-	b := make([]byte, 4)
-	if _, err := rand.Read(b); err != nil {
-		t.Fatal(err)
-		return nil, nil
-	}
-	bucket, err := client.NewBucket(ctx, fmt.Sprintf("%s-%s-%s", id, bucketName, hex.EncodeToString(b)), nil)
+	bucket, err := client.NewBucket(ctx, fmt.Sprintf("%s-%s-%s", id, bucketName, uniq), nil)
 	if err != nil {
 		t.Fatal(err)
 		return nil, nil

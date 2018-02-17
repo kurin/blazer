@@ -800,7 +800,7 @@ func TestAttrsFewRoundtrips(t *testing.T) {
 	bucket, done := startLiveTest(ctx, t)
 	defer done()
 
-	_, _, err := writeFile(ctx, bucket, smallFileName, 1e6+42, 1e8)
+	_, _, err := writeFile(ctx, bucket, smallFileName, 42, 1e8)
 	if err != nil {
 		t.Fatal(err)
 	}

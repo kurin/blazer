@@ -68,17 +68,15 @@ func Action(err error) ErrAction {
 	if e.retry > 0 {
 		return Retry
 	}
-	if e.code >= 500 && e.code < 600 {
-		if e.method == "b2_upload_file" || e.method == "b2_upload_part" {
-			return AttemptNewUpload
-		}
+	if e.code >= 500 && e.code < 600 && (e.method == "b2_upload_file" || e.method == "b2_upload_part") {
+		return AttemptNewUpload
 	}
 	switch e.code {
 	case 401:
-		if e.method == "b2_authorize_account" {
+		switch e.method {
+		case "b2_authorize_account":
 			return Punt
-		}
-		if e.method == "b2_upload_file" || e.method == "b2_upload_part" {
+		case "b2_upload_file", "b2_upload_part":
 			return AttemptNewUpload
 		}
 		return ReAuthenticate

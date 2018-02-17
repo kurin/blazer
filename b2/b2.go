@@ -45,6 +45,7 @@ type Client struct {
 	slock    sync.Mutex
 	sWriters map[string]*Writer
 	sReaders map[string]*Reader
+	sMethods map[string]int
 }
 
 // NewClient creates and returns a new Client with valid B2 service account
@@ -54,7 +55,9 @@ func NewClient(ctx context.Context, account, key string, opts ...ClientOption) (
 		backend: &beRoot{
 			b2i: &b2Root{},
 		},
+		sMethods: make(map[string]int),
 	}
+	opts = append(opts, client(c))
 	if err := c.backend.authorizeAccount(ctx, account, key, opts...); err != nil {
 		return nil, err
 	}
@@ -62,6 +65,7 @@ func NewClient(ctx context.Context, account, key string, opts ...ClientOption) (
 }
 
 type clientOptions struct {
+	client          *Client
 	transport       http.RoundTripper
 	failSomeUploads bool
 	expireTokens    bool
@@ -113,6 +117,31 @@ func ForceCapExceeded() ClientOption {
 	return func(c *clientOptions) {
 		c.capExceeded = true
 	}
+}
+
+func client(cl *Client) ClientOption {
+	return func(c *clientOptions) {
+		c.client = cl
+	}
+}
+
+type clientTransport struct {
+	client *Client
+	rt     http.RoundTripper
+}
+
+func (ct *clientTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	method := r.Header.Get("X-Blazer-Method")
+	if method != "" && ct.client != nil {
+		ct.client.slock.Lock()
+		ct.client.sMethods[method]++
+		ct.client.slock.Unlock()
+	}
+	t := ct.rt
+	if t == nil {
+		t = http.DefaultTransport
+	}
+	return t.RoundTrip(r)
 }
 
 // Bucket is a reference to a B2 bucket.

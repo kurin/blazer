@@ -735,9 +735,8 @@ func TestWriteEmpty(t *testing.T) {
 }
 
 type rtCounter struct {
-	rt      http.RoundTripper
-	trips   int
-	methods map[string]int
+	rt    http.RoundTripper
+	trips int
 	sync.Mutex
 }
 
@@ -745,10 +744,6 @@ func (rt *rtCounter) RoundTrip(r *http.Request) (*http.Response, error) {
 	rt.Lock()
 	defer rt.Unlock()
 	rt.trips++
-	if rt.methods == nil {
-		rt.methods = make(map[string]int)
-	}
-	rt.methods[r.Header.Get("X-Blazer-Method")]++
 	return rt.rt.RoundTrip(r)
 }
 
@@ -828,12 +823,6 @@ func TestAttrsNoRoundtrip(t *testing.T) {
 }*/
 
 func TestSmallUploadsFewRoundtrips(t *testing.T) {
-	rt := &rtCounter{rt: defaultTransport}
-	defaultTransport = rt
-	defer func() {
-		defaultTransport = rt.rt
-	}()
-
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
@@ -847,11 +836,11 @@ func TestSmallUploadsFewRoundtrips(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	getURL := rt.methods["b2_get_upload_url"]
-	uploadFile := rt.methods["b2_upload_file"]
-	diff := uploadFile - getURL
-	if diff != 9 {
-		t.Errorf("too many calls to b2_get_upload_url: got %d, want %d", getURL, uploadFile-9)
+	si := bucket.c.Status()
+	getURL := si.MethodCalls["b2_get_upload_url"]
+	uploadFile := si.MethodCalls["b2_upload_file"]
+	if getURL >= uploadFile {
+		t.Errorf("too many calls to b2_get_upload_url")
 	}
 }
 

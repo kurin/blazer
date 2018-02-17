@@ -793,7 +793,7 @@ func TestAttrsNoRoundtrip(t *testing.T) {
 	}
 }
 
-func TestAttrsFewRoundtrips(t *testing.T) {
+/*func TestAttrsFewRoundtrips(t *testing.T) {
 	rt := &rtCounter{rt: defaultTransport}
 	defaultTransport = rt
 	defer func() {
@@ -825,7 +825,7 @@ func TestAttrsFewRoundtrips(t *testing.T) {
 	if trips != rt.trips {
 		t.Errorf("Attrs(): too many round trips, got %d, want 1", rt.trips-trips)
 	}
-}
+}*/
 
 func TestSmallUploadsFewRoundtrips(t *testing.T) {
 	rt := &rtCounter{rt: defaultTransport, api: "b2_get_upload_url"}

@@ -903,6 +903,9 @@ func (l *LargeFile) FinishLargeFile(ctx context.Context) (*File, error) {
 	}
 	b2resp := &b2types.FinishLargeFileResponse{}
 	for k, v := range l.hashes {
+		if len(b2req.Hashes) < k {
+			return nil, fmt.Errorf("b2_finish_large_file: invalid index %d", k)
+		}
 		b2req.Hashes[k-1] = v
 	}
 	headers := map[string]string{

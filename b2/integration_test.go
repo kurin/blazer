@@ -735,23 +735,21 @@ func TestWriteEmpty(t *testing.T) {
 }
 
 type rtCounter struct {
-	rt    http.RoundTripper
-	trips int
-	api   string
+	rt      http.RoundTripper
+	trips   int
+	methods map[string]int
 	sync.Mutex
 }
 
 func (rt *rtCounter) RoundTrip(r *http.Request) (*http.Response, error) {
 	rt.Lock()
 	defer rt.Unlock()
-	resp, err := rt.rt.RoundTrip(r)
-	if err != nil {
-		return resp, err
+	rt.trips++
+	if rt.methods == nil {
+		rt.methods = make(map[string]int)
 	}
-	if rt.api == "" || r.Header.Get("X-Blazer-Method") == rt.api {
-		rt.trips++
-	}
-	return resp, nil
+	rt.methods[r.Header.Get("X-Blazer-Method")]++
+	return rt.rt.RoundTrip(r)
 }
 
 func TestAttrsNoRoundtrip(t *testing.T) {
@@ -830,7 +828,7 @@ func TestAttrsNoRoundtrip(t *testing.T) {
 }*/
 
 func TestSmallUploadsFewRoundtrips(t *testing.T) {
-	rt := &rtCounter{rt: defaultTransport, api: "b2_get_upload_url"}
+	rt := &rtCounter{rt: defaultTransport}
 	defaultTransport = rt
 	defer func() {
 		defaultTransport = rt.rt
@@ -849,9 +847,11 @@ func TestSmallUploadsFewRoundtrips(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if rt.trips > 3 {
-		// Pool is not guaranteed to be valid, so 3 calls allows some slack.
-		t.Errorf("too many calls to b2_get_upload_url: got %d, want < 3", rt.trips)
+	getURL := rt.methods["b2_get_upload_url"]
+	uploadFile := rt.methods["b2_upload_file"]
+	diff := uploadFile - getURL
+	if diff != 9 {
+		t.Errorf("too many calls to b2_get_upload_url: got %d, want %d", getURL, uploadFile-9)
 	}
 }
 

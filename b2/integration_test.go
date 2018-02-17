@@ -735,14 +735,21 @@ func TestWriteEmpty(t *testing.T) {
 type rtCounter struct {
 	rt    http.RoundTripper
 	trips int
+	api   string
 	sync.Mutex
 }
 
 func (rt *rtCounter) RoundTrip(r *http.Request) (*http.Response, error) {
 	rt.Lock()
 	defer rt.Unlock()
-	rt.trips++
-	return rt.rt.RoundTrip(r)
+	resp, err := rt.rt.RoundTrip(r)
+	if err != nil {
+		return resp, err
+	}
+	if rt.api == "" || r.Header.Get("X-Blazer-Method") == rt.api {
+		rt.trips++
+	}
+	return resp, nil
 }
 
 func TestAttrsNoRoundtrip(t *testing.T) {
@@ -817,6 +824,32 @@ func TestAttrsFewRoundtrips(t *testing.T) {
 
 	if trips != rt.trips {
 		t.Errorf("Attrs(): too many round trips, got %d, want 1", rt.trips-trips)
+	}
+}
+
+func TestSmallUploadsFewRoundtrips(t *testing.T) {
+	rt := &rtCounter{rt: defaultTransport, api: "b2_get_upload_url"}
+	defaultTransport = rt
+	defer func() {
+		defaultTransport = rt.rt
+	}()
+
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	defer cancel()
+
+	bucket, done := startLiveTest(ctx, t)
+	defer done()
+
+	for i := 0; i < 10; i++ {
+		_, _, err := writeFile(ctx, bucket, fmt.Sprintf("%s.%d", smallFileName, i), 42, 1e8)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if rt.trips > 3 {
+		// Pool is not guaranteed to be valid, so 3 calls allows some slack.
+		t.Errorf("too many calls to b2_get_upload_url: got %d, want < 3", rt.trips)
 	}
 }
 

@@ -17,7 +17,9 @@ package b2
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/sha1"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
@@ -1016,7 +1018,12 @@ func startLiveTest(ctx context.Context, t *testing.T) (*Bucket, func()) {
 		t.Fatal(err)
 		return nil, nil
 	}
-	bucket, err := client.NewBucket(ctx, id+"-"+bucketName, nil)
+	b := make([]byte, 4)
+	if _, err := rand.Read(b); err != nil {
+		t.Fatal(err)
+		return nil, nil
+	}
+	bucket, err := client.NewBucket(ctx, fmt.Sprintf("%s-%s-%s", id, bucketName, hex.EncodeToString(b)), nil)
 	if err != nil {
 		t.Fatal(err)
 		return nil, nil

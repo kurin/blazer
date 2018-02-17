@@ -120,7 +120,8 @@ type Bucket struct {
 	b beBucketInterface
 	r beRootInterface
 
-	c *Client
+	c       *Client
+	urlPool sync.Pool
 }
 
 type BucketType string

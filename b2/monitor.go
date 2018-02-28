@@ -28,20 +28,21 @@ type StatusInfo struct {
 	MethodInfo *MethodInfo
 }
 
-// numBuckets is the number of buckets per histogram, corresponding to 0-1ms,
+// numBins is the number of buckets per histogram, corresponding to 0-1ms,
 // 1-3ms, 3-7ms, etc.  Each bucket index i is 2^i ms wide, except of course the
-// last one.
-const numBuckets = 30
+// last one.  At 22 bins, the maximum finite bin width (the 21st, i=20) is
+// about 17m.
+const numBins = 22
 
-func getBucket(d time.Duration) int {
+func getBin(d time.Duration) int {
 	i := int(math.Log2(1 + float64(d/time.Millisecond)))
-	if i > numBuckets {
-		i = numBuckets
+	if i >= numBins {
+		i = numBins - 1
 	}
 	return i
 }
 
-type hist [numBuckets]int
+type hist [numBins]int
 
 func (h hist) add(o hist) hist {
 	var r hist
@@ -95,13 +96,14 @@ func (mi *MethodInfo) addCall(method string, d time.Duration, code int) {
 	defer mi.mu.Unlock()
 
 	mi.ensure(method)
-	mi.data[method][code] = mi.data[method][code].inc(getBucket(d))
+	mi.data[method][code] = mi.data[method][code].inc(getBin(d))
 }
 
 // Count returns the total number of method calls.
 func (mi *MethodInfo) Count() int {
 	mi.mu.Lock()
 	defer mi.mu.Unlock()
+
 	var t int
 	for _, codes := range mi.data {
 		for _, h := range codes {
@@ -117,6 +119,7 @@ func (mi *MethodInfo) Count() int {
 func (mi *MethodInfo) CountByMethod() map[string]int {
 	mi.mu.Lock()
 	defer mi.mu.Unlock()
+
 	t := make(map[string]int)
 	for method, codes := range mi.data {
 		for _, h := range codes {
@@ -126,6 +129,39 @@ func (mi *MethodInfo) CountByMethod() map[string]int {
 		}
 	}
 	return t
+}
+
+// CountByCode returns the number of calls per status code.
+func (mi *MethodInfo) CountByCode() map[int]int {
+	mi.mu.Lock()
+	defer mi.mu.Unlock()
+
+	t := make(map[int]int)
+	for _, codes := range mi.data {
+		for code, h := range codes {
+			for i := range h {
+				t[code] += h[i]
+			}
+		}
+	}
+	return t
+}
+
+// Histogram returns a slice of bins for call latencies.  The bin contains the
+// number of requests that finished within 1ms, and the second 1-3ms, the third
+// 3-7ms, etc.  The width of the bin in index i is 2^i milliseconds wide, and
+// the minimum time is (2^i)-1 milliseconds.
+func (mi *MethodInfo) Histogram() []int {
+	mi.mu.Lock()
+	defer mi.mu.Unlock()
+
+	var r hist
+	for _, codes := range mi.data {
+		for _, h := range codes {
+			r = r.add(h)
+		}
+	}
+	return []int(r[:])
 }
 
 // WriterStatus reports the status for each writer.

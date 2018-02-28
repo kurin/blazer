@@ -837,8 +837,9 @@ func TestSmallUploadsFewRoundtrips(t *testing.T) {
 		}
 	}
 	si := bucket.c.Status()
-	getURL := si.MethodCalls["b2_get_upload_url"]
-	uploadFile := si.MethodCalls["b2_upload_file"]
+	perMeth := si.MethodInfo.CountByMethod()
+	getURL := perMeth["b2_get_upload_url"]
+	uploadFile := perMeth["b2_upload_file"]
 	if getURL >= uploadFile {
 		t.Errorf("too many calls to b2_get_upload_url")
 	}

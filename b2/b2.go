@@ -45,7 +45,7 @@ type Client struct {
 	slock    sync.Mutex
 	sWriters map[string]*Writer
 	sReaders map[string]*Reader
-	sMethods map[string]int
+	sMethods MethodInfo
 }
 
 // NewClient creates and returns a new Client with valid B2 service account
@@ -55,7 +55,6 @@ func NewClient(ctx context.Context, account, key string, opts ...ClientOption) (
 		backend: &beRoot{
 			b2i: &b2Root{},
 		},
-		sMethods: make(map[string]int),
 	}
 	opts = append(opts, client(c))
 	if err := c.backend.authorizeAccount(ctx, account, key, opts...); err != nil {
@@ -132,16 +131,22 @@ type clientTransport struct {
 
 func (ct *clientTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	method := r.Header.Get("X-Blazer-Method")
-	if method != "" && ct.client != nil {
-		ct.client.slock.Lock()
-		ct.client.sMethods[method]++
-		ct.client.slock.Unlock()
-	}
 	t := ct.rt
 	if t == nil {
 		t = http.DefaultTransport
 	}
-	return t.RoundTrip(r)
+	b := time.Now()
+	resp, err := t.RoundTrip(r)
+	e := time.Now()
+	if err != nil {
+		return resp, err
+	}
+	if method != "" && ct.client != nil {
+		ct.client.slock.Lock()
+		ct.client.sMethods.addCall(method, e.Sub(b), resp.StatusCode)
+		ct.client.slock.Unlock()
+	}
+	return resp, nil
 }
 
 // Bucket is a reference to a B2 bucket.

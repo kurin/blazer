@@ -164,6 +164,24 @@ func (mi *MethodInfo) Histogram() []int {
 	return []int(r[:])
 }
 
+// HistogramByMethod returns a histogram for each method.
+func (mi *MethodInfo) HistogramByMethod() map[string][]int {
+	mi.mu.Lock()
+	defer mi.mu.Unlock()
+
+	m := make(map[string]hist)
+	for method, codes := range mi.data {
+		for _, h := range codes {
+			m[method] = m[method].add(h)
+		}
+	}
+	r := make(map[string][]int)
+	for method, h := range m {
+		r[method] = []int(h[:])
+	}
+	return r
+}
+
 // WriterStatus reports the status for each writer.
 type WriterStatus struct {
 	// Progress is a slice of completion ratios.  The index of a ratio is its

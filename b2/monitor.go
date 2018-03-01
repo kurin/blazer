@@ -177,6 +177,7 @@ func (mi *MethodInfo) HistogramByMethod() map[string][]int {
 	}
 	r := make(map[string][]int)
 	for method, h := range m {
+		h := h // arrays are copied by value, h[:] makes no copy, so we need to shadow
 		r[method] = []int(h[:])
 	}
 	return r

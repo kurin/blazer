@@ -17,6 +17,7 @@ package b2
 import (
 	"context"
 	"errors"
+	"io"
 	"time"
 )
 
@@ -86,6 +87,31 @@ func (c *Client) CreateKey(ctx context.Context, name string, opts ...KeyOption) 
 		c: c,
 		k: ki,
 	}, nil
+}
+
+// ListKeys lists all the keys associated with this project.  It takes the
+// maximum number of keys it should return in a call, as well as a cursor
+// (which should be empty for the initial call).  It will return up to count
+// keys, as well as the cursor for the next invocation.
+//
+// ListKeys returns io.EOF when there are no more keys, although it may do so
+// concurrently with the final set of keys.
+func (c *Client) ListKeys(ctx context.Context, count int, cursor string) ([]*Key, string, error) {
+	ks, next, err := c.backend.listKeys(ctx, count, cursor)
+	if err != nil {
+		return nil, "", err
+	}
+	if len(ks) == 0 {
+		return nil, "", io.EOF
+	}
+	var keys []*Key
+	for _, k := range ks {
+		keys = append(keys, &Key{
+			c: c,
+			k: k,
+		})
+	}
+	return keys, next, nil
 }
 
 // CreateKey creates a scoped application key that is valid only for this bucket.

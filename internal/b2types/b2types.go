@@ -29,11 +29,14 @@ type ErrorMessage struct {
 }
 
 type AuthorizeAccountResponse struct {
-	AccountID   string `json:"accountId"`
-	AuthToken   string `json:"authorizationToken"`
-	URI         string `json:"apiUrl"`
-	DownloadURI string `json:"downloadUrl"`
-	MinPartSize int    `json:"minimumPartSize"`
+	AccountID      string   `json:"accountId"`
+	AuthToken      string   `json:"authorizationToken"`
+	URI            string   `json:"apiUrl"`
+	DownloadURI    string   `json:"downloadUrl"`
+	MinPartSize    int      `json:"minimumPartSize"`
+	PartSize       int      `json:"recommendedPartSize"`
+	AbsMinPartSize int      `json:"absoluteMinimumPartSize"`
+	Capabilities   []string `json:"capabilities"`
 }
 
 type LifecycleRule struct {
@@ -73,15 +76,8 @@ type ListBucketsResponse struct {
 }
 
 type UpdateBucketRequest struct {
-	AccountID string `json:"accountId"`
-	BucketID  string `json:"bucketId"`
-	// bucketName is a required field according to
-	// https://www.backblaze.com/b2/docs/b2_update_bucket.html.
-	//
-	// However, actually setting it returns 400: unknown field in
-	// com.backblaze.modules.b2.data.UpdateBucketRequest: bucketName
-	//
-	//Name           string            `json:"bucketName"`
+	AccountID      string            `json:"accountId"`
+	BucketID       string            `json:"bucketId"`
 	Type           string            `json:"bucketType,omitempty"`
 	Info           map[string]string `json:"bucketInfo,omitempty"`
 	LifecycleRules []LifecycleRule   `json:"lifecycleRules,omitempty"`
@@ -236,4 +232,41 @@ type ListUnfinishedLargeFilesRequest struct {
 type ListUnfinishedLargeFilesResponse struct {
 	Files        []GetFileInfoResponse `json:"files"`
 	Continuation string                `json:"nextFileId"`
+}
+
+type CreateKeyRequest struct {
+	AccountID    string   `json:"accountId"`
+	Capabilities []string `json:"capabilities"`
+	Name         string   `json:"keyName"`
+	Valid        int      `json:"validDurationInSeconds,omitempty"`
+	BucketID     string   `json:"bucketId,omitempty"`
+	Prefix       string   `json:"namePrefix,omitempty"`
+}
+
+type Key struct {
+	AccountID    string   `json:"accountId"`
+	Capabilities []string `json:"capabilities"`
+	Name         string   `json:"keyName"`
+	Expires      int64    `json:"expirationTimestamp"`
+	BucketID     string   `json:"bucketId"`
+	Prefix       string   `json:"namePrefix"`
+}
+
+type CreateKeyResponse Key
+
+type DeleteKeyRequest struct {
+	KeyID string `json:"applicationKeyId"`
+}
+
+type DeleteKeyResponse Key
+
+type ListKeysRequest struct {
+	AccountID string `json:"accountId"`
+	Max       int    `json:"maxKeyCount,omitempty"`
+	Next      string `json:"startApplicationKeyId,omitempty"`
+}
+
+type ListKeysResponse struct {
+	Keys []Key  `json:"keys"`
+	Next string `json:"nextApplicationKeyId"`
 }

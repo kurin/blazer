@@ -17,9 +17,6 @@
 //
 // It currently lacks support for the following APIs:
 //
-// b2_create_key
-// b2_delete_key
-// b2_list_keys
 // b2_download_file_by_id
 package base
 
@@ -430,7 +427,7 @@ func AuthorizeAccount(ctx context.Context, account, key string, opts ...AuthOpti
 		authToken:   b2resp.AuthToken,
 		apiURI:      b2resp.URI,
 		downloadURI: b2resp.DownloadURI,
-		minPartSize: b2resp.MinPartSize,
+		minPartSize: b2resp.PartSize,
 		opts:        b2opts,
 	}, nil
 }
@@ -1205,4 +1202,74 @@ func (f *File) GetFileInfo(ctx context.Context) (*FileInfo, error) {
 		Timestamp:   millitime(b2resp.Timestamp),
 	}
 	return f.Info, nil
+}
+
+// Key is a B2 application key.
+type Key struct {
+	Name         string
+	Capabilities []string
+	Expires      time.Time
+	b2           *B2
+}
+
+// CreateKey wraps b2_create_key.
+func (b *B2) CreateKey(ctx context.Context, name string, caps []string, valid time.Duration, bucketID string, prefix string) (*Key, error) {
+	b2req := &b2types.CreateKeyRequest{
+		AccountID:    b.accountID,
+		Capabilities: caps,
+		Name:         name,
+		Valid:        int(valid.Seconds()),
+		BucketID:     bucketID,
+		Prefix:       prefix,
+	}
+	b2resp := &b2types.CreateKeyResponse{}
+	headers := map[string]string{
+		"Authorization": b.authToken,
+	}
+	if err := b.opts.makeRequest(ctx, "b2_create_key", "POST", b.apiURI+b2types.V1api+"b2_create_key", b2req, b2resp, headers, nil); err != nil {
+		return nil, err
+	}
+	return &Key{
+		Name:         b2resp.Name,
+		Capabilities: b2resp.Capabilities,
+		Expires:      millitime(b2resp.Expires),
+		b2:           b,
+	}, nil
+}
+
+// Delete wraps b2_delete_key.
+func (k *Key) Delete(ctx context.Context) error {
+	b2req := &b2types.DeleteKeyRequest{
+		KeyID: k.Name, // ???
+	}
+	headers := map[string]string{
+		"Authorization": k.b2.authToken,
+	}
+	return k.b2.opts.makeRequest(ctx, "b2_delete_key", "POST", k.b2.apiURI+b2types.V1api+"b2_delete_key", b2req, nil, headers, nil)
+}
+
+// ListKeys wraps b2_list_keys.
+func (b *B2) ListKeys(ctx context.Context, max int, next string) ([]*Key, string, error) {
+	b2req := &b2types.ListKeysRequest{
+		AccountID: b.accountID,
+		Max:       max,
+		Next:      next,
+	}
+	headers := map[string]string{
+		"Authorization": b.authToken,
+	}
+	b2resp := &b2types.ListKeysResponse{}
+	if err := b.opts.makeRequest(ctx, "b2_create_key", "POST", b.apiURI+b2types.V1api+"b2_create_key", b2req, b2resp, headers, nil); err != nil {
+		return nil, "", err
+	}
+	var keys []*Key
+	for _, key := range b2resp.Keys {
+		keys = append(keys, &Key{
+			Name:         key.Name,
+			Capabilities: key.Capabilities,
+			Expires:      millitime(key.Expires),
+			b2:           b,
+		})
+	}
+	return keys, b2resp.Next, nil
 }

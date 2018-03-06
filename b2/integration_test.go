@@ -1019,12 +1019,36 @@ func TestCreateDeleteKeyClient(t *testing.T) {
 	bucket, done := startLiveTest(ctx, t)
 	defer done()
 
-	key, err := bucket.c.CreateKey(ctx, "whee", Capability("listBuckets"))
-	if err != nil {
-		t.Fatalf("Client.CreateKey(whee, listBuckets): %v", err)
+	table := []struct {
+		d   time.Duration
+		e   time.Time
+		cap []string
+	}{
+		{
+			d:   time.Minute,
+			cap: []string{"deleteKeys"},
+		},
 	}
-	if err := key.Delete(ctx); err != nil {
-		t.Errorf("key.Delete(): %v", err)
+
+	for _, e := range table {
+		var opts []KeyOption
+		for _, cap := range e.cap {
+			opts = append(opts, Capability(cap))
+		}
+		if e.d != 0 {
+			opts = append(opts, Lifetime(e.d))
+		}
+		if !e.e.IsZero() {
+			opts = append(opts, Deadline(e.e))
+		}
+		key, err := bucket.c.CreateKey(ctx, "whee", opts...)
+		if err != nil {
+			t.Errorf("Client.CreateKey(%v): %v", e, err)
+			continue
+		}
+		if err := key.Delete(ctx); err != nil {
+			t.Errorf("key.Delete(): %v", err)
+		}
 	}
 }
 

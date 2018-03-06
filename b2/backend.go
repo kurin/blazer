@@ -46,6 +46,7 @@ type beBucketInterface interface {
 	name() string
 	btype() BucketType
 	attrs() *BucketAttrs
+	id() string
 	updateBucket(context.Context, *BucketAttrs) error
 	deleteBucket(context.Context) error
 	getUploadURL(context.Context) (beURLInterface, error)
@@ -271,17 +272,11 @@ func (r *beRoot) listKeys(ctx context.Context, max int, next string) ([]beKeyInt
 	}
 	return keys, cur, nil
 }
-func (b *beBucket) name() string {
-	return b.b2bucket.name()
-}
 
-func (b *beBucket) btype() BucketType {
-	return BucketType(b.b2bucket.btype())
-}
-
-func (b *beBucket) attrs() *BucketAttrs {
-	return b.b2bucket.attrs()
-}
+func (b *beBucket) name() string        { return b.b2bucket.name() }
+func (b *beBucket) btype() BucketType   { return BucketType(b.b2bucket.btype()) }
+func (b *beBucket) attrs() *BucketAttrs { return b.b2bucket.attrs() }
+func (b *beBucket) id() string          { return b.b2bucket.id() }
 
 func (b *beBucket) updateBucket(ctx context.Context, attrs *BucketAttrs) error {
 	f := func() error {

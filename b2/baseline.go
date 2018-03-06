@@ -42,6 +42,7 @@ type b2BucketInterface interface {
 	name() string
 	btype() string
 	attrs() *BucketAttrs
+	id() string
 	updateBucket(context.Context, *BucketAttrs) error
 	deleteBucket(context.Context) error
 	getUploadURL(context.Context) (b2URLInterface, error)
@@ -305,6 +306,8 @@ func (b *b2Bucket) attrs() *BucketAttrs {
 		Type:           BucketType(b.b.Type),
 	}
 }
+
+func (b *b2Bucket) id() string { return b.b.ID }
 
 func (b *b2Bucket) getUploadURL(ctx context.Context) (b2URLInterface, error) {
 	url, err := b.b.GetUploadURL(ctx)

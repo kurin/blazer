@@ -108,6 +108,13 @@ func (t *testRoot) transient(err error) bool {
 	return e.retry || e.reupload || e.backoff > 0
 }
 
+func (t *testRoot) createKey(context.Context, string, []string, time.Duration, string, string) (b2KeyInterface, error) {
+	return nil, nil
+}
+func (t *testRoot) listKeys(context.Context, int, string) ([]b2KeyInterface, string, error) {
+	return nil, "", nil
+}
+
 func (t *testRoot) createBucket(_ context.Context, name, _ string, _ map[string]string, _ []LifecycleRule) (b2BucketInterface, error) {
 	if err := t.errs.getError("createBucket"); err != nil {
 		return nil, err

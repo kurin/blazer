@@ -1014,6 +1014,20 @@ func TestVerifyReader(t *testing.T) {
 	}
 }
 
+func TestCreateDeleteKeyClient(t *testing.T) {
+	ctx := context.Background()
+	bucket, done := startLiveTest(ctx, t)
+	defer done()
+
+	key, err := bucket.c.CreateKey(ctx, "whee", Capability("listBuckets"))
+	if err != nil {
+		t.Fatalf("Client.CreateKey(whee, listBuckets): %v", err)
+	}
+	if err := key.Delete(ctx); err != nil {
+		t.Errorf("key.Delete(): %v", err)
+	}
+}
+
 type object struct {
 	o   *Object
 	err error

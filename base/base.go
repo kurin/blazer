@@ -17,6 +17,9 @@
 //
 // It currently lacks support for the following APIs:
 //
+// b2_create_key
+// b2_delete_key
+// b2_list_keys
 // b2_download_file_by_id
 package base
 

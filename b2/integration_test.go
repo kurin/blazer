@@ -1014,7 +1014,7 @@ func TestVerifyReader(t *testing.T) {
 	}
 }
 
-func TestCreateDeleteKeyClient(t *testing.T) {
+func TestCreateDeleteKey(t *testing.T) {
 	ctx := context.Background()
 	bucket, done := startLiveTest(ctx, t)
 	defer done()
@@ -1023,10 +1023,16 @@ func TestCreateDeleteKeyClient(t *testing.T) {
 		d   time.Duration
 		e   time.Time
 		cap []string
+		pfx string
 	}{
 		{
 			d:   time.Minute,
 			cap: []string{"deleteKeys"},
+			pfx: "/prefox",
+		},
+		{
+			e:   time.Now().Add(time.Minute), // <shrug emojis>
+			cap: []string{"writeFiles", "listFiles"},
 		},
 	}
 
@@ -1047,6 +1053,15 @@ func TestCreateDeleteKeyClient(t *testing.T) {
 			continue
 		}
 		if err := key.Delete(ctx); err != nil {
+			t.Errorf("key.Delete(): %v", err)
+		}
+		opts = append(opts, Prefix(e.pfx))
+		key2, err := bucket.CreateKey(ctx, "whee", opts...)
+		if err != nil {
+			t.Errorf("Bucket.CreateKey(%v, %v): %v", bucket.Name, e, err)
+			continue
+		}
+		if err := key2.Delete(ctx); err != nil {
 			t.Errorf("key.Delete(): %v", err)
 		}
 	}

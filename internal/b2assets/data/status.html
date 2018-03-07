@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>b2 client status</title>
+</head>
+<body>
+  <h1>count by code</h1>
+  <table>
+    <tr>
+    <th>method</th>
+    {{range $code := allCodes .MethodInfo}}
+      <th>{{$code}}</th>
+    {{end}}
+    </tr>
+    {{range $method := allMethods .MethodInfo}}
+      <tr>
+        <td>{{$method}}</td>
+        {{range $code := allCodes $.MethodInfo}}
+          <td>{{getCount $.MethodInfo $method $code}}</td>
+        {{end}}
+      </tr>
+    {{end}}
+    </tr>
+  </table>
+  <h1>uploads</h1>
+    {{range $name, $val := .Writers}}
+    <h2>{{ $name }}</h2>
+      {{range $id, $prog := $val.Progress}}
+      {{inc $id}} <progress value="{{$prog}}" max="1"></progress><br />
+      {{end}}
+    {{end}}
+  <h1>downloads</h1>
+    {{range $name, $val := .Readers}}
+    <h2>{{ $name }}</h2>
+      {{range $id, $prog := $val.Progress}}
+      {{inc $id}} <progress value="{{$prog}}" max="1"></progress><br />
+      {{end}}
+    {{end}}
+</body>
+</html>

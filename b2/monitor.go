@@ -16,9 +16,14 @@ package b2
 
 import (
 	"fmt"
+	"html/template"
 	"math"
+	"net/http"
+	"sort"
 	"sync"
 	"time"
+
+	"github.com/kurin/blazer/internal/b2assets"
 )
 
 // StatusInfo reports information about a client.
@@ -147,6 +152,26 @@ func (mi *MethodInfo) CountByCode() map[int]int {
 	return t
 }
 
+// CountByMethodAndCode returns the number of calls broken down by method and
+// status code.
+func (mi *MethodInfo) CountByMethodAndCode() map[string]map[int]int {
+	mi.mu.Lock()
+	defer mi.mu.Unlock()
+
+	t := make(map[string]map[int]int)
+	for method, codes := range mi.data {
+		if t[method] == nil {
+			t[method] = make(map[int]int)
+		}
+		for code, h := range codes {
+			for i := range h {
+				t[method][code] += h[i]
+			}
+		}
+	}
+	return t
+}
+
 // Histogram returns a slice of bins for call latencies.  The bin contains the
 // number of requests that finished within 1ms, and the second 1-3ms, the third
 // 3-7ms, etc.  The width of the bin in index i is 2^i milliseconds wide, and
@@ -261,4 +286,53 @@ func (c *Client) removeReader(r *Reader) {
 	}
 
 	delete(c.sReaders, fmt.Sprintf("%s/%s", r.o.b.Name(), r.name))
+}
+
+var (
+	funcMap = template.FuncMap{
+		"inc":    func(i int) int { return i + 1 },
+		"lookUp": func(m map[string]int, s string) int { return m[s] },
+		"pRange": func(i int) string {
+			f := float64(i)
+			min := int(math.Pow(2, f)) - 1
+			max := min + int(math.Pow(2, f))
+			return fmt.Sprintf("%v - %v", time.Duration(min)*time.Millisecond, time.Duration(max)*time.Millisecond)
+		},
+		"allCodes": func(mi *MethodInfo) []int {
+			var codes []int
+			for c := range mi.CountByCode() {
+				codes = append(codes, c)
+			}
+			sort.Ints(codes)
+			return codes
+		},
+		"allMethods": func(mi *MethodInfo) []string {
+			var meths []string
+			for m := range mi.CountByMethod() {
+				meths = append(meths, m)
+			}
+			sort.Strings(meths)
+			return meths
+		},
+		"getCount": func(mi *MethodInfo, method string, code int) int {
+			cmap := mi.CountByMethodAndCode()
+			codes, ok := cmap[method]
+			if !ok {
+				return 0
+			}
+			return codes[code]
+		},
+	}
+	statusTemplate = template.Must(template.New("status").Funcs(funcMap).Parse(string(b2assets.MustAsset("data/status.html"))))
+)
+
+// ServeHTTP satisfies the http.Handler interface.  This means that a Client
+// can be passed directly to a path via http.Handle (or on a custom ServeMux or
+// a custom http.Server).
+//
+// ServeHTTP serves diagnostic information about the current state of the
+// client; essentially everything available from Client.Status()
+func (c *Client) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
+	info := c.Status()
+	statusTemplate.Execute(rw, info)
 }

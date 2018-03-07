@@ -52,6 +52,7 @@ func (c *create) Execute(ctx context.Context, f *flag.FlagSet, _ ...interface{})
 
 	args := f.Args()
 	if len(args) < 2 {
+		fmt.Fprintf(os.Stderr, "%s\n", c.Usage())
 		return subcommands.ExitUsageError
 	}
 	name := args[0]

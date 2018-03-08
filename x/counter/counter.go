@@ -21,6 +21,10 @@ import (
 	"time"
 )
 
+// A Counter efficiently counts the number of events that have occurred over a
+// span of time extending from some fixed interval ago to now.  Events that
+// pass beyond this horizon effectively "fall off" the back of the counter, and
+// do not appear in the count.
 type Counter struct {
 	mu    sync.Mutex
 	count []int
@@ -28,10 +32,13 @@ type Counter struct {
 	last  time.Time
 }
 
-func New(size, resolution time.Duration) *Counter {
+// New returns an initialized counter for events over the given duration at the
+// given resolution.  Counters with tight resolution (i.e., small values for
+// that argument) will be more accurate, at the cost of some memory.
+func New(duration, resolution time.Duration) *Counter {
 	return &Counter{
 		res:   resolution,
-		count: make([]int, size/resolution),
+		count: make([]int, duration/resolution),
 	}
 }
 

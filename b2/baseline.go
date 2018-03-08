@@ -101,6 +101,9 @@ type b2FilePartInterface interface {
 
 type b2KeyInterface interface {
 	del(context.Context) error
+	caps() []string
+	name() string
+	expires() time.Time
 }
 
 type b2Root struct {
@@ -499,6 +502,7 @@ func (b *b2FilePart) number() int  { return b.b.Number }
 func (b *b2FilePart) sha1() string { return b.b.SHA1 }
 func (b *b2FilePart) size() int64  { return b.b.Size }
 
-func (b *b2Key) del(ctx context.Context) error {
-	return b.b.Delete(ctx)
-}
+func (b *b2Key) del(ctx context.Context) error { return b.b.Delete(ctx) }
+func (b *b2Key) caps() []string                { return b.b.Capabilities }
+func (b *b2Key) name() string                  { return b.b.Name }
+func (b *b2Key) expires() time.Time            { return b.b.Expires }

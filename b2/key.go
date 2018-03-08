@@ -28,6 +28,17 @@ type Key struct {
 	k beKeyInterface
 }
 
+// Capabilities returns the list of capabilites granted by this application
+// key.
+func (k *Key) Capabilities() []string { return k.k.caps() }
+
+// Name returns the user-supplied name of this application key.  Key names are
+// useless.
+func (k *Key) Name() string { return k.k.name() }
+
+// Expires returns the expiration date of this application key.
+func (k *Key) Expires() time.Time { return k.k.expires() }
+
 // Delete removes the key from B2.
 func (k *Key) Delete(ctx context.Context) error { return k.k.del(ctx) }
 

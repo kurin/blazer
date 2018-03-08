@@ -150,6 +150,9 @@ type beFileInfo struct {
 
 type beKeyInterface interface {
 	del(context.Context) error
+	caps() []string
+	name() string
+	expires() time.Time
 }
 
 type beKey struct {
@@ -703,6 +706,9 @@ func (b *beFilePart) sha1() string { return b.b2filePart.sha1() }
 func (b *beFilePart) size() int64  { return b.b2filePart.size() }
 
 func (b *beKey) del(ctx context.Context) error { return b.k.del(ctx) }
+func (b *beKey) caps() []string                { return b.k.caps() }
+func (b *beKey) name() string                  { return b.k.name() }
+func (b *beKey) expires() time.Time            { return b.k.expires() }
 
 func jitter(d time.Duration) time.Duration {
 	f := float64(d)

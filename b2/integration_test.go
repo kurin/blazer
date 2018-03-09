@@ -754,7 +754,10 @@ func TestAttrsNoRoundtrip(t *testing.T) {
 		t.Fatalf("unexpected objects: got %d, want 1", len(objs))
 	}
 
-	trips := bucket.c.Status().MethodInfo.Count()
+	var trips int
+	for range bucket.c.Status().table()["1m"] {
+		trips += 1
+	}
 	attrs, err := objs[0].Attrs(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -763,7 +766,10 @@ func TestAttrsNoRoundtrip(t *testing.T) {
 		t.Errorf("got the wrong object: got %q, want %q", attrs.Name, smallFileName)
 	}
 
-	newTrips := bucket.c.Status().MethodInfo.Count()
+	var newTrips int
+	for range bucket.c.Status().table()["1m"] {
+		newTrips += 1
+	}
 	if trips != newTrips {
 		t.Errorf("Attrs() should not have caused any net traffic, but it did: old %d, new %d", trips, newTrips)
 	}
@@ -818,9 +824,16 @@ func TestSmallUploadsFewRoundtrips(t *testing.T) {
 		}
 	}
 	si := bucket.c.Status()
-	perMeth := si.MethodInfo.CountByMethod()
-	getURL := perMeth["b2_get_upload_url"]
-	uploadFile := perMeth["b2_upload_file"]
+	var getURL int
+	var uploadFile int
+	for _, m := range si.Counters[time.Minute] {
+		switch m.Name {
+		case "b2_get_upload_url":
+			getURL++
+		case "b2_upload_file":
+			uploadFile++
+		}
+	}
 	if getURL >= uploadFile {
 		t.Errorf("too many calls to b2_get_upload_url")
 	}

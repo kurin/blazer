@@ -45,7 +45,7 @@ type Client struct {
 	slock    sync.Mutex
 	sWriters map[string]*Writer
 	sReaders map[string]*Reader
-	sMethods MethodInfo
+	sMethods []methodCounter
 }
 
 // NewClient creates and returns a new Client with valid B2 service account
@@ -54,6 +54,11 @@ func NewClient(ctx context.Context, account, key string, opts ...ClientOption) (
 	c := &Client{
 		backend: &beRoot{
 			b2i: &b2Root{},
+		},
+		sMethods: []methodCounter{
+			newMethodCounter(time.Minute, time.Second),
+			newMethodCounter(time.Minute*5, time.Second),
+			newMethodCounter(time.Hour, time.Minute),
 		},
 	}
 	opts = append(opts, client(c))
@@ -143,7 +148,14 @@ func (ct *clientTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	}
 	if method != "" && ct.client != nil {
 		ct.client.slock.Lock()
-		ct.client.sMethods.addCall(method, e.Sub(b), resp.StatusCode)
+		m := Method{
+			Name:     method,
+			Duration: e.Sub(b),
+			Status:   resp.StatusCode,
+		}
+		for _, counter := range ct.client.sMethods {
+			counter.record(m)
+		}
 		ct.client.slock.Unlock()
 	}
 	return resp, nil

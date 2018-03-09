@@ -4,23 +4,19 @@
   <title>b2 client status</title>
 </head>
 <body>
+  {{$methods := methods .}}
+  {{$durations := durations .}}
+  {{$table := table .}}
   <h1>count by code</h1>
   <table>
+    {{range $method := $methods}}
     <tr>
-    <th>method</th>
-    {{range $code := allCodes .MethodInfo}}
-      <th>{{$code}}</th>
-    {{end}}
+      <td>{{$method}}</td>
+      {{range $duration := $durations}}
+        <td>{{index $table $method $duration}}</td>
+      {{end}}
     </tr>
-    {{range $method := allMethods .MethodInfo}}
-      <tr>
-        <td>{{$method}}</td>
-        {{range $code := allCodes $.MethodInfo}}
-          <td>{{getCount $.MethodInfo $method $code}}</td>
-        {{end}}
-      </tr>
     {{end}}
-    </tr>
   </table>
   <h1>uploads</h1>
     {{range $name, $val := .Writers}}

@@ -32,6 +32,9 @@ type Window struct {
 	reduce ReduceFunc
 }
 
+// A ReduceFunc should take two values from the window and combine them into a
+// third value that will be stored in the window.  The values i or j may be
+// nil.
 type ReduceFunc func(i, j interface{}) interface{}
 
 // New returns an initialized window for events over the given duration at the

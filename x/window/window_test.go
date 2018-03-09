@@ -41,7 +41,7 @@ func TestWindows(t *testing.T) {
 		size, dur time.Duration
 		incs      []epair
 		look      time.Time
-		reduce    ReduceFunc
+		reduce    Reducer
 		want      interface{}
 	}{
 		{

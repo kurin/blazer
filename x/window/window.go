@@ -29,22 +29,25 @@ type Window struct {
 	events []interface{}
 	res    time.Duration
 	last   time.Time
-	reduce ReduceFunc
+	reduce Reducer
 }
 
-// A ReduceFunc should take two values from the window and combine them into a
+// A Reducer should take two values from the window and combine them into a
 // third value that will be stored in the window.  The values i or j may be
-// nil.
-type ReduceFunc func(i, j interface{}) interface{}
+// nil.  The underlying types for both arguments and the output should be
+// identical.
+//
+// Reducer will be called on its own output: Reducer(Reducer(x, y), z).
+type Reducer func(i, j interface{}) interface{}
 
 // New returns an initialized window for events over the given duration at the
 // given resolution.  Windows with tight resolution (i.e., small values for
 // that argument) will be more accurate, at the cost of some memory.
-func New(size, resolution time.Duration, reduce ReduceFunc) *Window {
+func New(size, resolution time.Duration, r Reducer) *Window {
 	return &Window{
 		res:    resolution,
 		events: make([]interface{}, size/resolution),
-		reduce: reduce,
+		reduce: r,
 	}
 }
 
@@ -103,7 +106,7 @@ func (w *Window) addAt(t time.Time, e interface{}) {
 	w.events[w.bucket(t)] = w.reduce(w.events[w.bucket(t)], e)
 }
 
-// Reduce runs the windows reducer over the valid values and returns the
+// Reduce runs the window's reducer over the valid values and returns the
 // result.
 func (w *Window) Reduce() interface{} {
 	return w.reducedAt(time.Now())

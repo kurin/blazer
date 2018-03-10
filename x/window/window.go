@@ -25,11 +25,13 @@ import (
 // extending from some fixed interval ago to now.  Events that pass beyond this
 // horizon effectively "fall off" the back of the window.
 type Window struct {
-	mu     sync.Mutex
-	events []interface{}
-	res    time.Duration
-	last   time.Time
-	reduce Reducer
+	mu      sync.Mutex
+	events  []interface{}
+	res     time.Duration
+	last    time.Time
+	reduce  Reducer
+	forever bool
+	e       interface{}
 }
 
 // A Reducer should take two values from the window and combine them into a
@@ -43,11 +45,19 @@ type Reducer func(i, j interface{}) interface{}
 // New returns an initialized window for events over the given duration at the
 // given resolution.  Windows with tight resolution (i.e., small values for
 // that argument) will be more accurate, at the cost of some memory.
+//
+// A size of 0 means "forever"; old events will never be removed.
 func New(size, resolution time.Duration, r Reducer) *Window {
+	if size > 0 {
+		return &Window{
+			res:    resolution,
+			events: make([]interface{}, size/resolution),
+			reduce: r,
+		}
+	}
 	return &Window{
-		res:    resolution,
-		events: make([]interface{}, size/resolution),
-		reduce: r,
+		forever: true,
+		reduce:  r,
 	}
 }
 
@@ -57,9 +67,12 @@ func (w *Window) bucket(now time.Time) int {
 	return int(abs) % len(w.events)
 }
 
-// sweep keeps the counter valid.  It needs to be called from every method that
-// views or updates the counter, and the caller needs to hold the mutex.
+// sweep keeps the window valid.  It needs to be called from every method that
+// views or updates the window, and the caller needs to hold the mutex.
 func (w *Window) sweep(now time.Time) {
+	if w.forever {
+		return
+	}
 	defer func() {
 		w.last = now
 	}()
@@ -74,7 +87,7 @@ func (w *Window) sweep(now time.Time) {
 	}
 
 	if now.Sub(w.last) > w.res*time.Duration(len(w.events)) {
-		// We've gone longer than this counter measures since the last sweep, just
+		// We've gone longer than this window measures since the last sweep, just
 		// zero the thing and have done.
 		for i := range w.events {
 			w.events[i] = nil
@@ -95,12 +108,17 @@ func (w *Window) sweep(now time.Time) {
 
 // Insert adds the given event.
 func (w *Window) Insert(e interface{}) {
-	w.addAt(time.Now(), e)
+	w.insertAt(time.Now(), e)
 }
 
-func (w *Window) addAt(t time.Time, e interface{}) {
+func (w *Window) insertAt(t time.Time, e interface{}) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+
+	if w.forever {
+		w.e = w.reduce(w.e, e)
+		return
+	}
 
 	w.sweep(t)
 	w.events[w.bucket(t)] = w.reduce(w.events[w.bucket(t)], e)
@@ -115,6 +133,10 @@ func (w *Window) Reduce() interface{} {
 func (w *Window) reducedAt(t time.Time) interface{} {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+
+	if w.forever {
+		return w.e
+	}
 
 	w.sweep(t)
 	var n interface{}

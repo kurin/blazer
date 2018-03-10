@@ -60,12 +60,25 @@ func TestWindows(t *testing.T) {
 			want:   5,
 			reduce: adder,
 		},
+		{
+			incs: []epair{
+				// year, month, day, hour, min, sec, nano
+				{t: time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC), e: 1},
+				{t: time.Date(2000, 1, 1, 0, 0, 1, 0, time.UTC), e: 1},
+				{t: time.Date(2000, 1, 1, 0, 0, 2, 0, time.UTC), e: 1},
+				{t: time.Date(2000, 1, 1, 0, 0, 3, 0, time.UTC), e: 1},
+				{t: time.Date(2000, 1, 1, 0, 0, 4, 0, time.UTC), e: 1},
+				{t: time.Date(2000, 1, 1, 0, 0, 5, 0, time.UTC), e: 1},
+			},
+			want:   6,
+			reduce: adder,
+		},
 	}
 
 	for _, e := range table {
 		w := New(e.size, e.dur, e.reduce)
 		for _, inc := range e.incs {
-			w.addAt(inc.t, inc.e)
+			w.insertAt(inc.t, inc.e)
 		}
 		ct := w.reducedAt(e.look)
 		if ct != e.want {

@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package window provides a type for efficiently (in time) recording events
-// seen in a given span of time, with a given resolution.
+// Package window provides a type for efficiently recording events as they
+// occur over a given span of time.  Events added to the window will remain
+// until the time expires.
 package window
 
 import (
@@ -38,6 +39,9 @@ type Window struct {
 // third value that will be stored in the window.  The values i or j may be
 // nil.  The underlying types for both arguments and the output should be
 // identical.
+//
+// If the reducer is any kind of slice or list, then data usage will grow
+// linearly with the number of events added to the window.
 //
 // Reducer will be called on its own output: Reducer(Reducer(x, y), z).
 type Reducer func(i, j interface{}) interface{}

@@ -1244,7 +1244,7 @@ func (b *B2) CreateKey(ctx context.Context, name string, caps []string, valid ti
 // Delete wraps b2_delete_key.
 func (k *Key) Delete(ctx context.Context) error {
 	b2req := &b2types.DeleteKeyRequest{
-		KeyID: k.Name, // ???
+		KeyID: k.ID,
 	}
 	headers := map[string]string{
 		"Authorization": k.b2.authToken,

@@ -42,6 +42,11 @@ func (k *Key) Expires() time.Time { return k.k.expires() }
 // Delete removes the key from B2.
 func (k *Key) Delete(ctx context.Context) error { return k.k.del(ctx) }
 
+// Secret returns the value that should be passed into NewClient().  It is only
+// available on newly created keys; it is not available from ListKey
+// operations.
+func (k *Key) Secret() string { return k.k.secret() }
+
 type keyOptions struct {
 	caps     []string
 	prefix   string
@@ -80,8 +85,9 @@ func Prefix(prefix string) KeyOption {
 	}
 }
 
-// CreateKey creates a global application key that is valid for all buckets
-// in this project.
+// CreateKey creates a global application key that is valid for all buckets in
+// this project.  The key's secret will only be accessible on the object
+// returned from this call.
 func (c *Client) CreateKey(ctx context.Context, name string, opts ...KeyOption) (*Key, error) {
 	var ko keyOptions
 	for _, o := range opts {

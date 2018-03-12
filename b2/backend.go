@@ -153,6 +153,7 @@ type beKeyInterface interface {
 	caps() []string
 	name() string
 	expires() time.Time
+	secret() string
 }
 
 type beKey struct {
@@ -709,6 +710,7 @@ func (b *beKey) del(ctx context.Context) error { return b.k.del(ctx) }
 func (b *beKey) caps() []string                { return b.k.caps() }
 func (b *beKey) name() string                  { return b.k.name() }
 func (b *beKey) expires() time.Time            { return b.k.expires() }
+func (b *beKey) secret() string                { return b.k.secret() }
 
 func jitter(d time.Duration) time.Duration {
 	f := float64(d)

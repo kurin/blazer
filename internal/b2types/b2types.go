@@ -244,6 +244,8 @@ type CreateKeyRequest struct {
 }
 
 type Key struct {
+	ID           string   `json:"applicationKeyId"`
+	Secret       string   `json:"applicationKey"`
 	AccountID    string   `json:"accountId"`
 	Capabilities []string `json:"capabilities"`
 	Name         string   `json:"keyName"`

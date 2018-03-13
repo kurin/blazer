@@ -824,8 +824,8 @@ func TestSmallUploadsFewRoundtrips(t *testing.T) {
 		}
 	}
 	si := bucket.c.Status()
-	getURL := si.Counters[0].CountByMethod()["b2_get_upload_url"]
-	uploadFile := si.Counters[0].CountByMethod()["b2_upload_file"]
+	getURL := si.RPCs[0].CountByMethod()["b2_get_upload_url"]
+	uploadFile := si.RPCs[0].CountByMethod()["b2_upload_file"]
 	if getURL >= uploadFile {
 		t.Errorf("too many calls to b2_get_upload_url")
 	}

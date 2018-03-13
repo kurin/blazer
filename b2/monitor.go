@@ -28,9 +28,15 @@ import (
 
 // StatusInfo reports information about a client.
 type StatusInfo struct {
-	Writers  map[string]*WriterStatus
-	Readers  map[string]*ReaderStatus
-	Counters map[time.Duration]MethodList
+	// Writers contains the status of all current uploads with progress.
+	Writers map[string]*WriterStatus
+
+	// Readers contains the status of all current downloads with progress.
+	Readers map[string]*ReaderStatus
+
+	// RPCs contains information about recently made RPC calls over the last
+	// minute, five minutes, hour, and for all time.
+	RPCs map[time.Duration]MethodList
 }
 
 // MethodList is an accumulation of RPC calls that have been made over a given
@@ -107,9 +113,9 @@ func (c *Client) Status() *StatusInfo {
 	defer c.slock.Unlock()
 
 	si := &StatusInfo{
-		Writers:  make(map[string]*WriterStatus),
-		Readers:  make(map[string]*ReaderStatus),
-		Counters: make(map[time.Duration]MethodList),
+		Writers: make(map[string]*WriterStatus),
+		Readers: make(map[string]*ReaderStatus),
+		RPCs:    make(map[time.Duration]MethodList),
 	}
 
 	for name, w := range c.sWriters {
@@ -121,7 +127,7 @@ func (c *Client) Status() *StatusInfo {
 	}
 
 	for _, c := range c.sMethods {
-		si.Counters[c.d] = c.retrieve()
+		si.RPCs[c.d] = c.retrieve()
 	}
 
 	return si
@@ -129,7 +135,7 @@ func (c *Client) Status() *StatusInfo {
 
 func (si *StatusInfo) table() map[string]map[string]int {
 	r := make(map[string]map[string]int)
-	for d, c := range si.Counters {
+	for d, c := range si.RPCs {
 		for _, m := range c {
 			if _, ok := r[m.name]; !ok {
 				r[m.name] = make(map[string]int)
@@ -200,7 +206,7 @@ var (
 		},
 		"methods": func(si *StatusInfo) []string {
 			methods := make(map[string]bool)
-			for _, ms := range si.Counters {
+			for _, ms := range si.RPCs {
 				for _, m := range ms {
 					methods[m.name] = true
 				}
@@ -214,7 +220,7 @@ var (
 		},
 		"durations": func(si *StatusInfo) []string {
 			var ds []time.Duration
-			for d := range si.Counters {
+			for d := range si.RPCs {
 				ds = append(ds, d)
 			}
 			sort.Slice(ds, func(i, j int) bool { return ds[i] < ds[j] })

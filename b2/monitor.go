@@ -30,13 +30,26 @@ import (
 type StatusInfo struct {
 	Writers  map[string]*WriterStatus
 	Readers  map[string]*ReaderStatus
-	Counters map[time.Duration][]Method
+	Counters map[time.Duration]MethodList
 }
 
-type Method struct {
-	Name     string
-	Duration time.Duration
-	Status   int
+// MethodList is an accumulation of RPC calls that have been made over a given
+// period of time.
+type MethodList []method
+
+// CountByMethod returns the total RPC calls made per method.
+func (ml MethodList) CountByMethod() map[string]int {
+	r := make(map[string]int)
+	for i := range ml {
+		r[ml[i].name]++
+	}
+	return r
+}
+
+type method struct {
+	name     string
+	duration time.Duration
+	status   int
 }
 
 type methodCounter struct {
@@ -44,22 +57,22 @@ type methodCounter struct {
 	w *window.Window
 }
 
-func (mc methodCounter) record(m Method) {
-	mc.w.Insert([]Method{m})
+func (mc methodCounter) record(m method) {
+	mc.w.Insert([]method{m})
 }
 
-func (mc methodCounter) retrieve() []Method {
+func (mc methodCounter) retrieve() MethodList {
 	ms := mc.w.Reduce()
-	return ms.([]Method)
+	return MethodList(ms.([]method))
 }
 
 func newMethodCounter(d, res time.Duration) methodCounter {
 	r := func(i, j interface{}) interface{} {
-		a, ok := i.([]Method)
+		a, ok := i.([]method)
 		if !ok {
 			a = nil
 		}
-		b, ok := j.([]Method)
+		b, ok := j.([]method)
 		if !ok {
 			b = nil
 		}
@@ -96,7 +109,7 @@ func (c *Client) Status() *StatusInfo {
 	si := &StatusInfo{
 		Writers:  make(map[string]*WriterStatus),
 		Readers:  make(map[string]*ReaderStatus),
-		Counters: make(map[time.Duration][]Method),
+		Counters: make(map[time.Duration]MethodList),
 	}
 
 	for name, w := range c.sWriters {
@@ -118,10 +131,14 @@ func (si *StatusInfo) table() map[string]map[string]int {
 	r := make(map[string]map[string]int)
 	for d, c := range si.Counters {
 		for _, m := range c {
-			if _, ok := r[m.Name]; !ok {
-				r[m.Name] = make(map[string]int)
+			if _, ok := r[m.name]; !ok {
+				r[m.name] = make(map[string]int)
 			}
-			r[m.Name][d.String()]++
+			dur := "all time"
+			if d > 0 {
+				dur = d.String()
+			}
+			r[m.name][dur]++
 		}
 	}
 	return r
@@ -185,7 +202,7 @@ var (
 			methods := make(map[string]bool)
 			for _, ms := range si.Counters {
 				for _, m := range ms {
-					methods[m.Name] = true
+					methods[m.name] = true
 				}
 			}
 			var names []string
@@ -203,7 +220,11 @@ var (
 			sort.Slice(ds, func(i, j int) bool { return ds[i] < ds[j] })
 			var r []string
 			for _, d := range ds {
-				r = append(r, d.String())
+				dur := "all time"
+				if d > 0 {
+					dur = d.String()
+				}
+				r = append(r, dur)
 			}
 			return r
 		},
@@ -212,12 +233,12 @@ var (
 	statusTemplate = template.Must(template.New("status").Funcs(funcMap).Parse(string(b2assets.MustAsset("data/status.html"))))
 )
 
+// ServeHTTP serves diagnostic information about the current state of the
+// client; essentially everything available from Client.Status()
+//
 // ServeHTTP satisfies the http.Handler interface.  This means that a Client
 // can be passed directly to a path via http.Handle (or on a custom ServeMux or
 // a custom http.Server).
-//
-// ServeHTTP serves diagnostic information about the current state of the
-// client; essentially everything available from Client.Status()
 func (c *Client) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	info := c.Status()
 	statusTemplate.Execute(rw, info)

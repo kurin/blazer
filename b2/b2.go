@@ -59,6 +59,7 @@ func NewClient(ctx context.Context, account, key string, opts ...ClientOption) (
 			newMethodCounter(time.Minute, time.Second),
 			newMethodCounter(time.Minute*5, time.Second),
 			newMethodCounter(time.Hour, time.Minute),
+			newMethodCounter(0, 0), // forever
 		},
 	}
 	opts = append(opts, client(c))
@@ -135,7 +136,7 @@ type clientTransport struct {
 }
 
 func (ct *clientTransport) RoundTrip(r *http.Request) (*http.Response, error) {
-	method := r.Header.Get("X-Blazer-Method")
+	m := r.Header.Get("X-Blazer-Method")
 	t := ct.rt
 	if t == nil {
 		t = http.DefaultTransport
@@ -146,12 +147,12 @@ func (ct *clientTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	if err != nil {
 		return resp, err
 	}
-	if method != "" && ct.client != nil {
+	if m != "" && ct.client != nil {
 		ct.client.slock.Lock()
-		m := Method{
-			Name:     method,
-			Duration: e.Sub(b),
-			Status:   resp.StatusCode,
+		m := method{
+			name:     m,
+			duration: e.Sub(b),
+			status:   resp.StatusCode,
 		}
 		for _, counter := range ct.client.sMethods {
 			counter.record(m)

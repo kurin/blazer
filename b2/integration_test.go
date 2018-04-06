@@ -1026,6 +1026,9 @@ func TestCreateDeleteKey(t *testing.T) {
 		pfx string
 	}{
 		{
+			cap: []string{"deleteKeys"},
+		},
+		{
 			d:   time.Minute,
 			cap: []string{"deleteKeys"},
 			pfx: "/prefox",

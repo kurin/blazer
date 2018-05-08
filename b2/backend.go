@@ -164,7 +164,7 @@ func (r *beRoot) authorizeAccount(ctx context.Context, account, key string, opts
 }
 
 func (r *beRoot) reauthorizeAccount(ctx context.Context) error {
-	return r.authorizeAccount(ctx, r.account, r.key)
+	return r.authorizeAccount(ctx, r.account, r.key, r.options...)
 }
 
 func (r *beRoot) createBucket(ctx context.Context, name, btype string, info map[string]string, rules []LifecycleRule) (beBucketInterface, error) {

@@ -37,6 +37,7 @@ type beRootInterface interface {
 type beRoot struct {
 	account, key string
 	b2i          b2RootInterface
+	options      []ClientOption
 }
 
 type beBucketInterface interface {
@@ -156,6 +157,7 @@ func (r *beRoot) authorizeAccount(ctx context.Context, account, key string, opts
 		}
 		r.account = account
 		r.key = key
+		r.options = opts
 		return nil
 	}
 	return withBackoff(ctx, r, f)

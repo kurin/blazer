@@ -869,6 +869,37 @@ func TestListUnfinishedLargeFiles(t *testing.T) {
 	}
 }
 
+func TestReauthPreservesOptions(t *testing.T) {
+	ctx := context.Background()
+	bucket, done := startLiveTest(ctx, t)
+	defer done()
+
+	var first []ClientOption
+	opts := bucket.r.(*beRoot).options
+	for _, o := range opts {
+		first = append(first, o)
+	}
+
+	if err := bucket.r.reauthorizeAccount(ctx); err != nil {
+		t.Fatalf("reauthorizeAccount: %v", err)
+	}
+
+	second := bucket.r.(*beRoot).options
+	if len(second) != len(first) {
+		t.Fatalf("options mismatch: got %d options, wanted %d", len(second), len(first))
+	}
+
+	var f, s clientOptions
+	for i := range first {
+		first[i](&f)
+		second[i](&s)
+	}
+
+	if !f.eq(s) {
+		t.Errorf("options mismatch: got %v, want %v", s, f)
+	}
+}
+
 type object struct {
 	o   *Object
 	err error

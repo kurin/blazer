@@ -78,6 +78,26 @@ type clientOptions struct {
 	userAgents      []string
 }
 
+// for testing
+func (c clientOptions) eq(o clientOptions) bool {
+	if c.client != o.client ||
+		c.transport != o.transport ||
+		c.failSomeUploads != o.failSomeUploads ||
+		c.expireTokens != o.expireTokens ||
+		c.capExceeded != o.capExceeded {
+		return false
+	}
+	if len(c.userAgents) != len(o.userAgents) {
+		return false
+	}
+	for i := range c.userAgents {
+		if c.userAgents[i] != o.userAgents[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // A ClientOption allows callers to adjust various per-client settings.
 type ClientOption func(*clientOptions)
 

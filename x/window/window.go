@@ -24,7 +24,7 @@ import (
 
 // A Window efficiently records events that have occurred over a span of time
 // extending from some fixed interval ago to now.  Events that pass beyond this
-// horizon effectively "fall off" the back of the window.
+// horizon are discarded.
 type Window struct {
 	mu      sync.Mutex
 	events  []interface{}

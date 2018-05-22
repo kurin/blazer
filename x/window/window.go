@@ -83,6 +83,13 @@ func (w *Window) sweep(now time.Time) {
 
 	// This compares now and w.last's monotonic clocks.
 	diff := now.Sub(w.last)
+	if diff < 0 {
+		// time went backwards somehow; zero events and return
+		for i := range w.events {
+			w.events[i] = nil
+		}
+		return
+	}
 	last := now.Add(-diff)
 
 	b := w.bucket(now)

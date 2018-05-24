@@ -53,12 +53,13 @@ type ObjectIterator struct {
 	objs   []*Object
 	init   sync.Once
 	l      lister
+	count  int
 }
 
 type lister func(context.Context, int, *Cursor) ([]*Object, *Cursor, error)
 
 func (o *ObjectIterator) frame(ctx context.Context) error {
-	objs, c, err := o.l(ctx, 1000, o.c)
+	objs, c, err := o.l(ctx, o.count, o.c)
 	if err != nil && err != io.EOF {
 		if bNotExist.MatchString(err.Error()) {
 			return b2err{
@@ -83,9 +84,11 @@ func (o *ObjectIterator) frame(ctx context.Context) error {
 // value of Err().
 func (o *ObjectIterator) Next(ctx context.Context) bool {
 	o.init.Do(func() {
+		o.count = 1000
 		switch {
 		case o.opts.unfinished:
 			o.l = o.bucket.ListUnfinishedLargeFiles
+			o.count = 100
 		case o.opts.hidden:
 			o.l = o.bucket.ListObjects
 		default:

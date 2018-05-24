@@ -64,21 +64,14 @@ func TestReadWriteLive(t *testing.T) {
 		t.Error(err)
 	}
 
-	var cur *Cursor
-	for {
-		objs, c, err := bucket.ListObjects(ctx, 100, cur)
-		if err != nil && err != io.EOF {
-			t.Fatal(err)
+	iter := bucket.List(ListHidden())
+	for iter.Next(ctx) {
+		if err := iter.Object().Delete(ctx); err != nil {
+			t.Error(err)
 		}
-		for _, o := range objs {
-			if err := o.Delete(ctx); err != nil {
-				t.Error(err)
-			}
-		}
-		if err == io.EOF {
-			break
-		}
-		cur = c
+	}
+	if err := iter.Err(); err != nil {
+		t.Error(err)
 	}
 }
 
@@ -175,7 +168,7 @@ func TestHideShowLive(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := countObjects(ctx, bucket.ListCurrentObjects)
+	got, err := countObjects(ctx, bucket.List())
 	if err != nil {
 		t.Error(err)
 	}
@@ -193,7 +186,7 @@ func TestHideShowLive(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err = countObjects(ctx, bucket.ListCurrentObjects)
+	got, err = countObjects(ctx, bucket.List())
 	if err != nil {
 		t.Error(err)
 	}
@@ -207,7 +200,7 @@ func TestHideShowLive(t *testing.T) {
 	}
 
 	// count see the object again
-	got, err = countObjects(ctx, bucket.ListCurrentObjects)
+	got, err = countObjects(ctx, bucket.List())
 	if err != nil {
 		t.Error(err)
 	}
@@ -905,39 +898,12 @@ type object struct {
 	err error
 }
 
-func countObjects(ctx context.Context, f func(context.Context, int, *Cursor) ([]*Object, *Cursor, error)) (int, error) {
+func countObjects(ctx context.Context, iter *ObjectIterator) (int, error) {
 	var got int
-	ch := listObjects(ctx, f)
-	for c := range ch {
-		if c.err != nil {
-			return 0, c.err
-		}
+	for iter.Next(ctx) {
 		got++
 	}
-	return got, nil
-}
-
-func listObjects(ctx context.Context, f func(context.Context, int, *Cursor) ([]*Object, *Cursor, error)) <-chan object {
-	ch := make(chan object)
-	go func() {
-		defer close(ch)
-		var cur *Cursor
-		for {
-			objs, c, err := f(ctx, 100, cur)
-			if err != nil && err != io.EOF {
-				ch <- object{err: err}
-				return
-			}
-			for _, o := range objs {
-				ch <- object{o: o}
-			}
-			if err == io.EOF {
-				return
-			}
-			cur = c
-		}
-	}()
-	return ch
+	return got, iter.Err()
 }
 
 var defaultTransport = http.DefaultTransport
@@ -1042,13 +1008,14 @@ func startLiveTest(ctx context.Context, t *testing.T) (*Bucket, func()) {
 	}
 	f := func() {
 		defer ccport.done()
-		for c := range listObjects(ctx, bucket.ListObjects) {
-			if c.err != nil {
-				continue
-			}
-			if err := c.o.Delete(ctx); err != nil {
+		iter := bucket.List(ListHidden())
+		for iter.Next(ctx) {
+			if err := iter.Object().Delete(ctx); err != nil {
 				t.Error(err)
 			}
+		}
+		if err := iter.Err(); err != nil && !IsNotExist(err) {
+			t.Errorf("%#v", err)
 		}
 		if err := bucket.Delete(ctx); err != nil && !IsNotExist(err) {
 			t.Error(err)

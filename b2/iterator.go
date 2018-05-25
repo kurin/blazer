@@ -58,7 +58,7 @@ type ObjectIterator struct {
 
 type lister func(context.Context, int, *Cursor) ([]*Object, *Cursor, error)
 
-func (o *ObjectIterator) frame(ctx context.Context) error {
+func (o *ObjectIterator) page(ctx context.Context) error {
 	objs, c, err := o.l(ctx, o.count, o.c)
 	if err != nil && err != io.EOF {
 		if bNotExist.MatchString(err.Error()) {
@@ -102,12 +102,16 @@ func (o *ObjectIterator) Next(ctx context.Context) bool {
 	if o.err != nil {
 		return false
 	}
+	if ctx.Err() != nil {
+		o.err = ctx.Err()
+		return false
+	}
 	if o.idx >= len(o.objs) {
 		if o.final {
 			o.err = io.EOF
 			return false
 		}
-		if err := o.frame(ctx); err != nil {
+		if err := o.page(ctx); err != nil {
 			o.err = err
 			return false
 		}

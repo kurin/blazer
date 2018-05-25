@@ -149,9 +149,9 @@ func startLiveTest(ctx context.Context, t *testing.T) (*b2.Bucket, func()) {
 		}
 		if err := iter.Err(); err != nil && !b2.IsNotExist(err) {
 			t.Error(err)
-			if err := bucket.Delete(ctx); err != nil && !b2.IsNotExist(err) {
-				t.Error(err)
-			}
+		}
+		if err := bucket.Delete(ctx); err != nil && !b2.IsNotExist(err) {
+			t.Error(err)
 		}
 	}
 	return bucket, f

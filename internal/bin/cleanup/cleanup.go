@@ -29,9 +29,12 @@ func main() {
 		fmt.Println(err)
 		return
 	}
-	kill := []string{fmt.Sprintf("%s-consistobucket", id), fmt.Sprintf("%s-base-tests", id)}
+	var kill []string
 	for _, bucket := range buckets {
 		if strings.HasPrefix(bucket.Name(), fmt.Sprintf("%s-b2-tests-", id)) {
+			kill = append(kill, bucket.Name())
+		}
+		if bucket.Name() == fmt.Sprintf("%s-consistobucket", id) || bucket.Name() == fmt.Sprintf("%s-base-tests", id) {
 			kill = append(kill, bucket.Name())
 		}
 	}
@@ -40,6 +43,7 @@ func main() {
 		wg.Add(1)
 		go func(name string) {
 			defer wg.Done()
+			fmt.Println("removing", name)
 			if err := killBucket(ctx, client, name); err != nil {
 				fmt.Println(err)
 			}

@@ -84,11 +84,16 @@ func (o *ObjectIterator) page(ctx context.Context) error {
 // value of Err().
 func (o *ObjectIterator) Next(ctx context.Context) bool {
 	o.init.Do(func() {
-		o.count = 1000
+		o.count = o.opts.pageSize
+		if o.count < 0 || o.count > 1000 {
+			o.count = 1000
+		}
 		switch {
 		case o.opts.unfinished:
 			o.l = o.bucket.ListUnfinishedLargeFiles
-			o.count = 100
+			if o.count > 100 {
+				o.count = 100
+			}
 		case o.opts.hidden:
 			o.l = o.bucket.ListObjects
 		default:
@@ -140,6 +145,7 @@ type objectIteratorOptions struct {
 	unfinished bool
 	prefix     string
 	delimiter  string
+	pageSize   int
 }
 
 // A ListOption alters the default behavor of List.
@@ -183,5 +189,14 @@ func ListPrefix(pfx string) ListOption {
 func ListDelimiter(delimiter string) ListOption {
 	return func(o *objectIteratorOptions) {
 		o.delimiter = delimiter
+	}
+}
+
+// Request the given number of objects per network round-trip.  The default
+// (and maximum) is 1000 objects, except for unfinished large files, which is
+// 100.
+func ListPageSize(count int) ListOption {
+	return func(o *objectIteratorOptions) {
+		o.pageSize = count
 	}
 }

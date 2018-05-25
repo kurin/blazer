@@ -99,9 +99,9 @@ func downloadFile(ctx context.Context, bucket *b2.Bucket, downloads int, src, ds
 func printObjects(ctx context.Context, bucket *b2.Bucket) error {
 	iterator := bucket.List()
 	for iterator.Next() {
-    fmt.Println(itrator.Object())
+		fmt.Println(itrator.Object())
 	}
-  return iterator.Err()
+	return iterator.Err()
 }
 ```
 

@@ -22,9 +22,10 @@ import (
 
 // List returns an iterator for selecting objects in a bucket.  The default
 // behavior, with no options, is to list all currently un-hidden objects.
-func (b *Bucket) List(opts ...ListOption) *ObjectIterator {
+func (b *Bucket) List(ctx context.Context, opts ...ListOption) *ObjectIterator {
 	o := &ObjectIterator{
 		bucket: b,
+		ctx:    ctx,
 	}
 	for _, opt := range opts {
 		opt(&o.opts)
@@ -36,7 +37,7 @@ func (b *Bucket) List(opts ...ListOption) *ObjectIterator {
 // contents.
 //
 // It is intended to be called in a loop:
-//  for iter.Next(ctx) {
+//  for iter.Next() {
 //    obj := iter.Object()
 //    // act on obj
 //  }
@@ -45,6 +46,7 @@ func (b *Bucket) List(opts ...ListOption) *ObjectIterator {
 //  }
 type ObjectIterator struct {
 	bucket *Bucket
+	ctx    context.Context
 	final  bool
 	err    error
 	idx    int
@@ -82,7 +84,7 @@ func (o *ObjectIterator) page(ctx context.Context) error {
 // any calls to Object().  If Next returns true, then the next call to Object()
 // will be valid.  Once Next returns false, it is important to check the return
 // value of Err().
-func (o *ObjectIterator) Next(ctx context.Context) bool {
+func (o *ObjectIterator) Next() bool {
 	o.init.Do(func() {
 		o.count = o.opts.pageSize
 		if o.count < 0 || o.count > 1000 {
@@ -107,8 +109,8 @@ func (o *ObjectIterator) Next(ctx context.Context) bool {
 	if o.err != nil {
 		return false
 	}
-	if ctx.Err() != nil {
-		o.err = ctx.Err()
+	if o.ctx.Err() != nil {
+		o.err = o.ctx.Err()
 		return false
 	}
 	if o.idx >= len(o.objs) {
@@ -116,11 +118,11 @@ func (o *ObjectIterator) Next(ctx context.Context) bool {
 			o.err = io.EOF
 			return false
 		}
-		if err := o.page(ctx); err != nil {
+		if err := o.page(o.ctx); err != nil {
 			o.err = err
 			return false
 		}
-		return o.Next(ctx)
+		return o.Next()
 	}
 	o.idx++
 	return true

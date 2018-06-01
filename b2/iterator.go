@@ -61,6 +61,10 @@ type ObjectIterator struct {
 type lister func(context.Context, int, *Cursor) ([]*Object, *Cursor, error)
 
 func (o *ObjectIterator) page(ctx context.Context) error {
+	if o.opts.locker != nil {
+		o.opts.locker.Lock()
+		defer o.opts.locker.Unlock()
+	}
 	objs, c, err := o.l(ctx, o.count, o.c)
 	if err != nil && err != io.EOF {
 		if bNotExist.MatchString(err.Error()) {
@@ -148,6 +152,7 @@ type objectIteratorOptions struct {
 	prefix     string
 	delimiter  string
 	pageSize   int
+	locker     sync.Locker
 }
 
 // A ListOption alters the default behavor of List.
@@ -194,11 +199,19 @@ func ListDelimiter(delimiter string) ListOption {
 	}
 }
 
-// Request the given number of objects per network round-trip.  The default
-// (and maximum) is 1000 objects, except for unfinished large files, which is
-// 100.
+// ListPageSize configures the iterator to request the given number of objects
+// per network round-trip.  The default (and maximum) is 1000 objects, except
+// for unfinished large files, which is 100.
 func ListPageSize(count int) ListOption {
 	return func(o *objectIteratorOptions) {
 		o.pageSize = count
+	}
+}
+
+// ListLocker passes the iterator a lock which will be held during network
+// round-trips.
+func ListLocker(l sync.Locker) ListOption {
+	return func(o *objectIteratorOptions) {
+		o.locker = l
 	}
 }

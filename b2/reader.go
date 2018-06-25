@@ -256,38 +256,28 @@ func (r *Reader) status() *ReaderStatus {
 	return rs
 }
 
-// copied from io.Copy, basically.
-func copyContext(ctx context.Context, dst io.Writer, src io.Reader) (written int64, err error) {
-	buf := make([]byte, 32*1024)
-	for {
-		if ctx.Err() != nil {
-			err = ctx.Err()
-			return
+// strip a writer of any non-Write methods
+type onlyWriter struct{ w io.Writer }
+
+func (ow onlyWriter) Write(p []byte) (int, error) { return ow.w.Write(p) }
+
+func copyContext(ctx context.Context, w io.Writer, r io.Reader) (int64, error) {
+	var n int64
+	var err error
+	done := make(chan struct{})
+	go func() {
+		if _, ok := w.(*Writer); ok {
+			w = onlyWriter{w}
 		}
-		nr, er := src.Read(buf)
-		if nr > 0 {
-			nw, ew := dst.Write(buf[0:nr])
-			if nw > 0 {
-				written += int64(nw)
-			}
-			if ew != nil {
-				err = ew
-				break
-			}
-			if nr != nw {
-				err = io.ErrShortWrite
-				break
-			}
-		}
-		if er == io.EOF {
-			break
-		}
-		if er != nil {
-			err = er
-			break
-		}
+		n, err = io.Copy(w, r)
+		close(done)
+	}()
+	select {
+	case <-done:
+		return n, err
+	case <-ctx.Done():
+		return 0, ctx.Err()
 	}
-	return written, err
 }
 
 type noopResetter struct {

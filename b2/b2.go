@@ -434,7 +434,7 @@ type Attrs struct {
 	ContentType     string            // Used on upload, default is "application/octet-stream".
 	Status          ObjectState       // Not used on upload.
 	UploadTimestamp time.Time         // Not used on upload.
-	SHA1            string            // Not used on upload. Can be "none" for large files.
+	SHA1            string            // Can be "none" for large files.  If set on upload, will be used for large files.
 	LastModified    time.Time         // If present, and there are fewer than 10 keys in the Info field, this is saved on upload.
 	Info            map[string]string // Save arbitrary metadata on upload, but limited to 10 keys.
 }
@@ -473,6 +473,9 @@ func (o *Object) Attrs(ctx context.Context) (*Attrs, error) {
 		}
 		mtime = time.Unix(ms/1e3, (ms%1e3)*1e6)
 		delete(info, "src_last_modified_millis")
+	}
+	if v, ok := info["large_file_sha1"]; ok {
+		sha = v
 	}
 	return &Attrs{
 		Name:            name,

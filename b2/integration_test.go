@@ -22,6 +22,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"reflect"
@@ -136,6 +137,9 @@ func TestReaderFromLive(t *testing.T) {
 		}
 		if rn != n {
 			t.Errorf("Read from B2: got %d bytes, want %d bytes", rn, n)
+		}
+		if err, ok := r.Verify(); ok && err != nil {
+			t.Errorf("Read from B2: %v", err)
 		}
 		if err := r.Close(); err != nil {
 			t.Errorf("r.Close(): %v", err)
@@ -323,6 +327,7 @@ func TestAttrs(t *testing.T) {
 		for _, attrs := range attrlist {
 			o := bucket.Object(e.name)
 			w := o.NewWriter(ctx).WithAttrs(attrs)
+			w.ChunkSize = 5e6
 			if _, err := io.Copy(w, io.LimitReader(zReader{}, e.size)); err != nil {
 				t.Error(err)
 				continue
@@ -509,6 +514,9 @@ func TestRangeReaderLive(t *testing.T) {
 		want := fmt.Sprintf("%x", hw.Sum(nil))
 		if got != want {
 			t.Errorf("NewRangeReader(_, %d, %d): got %q, want %q", e.offset, e.length, got, want)
+		}
+		if err, ok := r.Verify(); ok && err != nil {
+			t.Errorf("NewRangeReader(_, %d, %d): %v", e.offset, e.length, err)
 		}
 	}
 }
@@ -886,6 +894,85 @@ func TestReauthPreservesOptions(t *testing.T) {
 
 	if !f.eq(s) {
 		t.Errorf("options mismatch: got %v, want %v", s, f)
+	}
+}
+
+func TestVerifyReader(t *testing.T) {
+	ctx := context.Background()
+	bucket, done := startLiveTest(ctx, t)
+	defer done()
+
+	table := []struct {
+		name     string
+		fakeSHA  string
+		size     int64
+		off, len int64
+		valid    bool
+	}{
+		{
+			name:  "first",
+			size:  100,
+			off:   0,
+			len:   -1,
+			valid: true,
+		},
+		{
+			name:  "second",
+			size:  100,
+			off:   0,
+			len:   100,
+			valid: true,
+		},
+		{
+			name:  "third",
+			size:  100,
+			off:   0,
+			len:   99,
+			valid: false,
+		},
+		{
+			name:  "fourth",
+			size:  5e6 + 100,
+			off:   0,
+			len:   -1,
+			valid: false,
+		},
+		{
+			name:    "fifth",
+			size:    5e6 + 100,
+			off:     0,
+			len:     -1,
+			fakeSHA: "fbc815f2d6518858dec83ccb46263875fc894d88",
+			valid:   true,
+		},
+	}
+
+	for _, e := range table {
+		o := bucket.Object(e.name)
+		w := o.NewWriter(ctx)
+		if e.fakeSHA != "" {
+			w = w.WithAttrs(&Attrs{SHA1: e.fakeSHA})
+		}
+		w.ChunkSize = 5e6
+		if _, err := io.Copy(w, io.LimitReader(zReader{}, e.size)); err != nil {
+			t.Error(err)
+			continue
+		}
+		if err := w.Close(); err != nil {
+			t.Error(err)
+			continue
+		}
+		r := o.NewRangeReader(ctx, e.off, e.len)
+		if _, err := io.Copy(ioutil.Discard, r); err != nil {
+			t.Error(err)
+		}
+		err, ok := r.Verify()
+		if ok != e.valid {
+			t.Errorf("%s: bad validity: got %v, want %v", e.name, ok, e.valid)
+		}
+		if e.valid && err != nil {
+			t.Errorf("%s does not verify: %v", e.name, err)
+		}
 	}
 }
 

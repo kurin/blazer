@@ -1121,9 +1121,13 @@ func (b *Bucket) DownloadFileByName(ctx context.Context, name string, offset, si
 		}
 		info[name] = val
 	}
+	sha1 := resp.Header.Get("X-Bz-Content-Sha1")
+	if sha1 == "none" && info["Large_file_sha1"] != "" {
+		sha1 = info["Large_file_sha1"]
+	}
 	return &FileReader{
 		ReadCloser:    resp.Body,
-		SHA1:          resp.Header.Get("X-Bz-Content-Sha1"),
+		SHA1:          sha1,
 		ID:            resp.Header.Get("X-Bz-File-Id"),
 		ContentType:   resp.Header.Get("Content-Type"),
 		ContentLength: int(clen),

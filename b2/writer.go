@@ -482,6 +482,9 @@ func (w *Writer) WithAttrs(attrs *Attrs) *Writer {
 	for k, v := range attrs.Info {
 		w.info[k] = v
 	}
+	if len(w.info) < 10 && attrs.SHA1 != "" {
+		w.info["large_file_sha1"] = attrs.SHA1
+	}
 	if len(w.info) < 10 && !attrs.LastModified.IsZero() {
 		w.info["src_last_modified_millis"] = fmt.Sprintf("%d", attrs.LastModified.UnixNano()/1e6)
 	}

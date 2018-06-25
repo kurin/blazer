@@ -20,6 +20,7 @@ import (
 	"errors"
 	"io"
 	"sync"
+	"time"
 
 	"github.com/kurin/blazer/internal/blog"
 )
@@ -122,6 +123,7 @@ func (r *Reader) thread() {
 				}
 				r.length -= size
 			}
+			var b backoff
 		redo:
 			fr, err := r.o.b.b.downloadFileByName(r.ctx, r.name, offset, size)
 			if err == errNoMoreContent {
@@ -150,7 +152,8 @@ func (r *Reader) thread() {
 			r.smux.Unlock()
 			if i < int64(rsize) || err == io.ErrUnexpectedEOF {
 				// Probably the network connection was closed early.  Retry.
-				blog.V(1).Infof("b2 reader %d: got %dB of %dB; retrying", chunkID, i, rsize)
+				blog.V(1).Infof("b2 reader %d: got %dB of %dB; retrying after %v", chunkID, i, rsize, b)
+				b.wait()
 				buf.Reset()
 				goto redo
 			}
@@ -285,3 +288,19 @@ type noopResetter struct {
 }
 
 func (noopResetter) Reset() error { return nil }
+
+type backoff time.Duration
+
+func (b *backoff) wait() {
+	if *b == 0 {
+		*b = backoff(time.Millisecond)
+	}
+	time.Sleep(time.Duration(*b))
+	if time.Duration(*b) < time.Second*10 {
+		*b <<= 1
+	}
+}
+
+func (b backoff) String() string {
+	return time.Duration(b).String()
+}

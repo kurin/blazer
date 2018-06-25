@@ -153,7 +153,11 @@ func (r *Reader) thread() {
 			if i < int64(rsize) || err == io.ErrUnexpectedEOF {
 				// Probably the network connection was closed early.  Retry.
 				blog.V(1).Infof("b2 reader %d: got %dB of %dB; retrying after %v", chunkID, i, rsize, b)
-				b.wait()
+				if err := b.wait(r.ctx); err != nil {
+					r.setErr(err)
+					r.rcond.Broadcast()
+					return
+				}
 				buf.Reset()
 				goto redo
 			}
@@ -291,13 +295,18 @@ func (noopResetter) Reset() error { return nil }
 
 type backoff time.Duration
 
-func (b *backoff) wait() {
+func (b *backoff) wait(ctx context.Context) error {
 	if *b == 0 {
 		*b = backoff(time.Millisecond)
 	}
-	time.Sleep(time.Duration(*b))
-	if time.Duration(*b) < time.Second*10 {
-		*b <<= 1
+	select {
+	case <-time.After(time.Duration(*b)):
+		if time.Duration(*b) < time.Second*10 {
+			*b <<= 1
+		}
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 }
 

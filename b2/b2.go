@@ -46,6 +46,7 @@ type Client struct {
 	sWriters map[string]*Writer
 	sReaders map[string]*Reader
 	sMethods []methodCounter
+	opts     clientOptions
 }
 
 // NewClient creates and returns a new Client with valid B2 service account
@@ -63,7 +64,10 @@ func NewClient(ctx context.Context, account, key string, opts ...ClientOption) (
 		},
 	}
 	opts = append(opts, client(c))
-	if err := c.backend.authorizeAccount(ctx, account, key, opts...); err != nil {
+	for _, f := range opts {
+		f(&c.opts)
+	}
+	if err := c.backend.authorizeAccount(ctx, account, key, c.opts); err != nil {
 		return nil, err
 	}
 	return c, nil
@@ -76,26 +80,7 @@ type clientOptions struct {
 	expireTokens    bool
 	capExceeded     bool
 	userAgents      []string
-}
-
-// for testing
-func (c clientOptions) eq(o clientOptions) bool {
-	if c.client != o.client ||
-		c.transport != o.transport ||
-		c.failSomeUploads != o.failSomeUploads ||
-		c.expireTokens != o.expireTokens ||
-		c.capExceeded != o.capExceeded {
-		return false
-	}
-	if len(c.userAgents) != len(o.userAgents) {
-		return false
-	}
-	for i := range c.userAgents {
-		if c.userAgents[i] != o.userAgents[i] {
-			return false
-		}
-	}
-	return true
+	writerOpts      []WriterOption
 }
 
 // A ClientOption allows callers to adjust various per-client settings.
@@ -527,14 +512,21 @@ func (o *Object) URL() string {
 // overwritten are not deleted, but are "hidden".
 //
 // Callers must close the writer when finished and check the error status.
-func (o *Object) NewWriter(ctx context.Context) *Writer {
+func (o *Object) NewWriter(ctx context.Context, opts ...WriterOption) *Writer {
 	ctx, cancel := context.WithCancel(ctx)
-	return &Writer{
+	w := &Writer{
 		o:      o,
 		name:   o.name,
 		ctx:    ctx,
 		cancel: cancel,
 	}
+	for _, f := range o.b.c.opts.writerOpts {
+		f(w)
+	}
+	for _, f := range opts {
+		f(w)
+	}
+	return w
 }
 
 // NewRangeReader returns a reader for the given object, reading up to length

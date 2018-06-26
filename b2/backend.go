@@ -28,7 +28,7 @@ type beRootInterface interface {
 	reauth(error) bool
 	transient(error) bool
 	reupload(error) bool
-	authorizeAccount(context.Context, string, string, ...ClientOption) error
+	authorizeAccount(context.Context, string, string, clientOptions) error
 	reauthorizeAccount(context.Context) error
 	createBucket(ctx context.Context, name, btype string, info map[string]string, rules []LifecycleRule) (beBucketInterface, error)
 	listBuckets(context.Context) ([]beBucketInterface, error)
@@ -37,7 +37,7 @@ type beRootInterface interface {
 type beRoot struct {
 	account, key string
 	b2i          b2RootInterface
-	options      []ClientOption
+	options      clientOptions
 }
 
 type beBucketInterface interface {
@@ -150,21 +150,21 @@ func (r *beRoot) reauth(err error) bool           { return r.b2i.reauth(err) }
 func (r *beRoot) reupload(err error) bool         { return r.b2i.reupload(err) }
 func (r *beRoot) transient(err error) bool        { return r.b2i.transient(err) }
 
-func (r *beRoot) authorizeAccount(ctx context.Context, account, key string, opts ...ClientOption) error {
+func (r *beRoot) authorizeAccount(ctx context.Context, account, key string, c clientOptions) error {
 	f := func() error {
-		if err := r.b2i.authorizeAccount(ctx, account, key, opts...); err != nil {
+		if err := r.b2i.authorizeAccount(ctx, account, key, c); err != nil {
 			return err
 		}
 		r.account = account
 		r.key = key
-		r.options = opts
+		r.options = c
 		return nil
 	}
 	return withBackoff(ctx, r, f)
 }
 
 func (r *beRoot) reauthorizeAccount(ctx context.Context) error {
-	return r.authorizeAccount(ctx, r.account, r.key, r.options...)
+	return r.authorizeAccount(ctx, r.account, r.key, r.options)
 }
 
 func (r *beRoot) createBucket(ctx context.Context, name, btype string, info map[string]string, rules []LifecycleRule) (beBucketInterface, error) {

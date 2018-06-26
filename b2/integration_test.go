@@ -871,29 +871,15 @@ func TestReauthPreservesOptions(t *testing.T) {
 	bucket, done := startLiveTest(ctx, t)
 	defer done()
 
-	var first []ClientOption
-	opts := bucket.r.(*beRoot).options
-	for _, o := range opts {
-		first = append(first, o)
-	}
-
+	first := bucket.r.(*beRoot).options
 	if err := bucket.r.reauthorizeAccount(ctx); err != nil {
 		t.Fatalf("reauthorizeAccount: %v", err)
 	}
-
 	second := bucket.r.(*beRoot).options
-	if len(second) != len(first) {
-		t.Fatalf("options mismatch: got %d options, wanted %d", len(second), len(first))
-	}
-
-	var f, s clientOptions
-	for i := range first {
-		first[i](&f)
-		second[i](&s)
-	}
-
-	if !f.eq(s) {
-		t.Errorf("options mismatch: got %v, want %v", s, f)
+	if !reflect.DeepEqual(first, second) {
+		// Test that they are literally the same set of options, which is an
+		// implementation detail but is fine for now.
+		t.Errorf("options mismatch: got %v, want %v", second, first)
 	}
 }
 

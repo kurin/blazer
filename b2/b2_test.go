@@ -71,7 +71,7 @@ type testRoot struct {
 	bucketMap map[string]map[string]string
 }
 
-func (t *testRoot) authorizeAccount(context.Context, string, string, ...ClientOption) error {
+func (t *testRoot) authorizeAccount(context.Context, string, string, clientOptions) error {
 	t.auths++
 	return nil
 }

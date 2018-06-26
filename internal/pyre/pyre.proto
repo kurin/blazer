@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+import "google/api/annotations.proto";
+
+package pyre;
+
+message AuthorizeAccountRequest {
+  string authorization = 1;
+}
+
+message AuthorizeAccountResponse {
+  string account_id = 1;
+  string authorization_token = 2;
+  string api_url = 3;
+  string download_url = 4;
+  int64 recommended_part_size = 5;
+  int64 absolute_mininum_part_size = 6;
+  int64 minimum_part_size = 7;
+}
+
+message GetUploadUrlRequest {
+  string bucket_id = 1;
+}
+
+message GetUploadUrlResponse {
+  string bucket_id = 1;
+  string upload_url = 2;
+  string authorization_token = 3;
+}
+
+service PyreService {
+  rpc AuthorizeAccount(AuthorizeAccountRequest) returns (AuthorizeAccountResponse) {
+    option (google.api.http) = {
+      get: "/b2api/v1/b2_authorize_account"
+    };
+  }
+
+  rpc GetUploadUrl(GetUploadUrlRequest) returns (GetUploadUrlResponse) {
+    option (google.api.http) = {
+      post: "/b2api/v1/b2_get_upload_url"
+      body: "*"
+    };
+  }
+}

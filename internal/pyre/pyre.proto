@@ -25,9 +25,9 @@ message AuthorizeAccountResponse {
   string authorization_token = 2;
   string api_url = 3;
   string download_url = 4;
-  int64 recommended_part_size = 5;
-  int64 absolute_mininum_part_size = 6;
-  int64 minimum_part_size = 7;
+  int32 recommended_part_size = 5;
+  int32 absolute_mininum_part_size = 6;
+  int32 minimum_part_size = 7;
 }
 
 message GetUploadUrlRequest {
@@ -54,7 +54,7 @@ message Bucket {
   string bucket_type = 4;
   map<string, string> bucket_info = 5;
   repeated string lifecycle_rules = 6;
-  int64 revision = 7;
+  int32 revision = 7;
 }
 
 message ListBucketsResponse {
@@ -71,7 +71,7 @@ message UploadFileResponse {
   string file_name = 2;
   string account_id = 3;
   string bucket_id = 4;
-  int64 content_length = 5;
+  int32 content_length = 5;
   string content_sha1 = 6;
   string content_type = 7;
   map<string, string> file_info = 8;

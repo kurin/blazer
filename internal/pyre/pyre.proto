@@ -18,9 +18,7 @@ import "google/api/annotations.proto";
 
 package pyre;
 
-message AuthorizeAccountRequest {
-  string authorization = 1;
-}
+message AuthorizeAccountRequest {}
 
 message AuthorizeAccountResponse {
   string account_id = 1;
@@ -42,6 +40,24 @@ message GetUploadUrlResponse {
   string authorization_token = 3;
 }
 
+message UploadFileRequest {
+  string contents = 1;
+  string path = 2;
+}
+
+message UploadFileResponse {
+  string file_id = 1;
+  string file_name = 2;
+  string account_id = 3;
+  string bucket_id = 4;
+  int64 content_length = 5;
+  string content_sha1 = 6;
+  string content_type = 7;
+  map<string, string> file_info = 8;
+  string action = 9;
+  int64 upload_timestamp = 10;
+}
+
 service PyreService {
   rpc AuthorizeAccount(AuthorizeAccountRequest) returns (AuthorizeAccountResponse) {
     option (google.api.http) = {
@@ -53,6 +69,13 @@ service PyreService {
     option (google.api.http) = {
       post: "/b2api/v1/b2_get_upload_url"
       body: "*"
+    };
+  }
+
+  rpc UploadFile(UploadFileRequest) returns (UploadFileResponse) {
+    option (google.api.http) = {
+      post: "/b2api/v1/b2_upload_file/{path}"
+      body: "contents"
     };
   }
 }

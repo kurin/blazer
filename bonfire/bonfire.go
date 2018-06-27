@@ -72,10 +72,6 @@ func (b *Bonfire) AuthorizeAccount(ctx context.Context, req *pyre.AuthorizeAccou
 	}, nil
 }
 
-func (b *Bonfire) GetUploadUrl(context.Context, *pyre.GetUploadUrlRequest) (*pyre.GetUploadUrlResponse, error) {
-	return &pyre.GetUploadUrlResponse{}, nil
-}
-
 func (b *Bonfire) ListBuckets(context.Context, *pyre.ListBucketsRequest) (*pyre.ListBucketsResponse, error) {
 	return &pyre.ListBucketsResponse{
 		Buckets: []*pyre.Bucket{
@@ -89,6 +85,21 @@ func (b *Bonfire) ListBuckets(context.Context, *pyre.ListBucketsRequest) (*pyre.
 			},
 		},
 	}, nil
+}
+
+func (b *Bonfire) CreateBucket(context.Context, *pyre.Bucket) (*pyre.Bucket, error) {
+	return &pyre.Bucket{
+		AccountId:  "foo",
+		BucketId:   "name",
+		BucketName: "name",
+		BucketType: "saturday",
+		BucketInfo: map[string]string{"is": "BUCKET"},
+		Revision:   4,
+	}, nil
+}
+
+func (b *Bonfire) GetUploadUrl(context.Context, *pyre.GetUploadUrlRequest) (*pyre.GetUploadUrlResponse, error) {
+	return &pyre.GetUploadUrlResponse{}, nil
 }
 
 func (b *Bonfire) UploadFile(context.Context, *pyre.UploadFileRequest) (*pyre.UploadFileResponse, error) {

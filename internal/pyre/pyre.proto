@@ -30,21 +30,26 @@ message AuthorizeAccountResponse {
   int32 minimum_part_size = 7;
 }
 
-message GetUploadUrlRequest {
-  string bucket_id = 1;
-}
-
-message GetUploadUrlResponse {
-  string bucket_id = 1;
-  string upload_url = 2;
-  string authorization_token = 3;
-}
-
 message ListBucketsRequest {
   string account_id = 1;
   string bucket_id = 2;
   string bucket_name = 3;
   repeated string bucket_types = 4;
+}
+
+message LifecycleRule {
+  int32 days_from_uploading_to_hiding = 1;
+  int32 days_from_hiding_to_deleting = 2;
+  string file_name_prefix = 3;
+}
+
+message CorsRule {
+  string cors_rule_name = 1;
+  repeated string allowed_origins = 2;
+  repeated string allowed_operations = 3;
+  repeated string allowed_headers = 4;
+  repeated string expose_headers = 5;
+  int32 max_age_seconds = 6;
 }
 
 message Bucket {
@@ -53,12 +58,23 @@ message Bucket {
   string bucket_name = 3;
   string bucket_type = 4;
   map<string, string> bucket_info = 5;
-  repeated string lifecycle_rules = 6;
-  int32 revision = 7;
+  repeated CorsRule cores_rules = 6;
+  repeated LifecycleRule lifecycle_rules = 7;
+  int32 revision = 8;
 }
 
 message ListBucketsResponse {
   repeated Bucket buckets = 1;
+}
+
+message GetUploadUrlRequest {
+  string bucket_id = 1;
+}
+
+message GetUploadUrlResponse {
+  string bucket_id = 1;
+  string upload_url = 2;
+  string authorization_token = 3;
 }
 
 message UploadFileRequest {
@@ -86,6 +102,13 @@ service PyreService {
     };
   }
 
+  rpc ListBuckets(ListBucketsRequest) returns (ListBucketsResponse) {
+    option (google.api.http) = {
+      post: "/b2api/v1/b2_list_buckets"
+      body: "*"
+    };
+  }
+
   rpc GetUploadUrl(GetUploadUrlRequest) returns (GetUploadUrlResponse) {
     option (google.api.http) = {
       post: "/b2api/v1/b2_get_upload_url"
@@ -93,9 +116,9 @@ service PyreService {
     };
   }
 
-  rpc ListBuckets(ListBucketsRequest) returns (ListBucketsResponse) {
+  rpc CreateBucket(Bucket) returns (Bucket) {
     option (google.api.http) = {
-      post: "/b2api/v1/b2_list_buckets"
+      post: "/b2api/v1/b2_create_bucket"
       body: "*"
     };
   }

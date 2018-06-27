@@ -41,7 +41,7 @@ func MuxOpts() []runtime.ServeMuxOption {
 			return s, true
 		}
 		return "", false
-	}))
+	}), runtime.WithMarshalerOption("*", &runtime.JSONPb{}))
 	return opts
 }
 
@@ -58,6 +58,7 @@ func getAuth(ctx context.Context) (string, error) {
 }
 
 type Bonfire struct {
+	Root string
 }
 
 func (b *Bonfire) AuthorizeAccount(ctx context.Context, req *pyre.AuthorizeAccountRequest) (*pyre.AuthorizeAccountResponse, error) {
@@ -66,11 +67,28 @@ func (b *Bonfire) AuthorizeAccount(ctx context.Context, req *pyre.AuthorizeAccou
 		return nil, err
 	}
 	fmt.Println(auth)
-	return &pyre.AuthorizeAccountResponse{}, nil
+	return &pyre.AuthorizeAccountResponse{
+		ApiUrl: b.Root,
+	}, nil
 }
 
 func (b *Bonfire) GetUploadUrl(context.Context, *pyre.GetUploadUrlRequest) (*pyre.GetUploadUrlResponse, error) {
 	return &pyre.GetUploadUrlResponse{}, nil
+}
+
+func (b *Bonfire) ListBuckets(context.Context, *pyre.ListBucketsRequest) (*pyre.ListBucketsResponse, error) {
+	return &pyre.ListBucketsResponse{
+		Buckets: []*pyre.Bucket{
+			{
+				AccountId:  "foo",
+				BucketId:   "name",
+				BucketName: "name",
+				BucketType: "saturday",
+				BucketInfo: map[string]string{"is": "BUCKET"},
+				Revision:   4,
+			},
+		},
+	}, nil
 }
 
 func (b *Bonfire) UploadFile(context.Context, *pyre.UploadFileRequest) (*pyre.UploadFileResponse, error) {

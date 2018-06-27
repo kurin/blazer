@@ -13,7 +13,9 @@ import (
 )
 
 func main() {
-	bf := &bonfire.Bonfire{}
+	bf := &bonfire.Bonfire{
+		Root: "http://localhost:8822",
+	}
 	server := grpc.NewServer()
 	pyre.RegisterPyreServiceServer(server, bf)
 	l, err := net.Listen("tcp", "0.0.0.0:8823")

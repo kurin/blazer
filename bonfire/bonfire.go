@@ -17,16 +17,62 @@ package bonfire
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"strings"
 
+	"google.golang.org/grpc/metadata"
+
+	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/kurin/blazer/internal/pyre"
 )
 
-type Bonfire struct{}
+func MuxOpts() []runtime.ServeMuxOption {
+	var opts []runtime.ServeMuxOption
+	opts = append(opts, runtime.WithIncomingHeaderMatcher(func(s string) (string, bool) {
+		if m, ok := runtime.DefaultHeaderMatcher(s); ok {
+			return m, ok
+		}
+		switch strings.ToLower(s) {
+		case "x-bz-file-name", "content-type", "content-length", "x-bz-content-sha1":
+			return s, true
+		}
+		if strings.HasPrefix(s, "X-Bz-Info-") {
+			return s, true
+		}
+		return "", false
+	}))
+	return opts
+}
 
-func (b *Bonfire) AuthorizeAccount(context.Context, *pyre.AuthorizeAccountRequest) (*pyre.AuthorizeAccountResponse, error) {
+func getAuth(ctx context.Context) (string, error) {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return "", errors.New("no metadata")
+	}
+	data := md.Get("authentication")
+	if len(data) == 0 {
+		return "", nil
+	}
+	return data[0], nil
+}
+
+type Bonfire struct {
+}
+
+func (b *Bonfire) AuthorizeAccount(ctx context.Context, req *pyre.AuthorizeAccountRequest) (*pyre.AuthorizeAccountResponse, error) {
+	auth, err := getAuth(ctx)
+	if err != nil {
+		return nil, err
+	}
+	fmt.Println(auth)
 	return &pyre.AuthorizeAccountResponse{}, nil
 }
 
 func (b *Bonfire) GetUploadUrl(context.Context, *pyre.GetUploadUrlRequest) (*pyre.GetUploadUrlResponse, error) {
 	return &pyre.GetUploadUrlResponse{}, nil
+}
+
+func (b *Bonfire) UploadFile(context.Context, *pyre.UploadFileRequest) (*pyre.UploadFileResponse, error) {
+	return &pyre.UploadFileResponse{}, nil
 }

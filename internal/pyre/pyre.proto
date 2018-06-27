@@ -40,6 +40,27 @@ message GetUploadUrlResponse {
   string authorization_token = 3;
 }
 
+message ListBucketsRequest {
+  string account_id = 1;
+  string bucket_id = 2;
+  string bucket_name = 3;
+  repeated string bucket_types = 4;
+}
+
+message Bucket {
+  string account_id = 1;
+  string bucket_id = 2;
+  string bucket_name = 3;
+  string bucket_type = 4;
+  map<string, string> bucket_info = 5;
+  repeated string lifecycle_rules = 6;
+  int64 revision = 7;
+}
+
+message ListBucketsResponse {
+  repeated Bucket buckets = 1;
+}
+
 message UploadFileRequest {
   string contents = 1;
   string path = 2;
@@ -68,6 +89,13 @@ service PyreService {
   rpc GetUploadUrl(GetUploadUrlRequest) returns (GetUploadUrlResponse) {
     option (google.api.http) = {
       post: "/b2api/v1/b2_get_upload_url"
+      body: "*"
+    };
+  }
+
+  rpc ListBuckets(ListBucketsRequest) returns (ListBucketsResponse) {
+    option (google.api.http) = {
+      post: "/b2api/v1/b2_list_buckets"
       body: "*"
     };
   }

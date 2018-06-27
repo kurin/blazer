@@ -148,6 +148,9 @@ func (b *b2Root) authorizeAccount(ctx context.Context, account, key string, c cl
 	if c.capExceeded {
 		aopts = append(aopts, base.ForceCapExceeded())
 	}
+	if c.apiBase != "" {
+		aopts = append(aopts, base.SetAPIBase(c.apiBase))
+	}
 	for _, agent := range c.userAgents {
 		aopts = append(aopts, base.UserAgent(agent))
 	}

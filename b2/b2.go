@@ -79,6 +79,7 @@ type clientOptions struct {
 	failSomeUploads bool
 	expireTokens    bool
 	capExceeded     bool
+	apiBase         string
 	userAgents      []string
 	writerOpts      []WriterOption
 }
@@ -94,6 +95,13 @@ type ClientOption func(*clientOptions)
 func UserAgent(agent string) ClientOption {
 	return func(o *clientOptions) {
 		o.userAgents = append(o.userAgents, agent)
+	}
+}
+
+// APIBase returns a ClientOption specifying the URL root of API requests.
+func APIBase(url string) ClientOption {
+	return func(o *clientOptions) {
+		o.apiBase = url
 	}
 }
 

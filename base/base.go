@@ -479,6 +479,14 @@ func ForceCapExceeded() AuthOption {
 	}
 }
 
+// SetAPIBase returns an AuthOption that uses the given URL as the base for API
+// requests.
+func SetAPIBase(url string) AuthOption {
+	return func(o *b2Options) {
+		o.apiBase = url
+	}
+}
+
 type LifecycleRule struct {
 	Prefix                 string
 	DaysNewUntilHidden     int

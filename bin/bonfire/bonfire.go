@@ -26,7 +26,7 @@ func main() {
 		fmt.Println(server.Serve(l))
 	}()
 	ctx := context.Background()
-	mux := runtime.NewServeMux(bonfire.MuxOpts()...)
+	mux := runtime.NewServeMux(pyre.ServeMuxOptions()...)
 	if err := pyre.RegisterPyreServiceHandlerFromEndpoint(ctx, mux, "localhost:8823", []grpc.DialOption{grpc.WithInsecure()}); err != nil {
 		fmt.Println(err)
 	}

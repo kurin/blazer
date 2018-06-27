@@ -19,31 +19,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
+	"sync"
 
 	"google.golang.org/grpc/metadata"
 
-	"github.com/grpc-ecosystem/grpc-gateway/runtime"
+	"github.com/golang/protobuf/proto"
 	"github.com/kurin/blazer/internal/pyre"
 )
-
-func MuxOpts() []runtime.ServeMuxOption {
-	var opts []runtime.ServeMuxOption
-	opts = append(opts, runtime.WithIncomingHeaderMatcher(func(s string) (string, bool) {
-		if m, ok := runtime.DefaultHeaderMatcher(s); ok {
-			return m, ok
-		}
-		switch strings.ToLower(s) {
-		case "x-bz-file-name", "content-type", "content-length", "x-bz-content-sha1":
-			return s, true
-		}
-		if strings.HasPrefix(s, "X-Bz-Info-") {
-			return s, true
-		}
-		return "", false
-	}), runtime.WithMarshalerOption("*", &runtime.JSONPb{}))
-	return opts
-}
 
 func getAuth(ctx context.Context) (string, error) {
 	md, ok := metadata.FromIncomingContext(ctx)
@@ -58,48 +40,56 @@ func getAuth(ctx context.Context) (string, error) {
 }
 
 type Bonfire struct {
-	Root string
+	Root       string
+	mu         sync.Mutex
+	buckets    map[int][]byte
+	nextBucket int
 }
 
 func (b *Bonfire) AuthorizeAccount(ctx context.Context, req *pyre.AuthorizeAccountRequest) (*pyre.AuthorizeAccountResponse, error) {
-	auth, err := getAuth(ctx)
-	if err != nil {
-		return nil, err
-	}
-	fmt.Println(auth)
 	return &pyre.AuthorizeAccountResponse{
 		ApiUrl: b.Root,
 	}, nil
 }
 
 func (b *Bonfire) ListBuckets(context.Context, *pyre.ListBucketsRequest) (*pyre.ListBucketsResponse, error) {
-	return &pyre.ListBucketsResponse{
-		Buckets: []*pyre.Bucket{
-			{
-				AccountId:  "foo",
-				BucketId:   "name",
-				BucketName: "name",
-				BucketType: "saturday",
-				BucketInfo: map[string]string{"is": "BUCKET"},
-				Revision:   4,
-			},
-		},
-	}, nil
+	resp := &pyre.ListBucketsResponse{}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for _, bs := range b.buckets {
+		var bucket pyre.Bucket
+		if err := proto.Unmarshal(bs, &bucket); err != nil {
+			return nil, err
+		}
+		resp.Buckets = append(resp.Buckets, &bucket)
+	}
+	return resp, nil
 }
 
-func (b *Bonfire) CreateBucket(context.Context, *pyre.Bucket) (*pyre.Bucket, error) {
-	return &pyre.Bucket{
-		AccountId:  "foo",
-		BucketId:   "name",
-		BucketName: "name",
-		BucketType: "saturday",
-		BucketInfo: map[string]string{"is": "BUCKET"},
-		Revision:   4,
-	}, nil
+func (b *Bonfire) CreateBucket(ctx context.Context, req *pyre.Bucket) (*pyre.Bucket, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	n := b.nextBucket
+	b.nextBucket++
+	req.BucketId = fmt.Sprintf("%d", n)
+	bs, err := proto.Marshal(req)
+	if err != nil {
+		return nil, err
+	}
+	if b.buckets == nil {
+		b.buckets = make(map[int][]byte)
+	}
+	b.buckets[n] = bs
+	return req, nil
 }
 
 func (b *Bonfire) GetUploadUrl(context.Context, *pyre.GetUploadUrlRequest) (*pyre.GetUploadUrlResponse, error) {
-	return &pyre.GetUploadUrlResponse{}, nil
+	return &pyre.GetUploadUrlResponse{
+		AuthorizationToken: "flooper",
+		UploadUrl:          fmt.Sprintf("%s/b2api/v1/b2_upload_file/%s", b.Root, "uploader"),
+		BucketId:           "like 4 or whatever",
+	}, nil
 }
 
 func (b *Bonfire) UploadFile(context.Context, *pyre.UploadFileRequest) (*pyre.UploadFileResponse, error) {

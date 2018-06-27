@@ -16,5 +16,29 @@
 // RESTful gateway on top of it.
 package pyre
 
+import (
+	"strings"
+
+	"github.com/grpc-ecosystem/grpc-gateway/runtime"
+)
+
 //go:generate protoc -I/usr/local/include -I. -I$GOPATH/src -I$GOPATH/src/github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis --grpc-gateway_out=logtostderr=true:. pyre.proto
 //go:generate protoc -I/usr/local/include -I. -I$GOPATH/src -I$GOPATH/src/github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis --go_out=plugins=grpc:. pyre.proto
+
+func ServeMuxOptions() []runtime.ServeMuxOption {
+	var opts []runtime.ServeMuxOption
+	opts = append(opts, runtime.WithIncomingHeaderMatcher(func(s string) (string, bool) {
+		if m, ok := runtime.DefaultHeaderMatcher(s); ok {
+			return m, ok
+		}
+		switch strings.ToLower(s) {
+		case "x-bz-file-name", "content-type", "content-length", "x-bz-content-sha1":
+			return s, true
+		}
+		if strings.HasPrefix(s, "X-Bz-Info-") {
+			return s, true
+		}
+		return "", false
+	}), runtime.WithMarshalerOption("*", &runtime.JSONPb{}))
+	return opts
+}

@@ -21,34 +21,120 @@ package pyre;
 message AuthorizeAccountRequest {}
 
 message AuthorizeAccountResponse {
+  // The identifier for the account.
   string account_id = 1;
+  // An authorization token to use with all calls, other than
+  // b2_authorize_account, that need an Authorization header. This
+  // authorization token is valid for at most 24 hours.
   string authorization_token = 2;
+  // The base URL to use for all API calls except for uploading and downloading
+  // files.
   string api_url = 3;
+  // The base URL to use for downloading files.
   string download_url = 4;
+  // The recommended size for each part of a large file. We recommend using
+  // this part size for optimal upload performance.
   int32 recommended_part_size = 5;
+  // The smallest possible size of a part of a large file (except the last
+  // one). This is smaller than the recommended part size. If you use it, you
+  // may find that it takes longer overall to upload a large file.
   int32 absolute_mininum_part_size = 6;
-  int32 minimum_part_size = 7;
 }
 
 message ListBucketsRequest {
+  // The ID of your account.
   string account_id = 1;
+  // When specified, the result will be a list containing just this bucket, if
+  // it's present in the account, or no buckets if the account does not have a
+  // bucket with this ID.
   string bucket_id = 2;
+  // When specified, the result will be a list containing just this bucket, if
+  // it's present in the account, or no buckets if the account does not have a
+  // bucket with this ID.
   string bucket_name = 3;
+  // If present, B2 will use it as a filter for bucket types returned in the
+  // list buckets response. If not present, only buckets with bucket types
+  // "allPublic", "allPrivate" and "snapshot" will be returned. A special
+  // filter value of ["all"] will return all bucket types. 
+  //
+  // If present, it must be in the form of a json array of strings containing
+  // valid bucket types in quotes and separated by a comma. Valid bucket types
+  // include "allPrivate", "allPublic", "snapshot", and other values added in
+  // the future. 
+  //
+  // A bad request error will be returned if "all" is used with other bucket
+  // types, this field is empty, or invalid bucket types are requested.
   repeated string bucket_types = 4;
 }
 
 message LifecycleRule {
+  // After a file is uploaded, the number of days before it can be hidden.
   int32 days_from_uploading_to_hiding = 1;
+  // After a file is hidden, the number of days before it can be deleted.
   int32 days_from_hiding_to_deleting = 2;
+  // The rule applies to files whose names start with this prefix.
   string file_name_prefix = 3;
 }
 
 message CorsRule {
+  // A name for humans to recognize the rule in a user interface. Names must be
+  // unique within a bucket. Names can consist of upper-case and lower-case
+  // English letters, numbers, and "-". No other characters are allowed. A name
+  // must be at least 6 characters long, and can be at most 50 characters long.
+  // These are all allowed names: myPhotosSite, allowAnyHttps,
+  // backblaze-images. Names that start with "b2-" are reserved for Backblaze
+  // use.
   string cors_rule_name = 1;
+  // A non-empty list specifying which origins the rule covers. Each value may
+  // have one of many formats:
+  //
+  //  * The origin can be fully specified, such as http://www.example.com:8180
+  //  or https://www.example.com:4433.
+  //
+  //  * The origin can omit a default port, such as https://www.example.com.
+  //
+  //  * The origin may have a single '*' as part of the domain name, such as
+  //  https://*.example.com, https://*:8443 or https://*.
+  //
+  //  * The origin may be 'https' to match any origin that uses HTTPS. (This is
+  //  broader than 'https://*' because it matches any port.)
+  //  
+  //  * Finally, the origin can be a single '*' to match any origin.
+  //
+  // If any entry is "*", it must be the only entry. There can be at most one
+  // "https" entry and no entry after it may start with "https:".
   repeated string allowed_origins = 2;
+  // A list specifying which operations the rule allows. At least one value
+  // must be specified. All values must be from the following list. More values
+  // may be added to this list at any time.
+  //
+  // b2_download_file_by_name
+  // b2_download_file_by_id
+  // b2_upload_file
+  // b2_upload_part
   repeated string allowed_operations = 3;
+  // If present, this is a list of headers that are allowed in a pre-flight
+  // OPTIONS's request's Access-Control-Request-Headers header value. Each
+  // value may have one of many formats:
+  //
+  //  * It may be a complete header name, such as x-bz-content-sha1.
+  //
+  //  * It may end with an asterisk, such as x-bz-info-*.
+  // 
+  //  * Finally, it may be a single '*' to match any header.
+  //
+  // If any entry is "*", it must be the only entry in the list. If this list
+  // is missing, it is be treated as if it is a list with no entries.
   repeated string allowed_headers = 4;
+  // If present, this is a list of headers that may be exposed to an
+  // application inside the client (eg. exposed to Javascript in a browser).
+  // Each entry in the list must be a complete header name (eg.
+  // "x-bz-content-sha1"). If this list is missing or empty, no headers will be
+  // exposed.
   repeated string expose_headers = 5;
+  // This specifies the maximum number of seconds that a browser may cache the
+  // response to a preflight request. The value must not be negative and it
+  // must not be more than 86,400 seconds (one day).
   int32 max_age_seconds = 6;
 }
 
@@ -96,12 +182,17 @@ message UploadFileResponse {
 }
 
 service PyreService {
+  // Used to log in to the B2 API. Returns an authorization token that can be
+  // used for account-level operations, and a URL that should be used as the
+  // base URL for subsequent API calls.
   rpc AuthorizeAccount(AuthorizeAccountRequest) returns (AuthorizeAccountResponse) {
     option (google.api.http) = {
       get: "/b2api/v1/b2_authorize_account"
     };
   }
 
+  // Lists buckets associated with an account, in alphabetical order by bucket
+  // name.
   rpc ListBuckets(ListBucketsRequest) returns (ListBucketsResponse) {
     option (google.api.http) = {
       post: "/b2api/v1/b2_list_buckets"
@@ -109,16 +200,23 @@ service PyreService {
     };
   }
 
-  rpc GetUploadUrl(GetUploadUrlRequest) returns (GetUploadUrlResponse) {
+  // Creates a new bucket. A bucket belongs to the account used to create it.
+  //
+  // Buckets can be named. The name must be globally unique. No account can use
+  // a bucket with the same name. Buckets are assigned a unique bucketId which
+  // is used when uploading, downloading, or deleting files.
+  //
+  // There is a limit of 100 buckets per account.
+  rpc CreateBucket(Bucket) returns (Bucket) {
     option (google.api.http) = {
-      post: "/b2api/v1/b2_get_upload_url"
+      post: "/b2api/v1/b2_create_bucket"
       body: "*"
     };
   }
 
-  rpc CreateBucket(Bucket) returns (Bucket) {
+  rpc GetUploadUrl(GetUploadUrlRequest) returns (GetUploadUrlResponse) {
     option (google.api.http) = {
-      post: "/b2api/v1/b2_create_bucket"
+      post: "/b2api/v1/b2_get_upload_url"
       body: "*"
     };
   }

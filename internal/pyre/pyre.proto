@@ -164,7 +164,7 @@ message GetUploadUrlResponse {
 }
 
 message UploadFileRequest {
-  string contents = 1;
+  bytes contents = 1;
   string path = 2;
 }
 
@@ -223,7 +223,7 @@ service PyreService {
 
   rpc UploadFile(UploadFileRequest) returns (UploadFileResponse) {
     option (google.api.http) = {
-      post: "/b2api/v1/b2_upload_file/{path}"
+      post: "/b2api/v1/b2_upload_file/{path=**}"
       body: "contents"
     };
   }

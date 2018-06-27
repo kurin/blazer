@@ -302,7 +302,7 @@ var (
 
 	pattern_PyreService_GetUploadUrl_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"b2api", "v1", "b2_get_upload_url"}, ""))
 
-	pattern_PyreService_UploadFile_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3}, []string{"b2api", "v1", "b2_upload_file", "path"}, ""))
+	pattern_PyreService_UploadFile_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 3, 0, 4, 1, 5, 3}, []string{"b2api", "v1", "b2_upload_file", "path"}, ""))
 )
 
 var (

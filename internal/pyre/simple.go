@@ -29,7 +29,7 @@ import (
 const uploadFilePrefix = "/b2api/v1/b2_upload_file/"
 
 type SimpleFileManager interface {
-	Writer(bucket, name, id string) io.WriteCloser
+	Writer(bucket, name, id string) (io.WriteCloser, error)
 }
 
 type simpleFileServer struct {
@@ -74,7 +74,12 @@ func (fs *simpleFileServer) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := uuid.New().String()
-	w := fs.fm.Writer(req.bucket, req.name, id)
+	w, err := fs.fm.Writer(req.bucket, req.name, id)
+	if err != nil {
+		http.Error(rw, err.Error(), 500)
+		fmt.Println("oh no")
+		return
+	}
 	if _, err := io.Copy(w, r.Body); err != nil {
 		w.Close()
 		http.Error(rw, err.Error(), 500)

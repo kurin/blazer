@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package bonfire implements the B2 service.
 package pyre
 
 import (
@@ -32,6 +31,12 @@ import (
 	pb "github.com/kurin/blazer/internal/pyre/proto"
 )
 
+func serveMuxOptions() []runtime.ServeMuxOption {
+	var opts []runtime.ServeMuxOption
+	opts = append(opts, runtime.WithMarshalerOption("*", &runtime.JSONPb{}))
+	return opts
+}
+
 func getAuth(ctx context.Context) (string, error) {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
@@ -44,7 +49,7 @@ func getAuth(ctx context.Context) (string, error) {
 	return data[0], nil
 }
 
-func RegisterServerOnMux(ctx context.Context, srv *apiServer, mux *http.ServeMux) error {
+func RegisterServerOnMux(ctx context.Context, srv *Server, mux *http.ServeMux) error {
 	rmux := runtime.NewServeMux(serveMuxOptions()...)
 	l, err := net.Listen("tcp", "localhost:0")
 	if err != nil {
@@ -63,8 +68,12 @@ func RegisterServerOnMux(ctx context.Context, srv *apiServer, mux *http.ServeMux
 	return nil
 }
 
-type apiServer struct {
-	Root       string
+func New(addr string) *Server {
+	return &Server{root: addr}
+}
+
+type Server struct {
+	root       string
 	mu         sync.Mutex
 	buckets    map[int][]byte
 	nextBucket int
@@ -72,13 +81,13 @@ type apiServer struct {
 	nextFile   int
 }
 
-func (b *apiServer) AuthorizeAccount(ctx context.Context, req *pb.AuthorizeAccountRequest) (*pb.AuthorizeAccountResponse, error) {
+func (b *Server) AuthorizeAccount(ctx context.Context, req *pb.AuthorizeAccountRequest) (*pb.AuthorizeAccountResponse, error) {
 	return &pb.AuthorizeAccountResponse{
-		ApiUrl: b.Root,
+		ApiUrl: b.root,
 	}, nil
 }
 
-func (b *apiServer) ListBuckets(context.Context, *pb.ListBucketsRequest) (*pb.ListBucketsResponse, error) {
+func (b *Server) ListBuckets(context.Context, *pb.ListBucketsRequest) (*pb.ListBucketsResponse, error) {
 	resp := &pb.ListBucketsResponse{}
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -92,7 +101,7 @@ func (b *apiServer) ListBuckets(context.Context, *pb.ListBucketsRequest) (*pb.Li
 	return resp, nil
 }
 
-func (b *apiServer) CreateBucket(ctx context.Context, req *pb.Bucket) (*pb.Bucket, error) {
+func (b *Server) CreateBucket(ctx context.Context, req *pb.Bucket) (*pb.Bucket, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -110,7 +119,7 @@ func (b *apiServer) CreateBucket(ctx context.Context, req *pb.Bucket) (*pb.Bucke
 	return req, nil
 }
 
-func (b *apiServer) DeleteBucket(ctx context.Context, req *pb.Bucket) (*pb.Bucket, error) {
+func (b *Server) DeleteBucket(ctx context.Context, req *pb.Bucket) (*pb.Bucket, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -129,7 +138,7 @@ func (b *apiServer) DeleteBucket(ctx context.Context, req *pb.Bucket) (*pb.Bucke
 	return req, nil
 }
 
-func (b *apiServer) GetUploadUrl(ctx context.Context, req *pb.GetUploadUrlRequest) (*pb.GetUploadUrlResponse, error) {
+func (b *Server) GetUploadUrl(ctx context.Context, req *pb.GetUploadUrlRequest) (*pb.GetUploadUrlResponse, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -142,12 +151,12 @@ func (b *apiServer) GetUploadUrl(ctx context.Context, req *pb.GetUploadUrlReques
 	}
 	b.nextFile++
 	return &pb.GetUploadUrlResponse{
-		UploadUrl: fmt.Sprintf("%s/b2api/v1/b2_upload_file/%s/%d", b.Root, req.BucketId, b.nextFile),
+		UploadUrl: fmt.Sprintf("%s/b2api/v1/b2_upload_file/%s/%d", b.root, req.BucketId, b.nextFile),
 		BucketId:  req.BucketId,
 	}, nil
 }
 
-func (b *apiServer) StartLargeFile(ctx context.Context, req *pb.StartLargeFileRequest) (*pb.StartLargeFileResponse, error) {
+func (b *Server) StartLargeFile(ctx context.Context, req *pb.StartLargeFileRequest) (*pb.StartLargeFileResponse, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -156,11 +165,11 @@ func (b *apiServer) StartLargeFile(ctx context.Context, req *pb.StartLargeFileRe
 	}, nil
 }
 
-func (b *apiServer) GetUploadPartUrl(ctx context.Context, req *pb.GetUploadPartUrlRequest) (*pb.GetUploadPartUrlResponse, error) {
+func (b *Server) GetUploadPartUrl(ctx context.Context, req *pb.GetUploadPartUrlRequest) (*pb.GetUploadPartUrlResponse, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	return &pb.GetUploadPartUrlResponse{
-		UploadUrl: fmt.Sprintf("%s/b2api/v1/b2_upload_part/wooooo", b.Root),
+		UploadUrl: fmt.Sprintf("%s/b2api/v1/b2_upload_part/wooooo", b.root),
 	}, nil
 }

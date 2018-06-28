@@ -26,7 +26,7 @@ import (
 const uploadFilePartPrefix = "/b2api/v1/b2_upload_part/"
 
 type LargeFileManager interface {
-	Writer(id string, part int) io.WriteCloser
+	PartWriter(id string, part int) (io.WriteCloser, error)
 }
 
 type largeFileServer struct {
@@ -64,7 +64,12 @@ func (fs *largeFileServer) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		fmt.Println("oh no")
 		return
 	}
-	w := fs.fm.Writer(req.ID, req.Part)
+	w, err := fs.fm.PartWriter(req.ID, req.Part)
+	if err != nil {
+		http.Error(rw, err.Error(), 500)
+		fmt.Println("oh no")
+		return
+	}
 	if _, err := io.Copy(w, r.Body); err != nil {
 		w.Close()
 		http.Error(rw, err.Error(), 500)

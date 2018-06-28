@@ -18,14 +18,24 @@ package pyre
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
+	"strings"
 )
 
-type LargeFileServer struct{}
+const uploadFilePartPrefix = "/b2api/v1/b2_upload_part/"
+
+type LargeFileManager interface {
+	Writer(id string, part int) io.WriteCloser
+}
+
+type largeFileServer struct {
+	fm LargeFileManager
+}
 
 type uploadPartRequest struct {
-	File string `json:"fileId"`
+	ID   string `json:"fileId"`
 	Part int    `json:"partNumber"`
 	Size int64  `json:"contentLength"`
 	Hash string `json:"contentSha1"`
@@ -44,18 +54,35 @@ func parseUploadPartHeaders(r *http.Request) (uploadPartRequest, error) {
 		return ur, err
 	}
 	ur.Size = size
+	ur.ID = strings.TrimPrefix(r.URL.Path, uploadFilePartPrefix)
 	return ur, nil
 }
 
-func (fs *LargeFileServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (fs *largeFileServer) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	req, err := parseUploadPartHeaders(r)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(rw, err.Error(), 500)
 		fmt.Println("oh no")
 		return
 	}
-	if err := json.NewEncoder(w).Encode(req); err != nil {
+	w := fs.fm.Writer(req.ID, req.Part)
+	if _, err := io.Copy(w, r.Body); err != nil {
+		w.Close()
+		http.Error(rw, err.Error(), 500)
+		fmt.Println("oh no")
+		return
+	}
+	if err := w.Close(); err != nil {
+		http.Error(rw, err.Error(), 500)
+		fmt.Println("oh no")
+		return
+	}
+	if err := json.NewEncoder(rw).Encode(req); err != nil {
 		fmt.Println("oh no")
 	}
 	fmt.Println("served!")
+}
+
+func RegisterLargeFileManagerOnMux(f LargeFileManager, mux *http.ServeMux) {
+	mux.Handle(uploadFilePartPrefix, &largeFileServer{fm: f})
 }

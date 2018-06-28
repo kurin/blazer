@@ -21,7 +21,7 @@ package pyre
 
 import "github.com/grpc-ecosystem/grpc-gateway/runtime"
 
-func ServeMuxOptions() []runtime.ServeMuxOption {
+func serveMuxOptions() []runtime.ServeMuxOption {
 	var opts []runtime.ServeMuxOption
 	opts = append(opts, runtime.WithMarshalerOption("*", &runtime.JSONPb{}))
 	return opts

@@ -19,10 +19,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
+	"net/http"
 	"strconv"
 	"sync"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/grpc-ecosystem/grpc-gateway/runtime"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 
 	pb "github.com/kurin/blazer/internal/pyre/proto"
@@ -40,7 +44,26 @@ func getAuth(ctx context.Context) (string, error) {
 	return data[0], nil
 }
 
-type Bonfire struct {
+func RegisterServerOnMux(ctx context.Context, srv *apiServer, mux *http.ServeMux) error {
+	rmux := runtime.NewServeMux(serveMuxOptions()...)
+	l, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		return err
+	}
+	gsrv := grpc.NewServer()
+	if err := pb.RegisterPyreServiceHandlerFromEndpoint(ctx, rmux, l.Addr().String(), []grpc.DialOption{grpc.WithInsecure()}); err != nil {
+		return err
+	}
+	mux.Handle("/b2api/v1/", rmux)
+	go gsrv.Serve(l)
+	go func() {
+		<-ctx.Done()
+		gsrv.GracefulStop()
+	}()
+	return nil
+}
+
+type apiServer struct {
 	Root       string
 	mu         sync.Mutex
 	buckets    map[int][]byte
@@ -49,13 +72,13 @@ type Bonfire struct {
 	nextFile   int
 }
 
-func (b *Bonfire) AuthorizeAccount(ctx context.Context, req *pb.AuthorizeAccountRequest) (*pb.AuthorizeAccountResponse, error) {
+func (b *apiServer) AuthorizeAccount(ctx context.Context, req *pb.AuthorizeAccountRequest) (*pb.AuthorizeAccountResponse, error) {
 	return &pb.AuthorizeAccountResponse{
 		ApiUrl: b.Root,
 	}, nil
 }
 
-func (b *Bonfire) ListBuckets(context.Context, *pb.ListBucketsRequest) (*pb.ListBucketsResponse, error) {
+func (b *apiServer) ListBuckets(context.Context, *pb.ListBucketsRequest) (*pb.ListBucketsResponse, error) {
 	resp := &pb.ListBucketsResponse{}
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -69,7 +92,7 @@ func (b *Bonfire) ListBuckets(context.Context, *pb.ListBucketsRequest) (*pb.List
 	return resp, nil
 }
 
-func (b *Bonfire) CreateBucket(ctx context.Context, req *pb.Bucket) (*pb.Bucket, error) {
+func (b *apiServer) CreateBucket(ctx context.Context, req *pb.Bucket) (*pb.Bucket, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -87,7 +110,7 @@ func (b *Bonfire) CreateBucket(ctx context.Context, req *pb.Bucket) (*pb.Bucket,
 	return req, nil
 }
 
-func (b *Bonfire) DeleteBucket(ctx context.Context, req *pb.Bucket) (*pb.Bucket, error) {
+func (b *apiServer) DeleteBucket(ctx context.Context, req *pb.Bucket) (*pb.Bucket, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -106,7 +129,7 @@ func (b *Bonfire) DeleteBucket(ctx context.Context, req *pb.Bucket) (*pb.Bucket,
 	return req, nil
 }
 
-func (b *Bonfire) GetUploadUrl(ctx context.Context, req *pb.GetUploadUrlRequest) (*pb.GetUploadUrlResponse, error) {
+func (b *apiServer) GetUploadUrl(ctx context.Context, req *pb.GetUploadUrlRequest) (*pb.GetUploadUrlResponse, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -124,7 +147,7 @@ func (b *Bonfire) GetUploadUrl(ctx context.Context, req *pb.GetUploadUrlRequest)
 	}, nil
 }
 
-func (b *Bonfire) StartLargeFile(ctx context.Context, req *pb.StartLargeFileRequest) (*pb.StartLargeFileResponse, error) {
+func (b *apiServer) StartLargeFile(ctx context.Context, req *pb.StartLargeFileRequest) (*pb.StartLargeFileResponse, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -133,7 +156,7 @@ func (b *Bonfire) StartLargeFile(ctx context.Context, req *pb.StartLargeFileRequ
 	}, nil
 }
 
-func (b *Bonfire) GetUploadPartUrl(ctx context.Context, req *pb.GetUploadPartUrlRequest) (*pb.GetUploadPartUrlResponse, error) {
+func (b *apiServer) GetUploadPartUrl(ctx context.Context, req *pb.GetUploadPartUrlRequest) (*pb.GetUploadPartUrlResponse, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 

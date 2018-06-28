@@ -26,10 +26,13 @@ func main() {
 		fmt.Println(server.Serve(l))
 	}()
 	ctx := context.Background()
+	rootMux := http.NewServeMux()
 	mux := runtime.NewServeMux(pyre.ServeMuxOptions()...)
 	if err := pyre.RegisterPyreServiceHandlerFromEndpoint(ctx, mux, "localhost:8823", []grpc.DialOption{grpc.WithInsecure()}); err != nil {
 		fmt.Println(err)
 	}
+	rootMux.Handle("/b2api/v1/", mux)
+	rootMux.Handle("/b2api/v1/b2_upload_file/", &bonfire.SimpleFileServer{})
 	fmt.Println("ok")
-	fmt.Println(http.ListenAndServe(":8822", mux))
+	fmt.Println(http.ListenAndServe(":8822", rootMux))
 }

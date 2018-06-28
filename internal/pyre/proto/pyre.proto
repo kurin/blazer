@@ -16,7 +16,7 @@ syntax = "proto3";
 
 import "google/api/annotations.proto";
 
-package pyre;
+package pyre.proto;
 
 message AuthorizeAccountRequest {}
 

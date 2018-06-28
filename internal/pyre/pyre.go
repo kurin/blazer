@@ -16,10 +16,10 @@
 // RESTful gateway on top of it.
 package pyre
 
-import "github.com/grpc-ecosystem/grpc-gateway/runtime"
+//go:generate protoc -I/usr/local/include -I. -I$GOPATH/src -I$GOPATH/src/github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis --grpc-gateway_out=logtostderr=true:. proto/pyre.proto
+//go:generate protoc -I/usr/local/include -I. -I$GOPATH/src -I$GOPATH/src/github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis --go_out=plugins=grpc:. proto/pyre.proto
 
-//go:generate protoc -I/usr/local/include -I. -I$GOPATH/src -I$GOPATH/src/github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis --grpc-gateway_out=logtostderr=true:. pyre.proto
-//go:generate protoc -I/usr/local/include -I. -I$GOPATH/src -I$GOPATH/src/github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis --go_out=plugins=grpc:. pyre.proto
+import "github.com/grpc-ecosystem/grpc-gateway/runtime"
 
 func ServeMuxOptions() []runtime.ServeMuxOption {
 	var opts []runtime.ServeMuxOption

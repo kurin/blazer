@@ -63,6 +63,19 @@ func request_PyreService_CreateBucket_0(ctx context.Context, marshaler runtime.M
 
 }
 
+func request_PyreService_DeleteBucket_0(ctx context.Context, marshaler runtime.Marshaler, client PyreServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var protoReq Bucket
+	var metadata runtime.ServerMetadata
+
+	if err := marshaler.NewDecoder(req.Body).Decode(&protoReq); err != nil && err != io.EOF {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+
+	msg, err := client.DeleteBucket(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	return msg, metadata, err
+
+}
+
 func request_PyreService_GetUploadUrl_0(ctx context.Context, marshaler runtime.Marshaler, client PyreServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
 	var protoReq GetUploadUrlRequest
 	var metadata runtime.ServerMetadata
@@ -76,33 +89,28 @@ func request_PyreService_GetUploadUrl_0(ctx context.Context, marshaler runtime.M
 
 }
 
-func request_PyreService_UploadFile_0(ctx context.Context, marshaler runtime.Marshaler, client PyreServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq UploadFileRequest
+func request_PyreService_StartLargeFile_0(ctx context.Context, marshaler runtime.Marshaler, client PyreServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var protoReq StartLargeFileRequest
 	var metadata runtime.ServerMetadata
 
-	if err := marshaler.NewDecoder(req.Body).Decode(&protoReq.Contents); err != nil && err != io.EOF {
+	if err := marshaler.NewDecoder(req.Body).Decode(&protoReq); err != nil && err != io.EOF {
 		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
 	}
 
-	var (
-		val string
-		ok  bool
-		err error
-		_   = err
-	)
+	msg, err := client.StartLargeFile(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	return msg, metadata, err
 
-	val, ok = pathParams["path"]
-	if !ok {
-		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "path")
+}
+
+func request_PyreService_GetUploadPartUrl_0(ctx context.Context, marshaler runtime.Marshaler, client PyreServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var protoReq GetUploadPartUrlRequest
+	var metadata runtime.ServerMetadata
+
+	if err := marshaler.NewDecoder(req.Body).Decode(&protoReq); err != nil && err != io.EOF {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
 	}
 
-	protoReq.Path, err = runtime.String(val)
-
-	if err != nil {
-		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "path", err)
-	}
-
-	msg, err := client.UploadFile(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	msg, err := client.GetUploadPartUrl(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
 	return msg, metadata, err
 
 }
@@ -232,6 +240,35 @@ func RegisterPyreServiceHandlerClient(ctx context.Context, mux *runtime.ServeMux
 
 	})
 
+	mux.Handle("POST", pattern_PyreService_DeleteBucket_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		if cn, ok := w.(http.CloseNotifier); ok {
+			go func(done <-chan struct{}, closed <-chan bool) {
+				select {
+				case <-done:
+				case <-closed:
+					cancel()
+				}
+			}(ctx.Done(), cn.CloseNotify())
+		}
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		rctx, err := runtime.AnnotateContext(ctx, mux, req)
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_PyreService_DeleteBucket_0(rctx, inboundMarshaler, client, req, pathParams)
+		ctx = runtime.NewServerMetadataContext(ctx, md)
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+
+		forward_PyreService_DeleteBucket_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+
+	})
+
 	mux.Handle("POST", pattern_PyreService_GetUploadUrl_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
 		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
@@ -261,7 +298,7 @@ func RegisterPyreServiceHandlerClient(ctx context.Context, mux *runtime.ServeMux
 
 	})
 
-	mux.Handle("POST", pattern_PyreService_UploadFile_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+	mux.Handle("POST", pattern_PyreService_StartLargeFile_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
 		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
 		if cn, ok := w.(http.CloseNotifier); ok {
@@ -279,14 +316,43 @@ func RegisterPyreServiceHandlerClient(ctx context.Context, mux *runtime.ServeMux
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
 		}
-		resp, md, err := request_PyreService_UploadFile_0(rctx, inboundMarshaler, client, req, pathParams)
+		resp, md, err := request_PyreService_StartLargeFile_0(rctx, inboundMarshaler, client, req, pathParams)
 		ctx = runtime.NewServerMetadataContext(ctx, md)
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
 		}
 
-		forward_PyreService_UploadFile_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+		forward_PyreService_StartLargeFile_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+
+	})
+
+	mux.Handle("POST", pattern_PyreService_GetUploadPartUrl_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		if cn, ok := w.(http.CloseNotifier); ok {
+			go func(done <-chan struct{}, closed <-chan bool) {
+				select {
+				case <-done:
+				case <-closed:
+					cancel()
+				}
+			}(ctx.Done(), cn.CloseNotify())
+		}
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		rctx, err := runtime.AnnotateContext(ctx, mux, req)
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_PyreService_GetUploadPartUrl_0(rctx, inboundMarshaler, client, req, pathParams)
+		ctx = runtime.NewServerMetadataContext(ctx, md)
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+
+		forward_PyreService_GetUploadPartUrl_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
 
 	})
 
@@ -300,9 +366,13 @@ var (
 
 	pattern_PyreService_CreateBucket_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"b2api", "v1", "b2_create_bucket"}, ""))
 
+	pattern_PyreService_DeleteBucket_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"b2api", "v1", "b2_delete_bucket"}, ""))
+
 	pattern_PyreService_GetUploadUrl_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"b2api", "v1", "b2_get_upload_url"}, ""))
 
-	pattern_PyreService_UploadFile_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 3, 0, 4, 1, 5, 3}, []string{"b2api", "v1", "b2_upload_file", "path"}, ""))
+	pattern_PyreService_StartLargeFile_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"b2api", "v1", "b2_start_large_file"}, ""))
+
+	pattern_PyreService_GetUploadPartUrl_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"b2api", "v1", "b2_get_upload_part_url"}, ""))
 )
 
 var (
@@ -312,7 +382,11 @@ var (
 
 	forward_PyreService_CreateBucket_0 = runtime.ForwardResponseMessage
 
+	forward_PyreService_DeleteBucket_0 = runtime.ForwardResponseMessage
+
 	forward_PyreService_GetUploadUrl_0 = runtime.ForwardResponseMessage
 
-	forward_PyreService_UploadFile_0 = runtime.ForwardResponseMessage
+	forward_PyreService_StartLargeFile_0 = runtime.ForwardResponseMessage
+
+	forward_PyreService_GetUploadPartUrl_0 = runtime.ForwardResponseMessage
 )

@@ -163,11 +163,6 @@ message GetUploadUrlResponse {
   string authorization_token = 3;
 }
 
-message UploadFileRequest {
-  bytes contents = 1;
-  string path = 2;
-}
-
 message UploadFileResponse {
   string file_id = 1;
   string file_name = 2;
@@ -179,6 +174,33 @@ message UploadFileResponse {
   map<string, string> file_info = 8;
   string action = 9;
   int64 upload_timestamp = 10;
+}
+
+message StartLargeFileRequest {
+  string bucket_id = 1;
+  string file_name = 2;
+  string content_type = 3;
+  map<string, string> file_info = 4;
+}
+
+message StartLargeFileResponse {
+  string file_id = 1;
+  string file_name = 2;
+  string account_id = 3;
+  string bucket_id = 4;
+  string content_type = 5;
+  map<string, string> file_info = 6;
+  int64 upload_timestamp = 7;
+}
+
+message GetUploadPartUrlRequest {
+  string file_id = 1;
+}
+
+message GetUploadPartUrlResponse {
+  string file_id = 1;
+  string upload_url = 2;
+  string authorization_token = 3;
 }
 
 service PyreService {
@@ -214,6 +236,15 @@ service PyreService {
     };
   }
 
+  // Deletes the bucket specified. Only buckets that contain no version of any
+  // files can be deleted.
+  rpc DeleteBucket(Bucket) returns (Bucket) {
+    option (google.api.http) = {
+      post: "/b2api/v1/b2_delete_bucket"
+      body: "*"
+    };
+  }
+
   rpc GetUploadUrl(GetUploadUrlRequest) returns (GetUploadUrlResponse) {
     option (google.api.http) = {
       post: "/b2api/v1/b2_get_upload_url"
@@ -221,10 +252,19 @@ service PyreService {
     };
   }
 
-  rpc UploadFile(UploadFileRequest) returns (UploadFileResponse) {
+  // Prepares for uploading the parts of a large file.
+  rpc StartLargeFile(StartLargeFileRequest) returns (StartLargeFileResponse) {
     option (google.api.http) = {
-      post: "/b2api/v1/b2_upload_file/{path=**}"
-      body: "contents"
+      post: "/b2api/v1/b2_start_large_file"
+      body: "*"
+    };
+  }
+
+  // Gets an URL to use for uploading parts of a large file.
+  rpc GetUploadPartUrl(GetUploadPartUrlRequest) returns (GetUploadPartUrlResponse) {
+    option (google.api.http) = {
+      post: "/b2api/v1/b2_get_upload_part_url"
+      body: "*"
     };
   }
 }

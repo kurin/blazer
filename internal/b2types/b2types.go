@@ -99,11 +99,7 @@ type GetUploadURLResponse struct {
 	Token string `json:"authorizationToken"`
 }
 
-type UploadFileResponse struct {
-	FileID    string `json:"fileId"`
-	Timestamp int64  `json:"uploadTimestamp"`
-	Action    string `json:"action"`
-}
+type UploadFileResponse GetFileInfoResponse
 
 type DeleteFileVersionRequest struct {
 	Name   string `json:"fileName"`
@@ -206,14 +202,16 @@ type GetFileInfoRequest struct {
 }
 
 type GetFileInfoResponse struct {
-	FileID      string            `json:"fileId"`
-	Name        string            `json:"fileName"`
-	SHA1        string            `json:"contentSha1"`
-	Size        int64             `json:"contentLength"`
-	ContentType string            `json:"contentType"`
-	Info        map[string]string `json:"fileInfo"`
-	Action      string            `json:"action"`
-	Timestamp   int64             `json:"uploadTimestamp"`
+	FileID      string            `json:"fileId,omitempty"`
+	Name        string            `json:"fileName,omitempty"`
+	AccountID   string            `json:"accountId,omitempty"`
+	BucketID    string            `json:"bucketId,omitempty"`
+	Size        int64             `json:"contentLength,omitempty"`
+	SHA1        string            `json:"contentSha1,omitempty"`
+	ContentType string            `json:"contentType,omitempty"`
+	Info        map[string]string `json:"fileInfo,omitempty"`
+	Action      string            `json:"action,omitempty"`
+	Timestamp   int64             `json:"uploadTimestamp,omitempty"`
 }
 
 type GetDownloadAuthorizationRequest struct {

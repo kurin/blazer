@@ -18,6 +18,7 @@ func main() {
 		fmt.Println(err)
 		return
 	}
+
 	fs := bonfire.FS("/tmp/b2")
 	pyre.RegisterLargeFileManagerOnMux(fs, mux)
 	pyre.RegisterSimpleFileManagerOnMux(fs, mux)

@@ -25,9 +25,17 @@ import (
 type FS string
 
 func (f FS) PartWriter(id string, part int) (io.WriteCloser, error) {
-	return os.Create(filepath.Join(string(f), id, fmt.Sprintf("%d", part)))
+	fp := filepath.Join(string(f), id, fmt.Sprintf("%d", part))
+	if err := os.MkdirAll(filepath.Dir(fp), 0755); err != nil {
+		return nil, err
+	}
+	return os.Create(fp)
 }
 
 func (f FS) Writer(bucket, name, id string) (io.WriteCloser, error) {
-	return os.Create(filepath.Join(string(f), bucket, name, id))
+	fp := filepath.Join(string(f), bucket, name, id)
+	if err := os.MkdirAll(filepath.Dir(fp), 0755); err != nil {
+		return nil, err
+	}
+	return os.Create(fp)
 }

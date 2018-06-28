@@ -59,6 +59,7 @@ func RegisterServerOnMux(ctx context.Context, srv *Server, mux *http.ServeMux) e
 	if err := pb.RegisterPyreServiceHandlerFromEndpoint(ctx, rmux, l.Addr().String(), []grpc.DialOption{grpc.WithInsecure()}); err != nil {
 		return err
 	}
+	pb.RegisterPyreServiceServer(gsrv, srv)
 	mux.Handle("/b2api/v1/", rmux)
 	go gsrv.Serve(l)
 	go func() {

@@ -16,14 +16,15 @@ package pyre
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net"
 	"net/http"
-	"strconv"
-	"sync"
+	"strings"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/google/uuid"
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -69,30 +70,70 @@ func RegisterServerOnMux(ctx context.Context, srv *Server, mux *http.ServeMux) e
 	return nil
 }
 
-func New(addr string) *Server {
-	return &Server{root: addr}
+type AccountManager interface {
+	Authorize(acct, key string) (string, error)
+	CheckCreds(token, api string) error
+	APIRoot(acct string) string
+	DownloadRoot(acct string) string
+}
+
+type BucketManager interface {
+	Add(id string, bs []byte) error
+	Remove(id string) error
+	Update(id string, rev int, bs []byte) error
+	List(acct string) ([][]byte, error)
+	Get(id string) ([]byte, error)
+	SimpleUploadHost(id string) (string, error)
+}
+
+type LargeFileOrganizer interface {
+	PartSizes(acct string) (recommended, minimum int32)
+	StartLargeFile(bucketId, fileId string, bs []byte) error
+	PartHost(fileId string) (string, error)
 }
 
 type Server struct {
-	root       string
-	mu         sync.Mutex
-	buckets    map[int][]byte
-	nextBucket int
-	files      map[string][]byte
-	nextFile   int
+	account AccountManager
+	bucket  BucketManager
+	lfo     LargeFileOrganizer
 }
 
-func (b *Server) AuthorizeAccount(ctx context.Context, req *pb.AuthorizeAccountRequest) (*pb.AuthorizeAccountResponse, error) {
+func (s *Server) AuthorizeAccount(ctx context.Context, req *pb.AuthorizeAccountRequest) (*pb.AuthorizeAccountResponse, error) {
+	auth, err := getAuth(ctx)
+	if err != nil {
+		return nil, err
+	}
+	bs, err := base64.StdEncoding.DecodeString(auth)
+	if err != nil {
+		return nil, err
+	}
+	split := strings.Split(string(bs), ":")
+	if len(split) != 2 {
+		return nil, errors.New("bad auth")
+	}
+	acct, key := split[0], split[1]
+	token, err := s.account.Authorize(acct, key)
+	if err != nil {
+		return nil, err
+	}
+	rec, min := s.lfo.PartSizes(acct)
 	return &pb.AuthorizeAccountResponse{
-		ApiUrl: b.root,
+		AuthorizationToken:      token,
+		ApiUrl:                  s.account.APIRoot(acct),
+		DownloadUrl:             s.account.DownloadRoot(acct),
+		RecommendedPartSize:     rec,
+		MinimumPartSize:         rec,
+		AbsoluteMinimumPartSize: min,
 	}, nil
 }
 
-func (b *Server) ListBuckets(context.Context, *pb.ListBucketsRequest) (*pb.ListBucketsResponse, error) {
+func (s *Server) ListBuckets(ctx context.Context, req *pb.ListBucketsRequest) (*pb.ListBucketsResponse, error) {
 	resp := &pb.ListBucketsResponse{}
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	for _, bs := range b.buckets {
+	buckets, err := s.bucket.List(req.AccountId)
+	if err != nil {
+		return nil, err
+	}
+	for _, bs := range buckets {
 		var bucket pb.Bucket
 		if err := proto.Unmarshal(bs, &bucket); err != nil {
 			return nil, err
@@ -102,75 +143,56 @@ func (b *Server) ListBuckets(context.Context, *pb.ListBucketsRequest) (*pb.ListB
 	return resp, nil
 }
 
-func (b *Server) CreateBucket(ctx context.Context, req *pb.Bucket) (*pb.Bucket, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	n := b.nextBucket
-	b.nextBucket++
-	req.BucketId = fmt.Sprintf("%d", n)
+func (s *Server) CreateBucket(ctx context.Context, req *pb.Bucket) (*pb.Bucket, error) {
+	req.BucketId = uuid.New().String()
 	bs, err := proto.Marshal(req)
 	if err != nil {
 		return nil, err
 	}
-	if b.buckets == nil {
-		b.buckets = make(map[int][]byte)
+	if err := s.bucket.Add(req.BucketId, bs); err != nil {
+		return nil, err
 	}
-	b.buckets[n] = bs
 	return req, nil
 }
 
-func (b *Server) DeleteBucket(ctx context.Context, req *pb.Bucket) (*pb.Bucket, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	idx, err := strconv.ParseInt(req.BucketId, 10, 64)
+func (s *Server) DeleteBucket(ctx context.Context, req *pb.Bucket) (*pb.Bucket, error) {
+	bs, err := s.bucket.Get(req.BucketId)
 	if err != nil {
 		return nil, err
 	}
-	bs, ok := b.buckets[int(idx)]
-	if !ok {
-		return nil, fmt.Errorf("no such bucket: %v", req.BucketId)
-	}
-	if err := proto.Unmarshal(bs, req); err != nil {
+	var bucket pb.Bucket
+	if err := proto.Unmarshal(bs, &bucket); err != nil {
 		return nil, err
 	}
-	delete(b.buckets, int(idx))
-	return req, nil
+	if err := s.bucket.Remove(req.BucketId); err != nil {
+		return nil, err
+	}
+	return &bucket, nil
 }
 
-func (b *Server) GetUploadUrl(ctx context.Context, req *pb.GetUploadUrlRequest) (*pb.GetUploadUrlResponse, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	idx, err := strconv.ParseInt(req.BucketId, 10, 64)
+func (s *Server) GetUploadUrl(ctx context.Context, req *pb.GetUploadUrlRequest) (*pb.GetUploadUrlResponse, error) {
+	host, err := s.bucket.SimpleUploadHost(req.BucketId)
 	if err != nil {
 		return nil, err
 	}
-	if _, ok := b.buckets[int(idx)]; !ok {
-		return nil, fmt.Errorf("no such bucket: %v", req.BucketId)
-	}
-	b.nextFile++
 	return &pb.GetUploadUrlResponse{
-		UploadUrl: fmt.Sprintf("%s/b2api/v1/b2_upload_file/%s/%d", b.root, req.BucketId, b.nextFile),
+		UploadUrl: fmt.Sprintf("%s/b2api/v1/b2_upload_file/%s", host, req.BucketId),
 		BucketId:  req.BucketId,
 	}, nil
 }
 
-func (b *Server) StartLargeFile(ctx context.Context, req *pb.StartLargeFileRequest) (*pb.StartLargeFileResponse, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
+func (s *Server) StartLargeFile(ctx context.Context, req *pb.StartLargeFileRequest) (*pb.StartLargeFileResponse, error) {
 	return &pb.StartLargeFileResponse{
 		BucketId: req.BucketId,
 	}, nil
 }
 
-func (b *Server) GetUploadPartUrl(ctx context.Context, req *pb.GetUploadPartUrlRequest) (*pb.GetUploadPartUrlResponse, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
+func (s *Server) GetUploadPartUrl(ctx context.Context, req *pb.GetUploadPartUrlRequest) (*pb.GetUploadPartUrlResponse, error) {
+	host, err := s.lfo.PartHost(req.FileId)
+	if err != nil {
+		return nil, err
+	}
 	return &pb.GetUploadPartUrlResponse{
-		UploadUrl: fmt.Sprintf("%s/b2api/v1/b2_upload_part/wooooo", b.root),
+		UploadUrl: fmt.Sprintf("%s/b2api/v1/b2_upload_part/%s", host, req.FileId),
 	}, nil
 }

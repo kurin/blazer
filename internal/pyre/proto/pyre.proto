@@ -38,7 +38,8 @@ message AuthorizeAccountResponse {
   // The smallest possible size of a part of a large file (except the last
   // one). This is smaller than the recommended part size. If you use it, you
   // may find that it takes longer overall to upload a large file.
-  int32 absolute_mininum_part_size = 6;
+  int32 absolute_minimum_part_size = 6;
+  int32 minimum_part_size = 7; // alias for recommended_part_size
 }
 
 message ListBucketsRequest {

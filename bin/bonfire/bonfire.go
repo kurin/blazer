@@ -11,10 +11,9 @@ import (
 
 func main() {
 	ctx := context.Background()
-	srv := pyre.New("http://localhost:8822")
 	mux := http.NewServeMux()
 
-	if err := pyre.RegisterServerOnMux(ctx, srv, mux); err != nil {
+	if err := pyre.RegisterServerOnMux(ctx, &pyre.Server{}, mux); err != nil {
 		fmt.Println(err)
 		return
 	}

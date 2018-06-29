@@ -45,14 +45,16 @@ func (f FS) Writer(bucket, name, id string) (io.WriteCloser, error) {
 
 type Localhost int
 
-func (l Localhost) String() string                                        { return fmt.Sprintf("http://localhost:%d", l) }
-func (Localhost) Authorize(string, string) (string, error)                { return "ok", nil }
-func (Localhost) CheckCreds(string, string) error                         { return nil }
-func (l Localhost) APIRoot(string) string                                 { return l.String() }
-func (l Localhost) DownloadRoot(string) string                            { return l.String() }
-func (Localhost) PartSizes(string) (int32, int32)                         { return 1e5, 1 }
-func (l Localhost) PartHost(fileId string) (string, error)                { return l.String(), nil }
-func (Localhost) StartLargeFile(bucketId, fileId string, bs []byte) error { return nil }
+func (l Localhost) String() string                               { return fmt.Sprintf("http://localhost:%d", l) }
+func (Localhost) Authorize(string, string) (string, error)       { return "ok", nil }
+func (Localhost) CheckCreds(string, string) error                { return nil }
+func (l Localhost) APIRoot(string) string                        { return l.String() }
+func (l Localhost) DownloadRoot(string) string                   { return l.String() }
+func (Localhost) Sizes(string) (int32, int32)                    { return 1e5, 1 }
+func (l Localhost) Host(fileId string) (string, error)           { return l.String(), nil }
+func (Localhost) Start(bucketId, fileId string, bs []byte) error { return nil }
+func (Localhost) Finish(fileId string) error                     { return nil }
+func (Localhost) Get(fileId string) ([]byte, error)              { return nil, nil }
 
 type LocalBucket struct {
 	Port int

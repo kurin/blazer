@@ -204,6 +204,25 @@ message GetUploadPartUrlResponse {
   string authorization_token = 3;
 }
 
+message FinishLargeFileRequest {
+  string file_id = 1;
+  repeated string part_sha1_array = 2;
+  // string sha1 = 3;
+}
+
+message FinishLargeFileResponse {
+  string file_id = 1;
+  string file_name = 2;
+  string account_id = 3;
+  string bucket_id = 4;
+  int64 content_length = 5;
+  string content_sha1 = 6; // always "none"
+  string content_type = 7;
+  map<string, string> file_info = 8;
+  string action = 9;
+  int64 upload_timestamp = 10;
+}
+
 service PyreService {
   // Used to log in to the B2 API. Returns an authorization token that can be
   // used for account-level operations, and a URL that should be used as the
@@ -265,6 +284,14 @@ service PyreService {
   rpc GetUploadPartUrl(GetUploadPartUrlRequest) returns (GetUploadPartUrlResponse) {
     option (google.api.http) = {
       post: "/b2api/v1/b2_get_upload_part_url"
+      body: "*"
+    };
+  }
+
+  // Converts the parts that have been uploaded into a single B2 file.
+  rpc FinishLargeFile(FinishLargeFileRequest) returns (FinishLargeFileResponse) {
+    option (google.api.http) = {
+      post: "/b2api/v1/b2_finish_large_file"
       body: "*"
     };
   }

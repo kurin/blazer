@@ -87,9 +87,11 @@ type BucketManager interface {
 }
 
 type LargeFileOrganizer interface {
-	PartSizes(acct string) (recommended, minimum int32)
-	StartLargeFile(bucketId, fileId string, bs []byte) error
-	PartHost(fileId string) (string, error)
+	Sizes(acct string) (recommended, minimum int32)
+	Host(fileId string) (string, error)
+	Start(bucketId, fileId string, bs []byte) error
+	Get(fileId string) ([]byte, error)
+	Finish(fileId string) error
 }
 
 type Server struct {
@@ -120,7 +122,7 @@ func (s *Server) AuthorizeAccount(ctx context.Context, req *pb.AuthorizeAccountR
 	if err != nil {
 		return nil, err
 	}
-	rec, min := s.LargeFile.PartSizes(acct)
+	rec, min := s.LargeFile.Sizes(acct)
 	return &pb.AuthorizeAccountResponse{
 		AuthorizationToken:      token,
 		ApiUrl:                  s.Account.APIRoot(acct),
@@ -187,16 +189,24 @@ func (s *Server) GetUploadUrl(ctx context.Context, req *pb.GetUploadUrlRequest) 
 
 func (s *Server) StartLargeFile(ctx context.Context, req *pb.StartLargeFileRequest) (*pb.StartLargeFileResponse, error) {
 	return &pb.StartLargeFileResponse{
-		BucketId: req.BucketId,
+		FileId:      uuid.New().String(),
+		FileName:    req.FileName,
+		BucketId:    req.BucketId,
+		ContentType: req.ContentType,
+		FileInfo:    req.FileInfo,
 	}, nil
 }
 
 func (s *Server) GetUploadPartUrl(ctx context.Context, req *pb.GetUploadPartUrlRequest) (*pb.GetUploadPartUrlResponse, error) {
-	host, err := s.LargeFile.PartHost(req.FileId)
+	host, err := s.LargeFile.Host(req.FileId)
 	if err != nil {
 		return nil, err
 	}
 	return &pb.GetUploadPartUrlResponse{
 		UploadUrl: fmt.Sprintf("%s/b2api/v1/b2_upload_part/%s", host, req.FileId),
 	}, nil
+}
+
+func (s *Server) FinishLargeFile(ctx context.Context, req *pb.FinishLargeFileRequest) (*pb.FinishLargeFileResponse, error) {
+	return &pb.FinishLargeFileResponse{}, nil
 }

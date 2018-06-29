@@ -43,7 +43,7 @@ func getAuth(ctx context.Context) (string, error) {
 	if !ok {
 		return "", errors.New("no metadata")
 	}
-	data := md.Get("authentication")
+	data := md.Get("authorization")
 	if len(data) == 0 {
 		return "", nil
 	}
@@ -83,7 +83,7 @@ type BucketManager interface {
 	Update(id string, rev int, bs []byte) error
 	List(acct string) ([][]byte, error)
 	Get(id string) ([]byte, error)
-	SimpleUploadHost(id string) (string, error)
+	SimpleUploadHost(id string) (string, error) // does this belong here?
 }
 
 type LargeFileOrganizer interface {
@@ -93,9 +93,9 @@ type LargeFileOrganizer interface {
 }
 
 type Server struct {
-	account AccountManager
-	bucket  BucketManager
-	lfo     LargeFileOrganizer
+	Account   AccountManager
+	Bucket    BucketManager
+	LargeFile LargeFileOrganizer
 }
 
 func (s *Server) AuthorizeAccount(ctx context.Context, req *pb.AuthorizeAccountRequest) (*pb.AuthorizeAccountResponse, error) {
@@ -103,6 +103,10 @@ func (s *Server) AuthorizeAccount(ctx context.Context, req *pb.AuthorizeAccountR
 	if err != nil {
 		return nil, err
 	}
+	if !strings.HasPrefix(auth, "Basic ") {
+		return nil, errors.New("basic auth required")
+	}
+	auth = strings.TrimPrefix(auth, "Basic ")
 	bs, err := base64.StdEncoding.DecodeString(auth)
 	if err != nil {
 		return nil, err
@@ -112,15 +116,15 @@ func (s *Server) AuthorizeAccount(ctx context.Context, req *pb.AuthorizeAccountR
 		return nil, errors.New("bad auth")
 	}
 	acct, key := split[0], split[1]
-	token, err := s.account.Authorize(acct, key)
+	token, err := s.Account.Authorize(acct, key)
 	if err != nil {
 		return nil, err
 	}
-	rec, min := s.lfo.PartSizes(acct)
+	rec, min := s.LargeFile.PartSizes(acct)
 	return &pb.AuthorizeAccountResponse{
 		AuthorizationToken:      token,
-		ApiUrl:                  s.account.APIRoot(acct),
-		DownloadUrl:             s.account.DownloadRoot(acct),
+		ApiUrl:                  s.Account.APIRoot(acct),
+		DownloadUrl:             s.Account.DownloadRoot(acct),
 		RecommendedPartSize:     rec,
 		MinimumPartSize:         rec,
 		AbsoluteMinimumPartSize: min,
@@ -129,7 +133,7 @@ func (s *Server) AuthorizeAccount(ctx context.Context, req *pb.AuthorizeAccountR
 
 func (s *Server) ListBuckets(ctx context.Context, req *pb.ListBucketsRequest) (*pb.ListBucketsResponse, error) {
 	resp := &pb.ListBucketsResponse{}
-	buckets, err := s.bucket.List(req.AccountId)
+	buckets, err := s.Bucket.List(req.AccountId)
 	if err != nil {
 		return nil, err
 	}
@@ -149,14 +153,14 @@ func (s *Server) CreateBucket(ctx context.Context, req *pb.Bucket) (*pb.Bucket, 
 	if err != nil {
 		return nil, err
 	}
-	if err := s.bucket.Add(req.BucketId, bs); err != nil {
+	if err := s.Bucket.Add(req.BucketId, bs); err != nil {
 		return nil, err
 	}
 	return req, nil
 }
 
 func (s *Server) DeleteBucket(ctx context.Context, req *pb.Bucket) (*pb.Bucket, error) {
-	bs, err := s.bucket.Get(req.BucketId)
+	bs, err := s.Bucket.Get(req.BucketId)
 	if err != nil {
 		return nil, err
 	}
@@ -164,14 +168,14 @@ func (s *Server) DeleteBucket(ctx context.Context, req *pb.Bucket) (*pb.Bucket, 
 	if err := proto.Unmarshal(bs, &bucket); err != nil {
 		return nil, err
 	}
-	if err := s.bucket.Remove(req.BucketId); err != nil {
+	if err := s.Bucket.Remove(req.BucketId); err != nil {
 		return nil, err
 	}
 	return &bucket, nil
 }
 
 func (s *Server) GetUploadUrl(ctx context.Context, req *pb.GetUploadUrlRequest) (*pb.GetUploadUrlResponse, error) {
-	host, err := s.bucket.SimpleUploadHost(req.BucketId)
+	host, err := s.Bucket.SimpleUploadHost(req.BucketId)
 	if err != nil {
 		return nil, err
 	}
@@ -188,7 +192,7 @@ func (s *Server) StartLargeFile(ctx context.Context, req *pb.StartLargeFileReque
 }
 
 func (s *Server) GetUploadPartUrl(ctx context.Context, req *pb.GetUploadPartUrlRequest) (*pb.GetUploadPartUrlResponse, error) {
-	host, err := s.lfo.PartHost(req.FileId)
+	host, err := s.LargeFile.PartHost(req.FileId)
 	if err != nil {
 		return nil, err
 	}

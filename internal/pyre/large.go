@@ -84,7 +84,6 @@ func (fs *largeFileServer) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(rw).Encode(req); err != nil {
 		fmt.Println("oh no")
 	}
-	fmt.Println("served!")
 }
 
 func RegisterLargeFileManagerOnMux(f LargeFileManager, mux *http.ServeMux) {

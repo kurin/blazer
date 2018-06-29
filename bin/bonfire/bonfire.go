@@ -13,7 +13,11 @@ func main() {
 	ctx := context.Background()
 	mux := http.NewServeMux()
 
-	if err := pyre.RegisterServerOnMux(ctx, &pyre.Server{}, mux); err != nil {
+	if err := pyre.RegisterServerOnMux(ctx, &pyre.Server{
+		Account:   bonfire.Localhost(8822),
+		LargeFile: bonfire.Localhost(8822),
+		Bucket:    &bonfire.LocalBucket{Port: 8822},
+	}, mux); err != nil {
 		fmt.Println(err)
 		return
 	}

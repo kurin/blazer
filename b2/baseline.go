@@ -49,7 +49,7 @@ type b2BucketInterface interface {
 	listUnfinishedLargeFiles(context.Context, int, string) ([]b2FileInterface, string, error)
 	downloadFileByName(context.Context, string, int64, int64) (b2FileReaderInterface, error)
 	hideFile(context.Context, string) (b2FileInterface, error)
-	getDownloadAuthorization(context.Context, string, time.Duration) (string, error)
+	getDownloadAuthorization(context.Context, string, time.Duration, string) (string, error)
 	baseURL() string
 	file(string, string) b2FileInterface
 }
@@ -351,8 +351,8 @@ func (b *b2Bucket) hideFile(ctx context.Context, name string) (b2FileInterface, 
 	return &b2File{f}, nil
 }
 
-func (b *b2Bucket) getDownloadAuthorization(ctx context.Context, p string, v time.Duration) (string, error) {
-	return b.b.GetDownloadAuthorization(ctx, p, v)
+func (b *b2Bucket) getDownloadAuthorization(ctx context.Context, p string, v time.Duration, s string) (string, error) {
+	return b.b.GetDownloadAuthorization(ctx, p, v, s)
 }
 
 func (b *b2Bucket) baseURL() string {

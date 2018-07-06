@@ -221,7 +221,7 @@ func (t *testBucket) downloadFileByName(_ context.Context, name string, offset, 
 }
 
 func (t *testBucket) hideFile(context.Context, string) (b2FileInterface, error) { return nil, nil }
-func (t *testBucket) getDownloadAuthorization(context.Context, string, time.Duration) (string, error) {
+func (t *testBucket) getDownloadAuthorization(context.Context, string, time.Duration, string) (string, error) {
 	return "", nil
 }
 func (t *testBucket) baseURL() string                      { return "" }

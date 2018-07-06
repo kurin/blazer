@@ -768,7 +768,8 @@ func (b *Bucket) AuthToken(ctx context.Context, prefix string, valid time.Durati
 }
 
 // AuthURL returns a URL for the given object with embedded token and,
-// possibly, b2ContentDisposition arguments.
+// possibly, b2ContentDisposition arguments.  Leave b2cd blank for no content
+// disposition.
 func (o *Object) AuthURL(ctx context.Context, valid time.Duration, b2cd string) (*url.URL, error) {
 	token, err := o.b.b.getDownloadAuthorization(ctx, o.name, valid, b2cd)
 	if err != nil {

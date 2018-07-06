@@ -775,7 +775,7 @@ func (o *Object) AuthURL(ctx context.Context, valid time.Duration, b2cd string) 
 	if err != nil {
 		return nil, err
 	}
-	urlString := fmt.Sprintf("%s/file/%s/%s?Authorization=%s", o.b.BaseURL(), o.b.Name(), o.name, url.QueryEscape(token))
+	urlString := fmt.Sprintf("%s?Authorization=%s", o.URL(), url.QueryEscape(token))
 	if b2cd != "" {
 		urlString = fmt.Sprintf("%s&b2ContentDisposition=%s", urlString, url.QueryEscape(b2cd))
 	}

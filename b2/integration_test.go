@@ -30,6 +30,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kurin/blazer/internal/blog"
 	"github.com/kurin/blazer/x/transport"
 )
 
@@ -431,6 +432,57 @@ func TestAuthTokLive(t *testing.T) {
 	}
 	if brsp.StatusCode != 401 {
 		t.Fatalf("%s: got %s, want 401", burl, brsp.Status)
+	}
+}
+
+func TestObjAuthTokLive(t *testing.T) {
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+	bucket, done := startLiveTest(ctx, t)
+	defer done()
+
+	table := []struct {
+		obj  string
+		d    time.Duration
+		b2cd string
+	}{
+		{
+			obj: "foo/bar",
+			d:   time.Minute,
+		},
+		{
+			obj:  "foo2/thing.pdf",
+			d:    time.Minute,
+			b2cd: "attachment",
+		},
+		{
+			obj:  "foo2/thing.pdf",
+			d:    time.Minute,
+			b2cd: `attachment; filename="what.png"`,
+		},
+	}
+
+	for _, e := range table {
+		fw := bucket.Object(e.obj).NewWriter(ctx)
+		io.Copy(fw, io.LimitReader(zReader{}, 1e5))
+		if err := fw.Close(); err != nil {
+			t.Fatal(err)
+		}
+
+		url, err := bucket.Object(e.obj).AuthURL(ctx, e.d, e.b2cd)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		blog.V(2).Infof("downloading %s", url.String())
+		frsp, err := http.Get(url.String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if frsp.StatusCode != 200 {
+			t.Fatalf("%s: got %s, want 200", url.String(), frsp.Status)
+		}
 	}
 }
 

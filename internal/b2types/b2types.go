@@ -215,9 +215,10 @@ type GetFileInfoResponse struct {
 }
 
 type GetDownloadAuthorizationRequest struct {
-	BucketID string `json:"bucketId"`
-	Prefix   string `json:"fileNamePrefix"`
-	Valid    int    `json:"validDurationInSeconds"`
+	BucketID           string `json:"bucketId"`
+	Prefix             string `json:"fileNamePrefix"`
+	Valid              int    `json:"validDurationInSeconds"`
+	ContentDisposition string `json:"b2ContentDisposition,omitempty"`
 }
 
 type GetDownloadAuthorizationResponse struct {

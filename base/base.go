@@ -1046,11 +1046,12 @@ func (b *Bucket) ListFileVersions(ctx context.Context, count int, startName, sta
 }
 
 // GetDownloadAuthorization wraps b2_get_download_authorization.
-func (b *Bucket) GetDownloadAuthorization(ctx context.Context, prefix string, valid time.Duration) (string, error) {
+func (b *Bucket) GetDownloadAuthorization(ctx context.Context, prefix string, valid time.Duration, contentDisposition string) (string, error) {
 	b2req := &b2types.GetDownloadAuthorizationRequest{
-		BucketID: b.id,
-		Prefix:   prefix,
-		Valid:    int(valid.Seconds()),
+		BucketID:           b.id,
+		Prefix:             prefix,
+		Valid:              int(valid.Seconds()),
+		ContentDisposition: contentDisposition,
 	}
 	b2resp := &b2types.GetDownloadAuthorizationResponse{}
 	headers := map[string]string{

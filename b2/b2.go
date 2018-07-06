@@ -32,6 +32,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strconv"
 	"sync"
@@ -763,5 +764,24 @@ func (b *Bucket) getObject(ctx context.Context, name string) (*Object, error) {
 // in a private bucket.  Only objects that begin with prefix can be accessed.
 // The token expires after the given duration.
 func (b *Bucket) AuthToken(ctx context.Context, prefix string, valid time.Duration) (string, error) {
-	return b.b.getDownloadAuthorization(ctx, prefix, valid)
+	return b.b.getDownloadAuthorization(ctx, prefix, valid, "")
+}
+
+// AuthURL returns a URL for the given object with embedded token and,
+// possibly, b2ContentDisposition arguments.  Leave b2cd blank for no content
+// disposition.
+func (o *Object) AuthURL(ctx context.Context, valid time.Duration, b2cd string) (*url.URL, error) {
+	token, err := o.b.b.getDownloadAuthorization(ctx, o.name, valid, b2cd)
+	if err != nil {
+		return nil, err
+	}
+	urlString := fmt.Sprintf("%s?Authorization=%s", o.URL(), url.QueryEscape(token))
+	if b2cd != "" {
+		urlString = fmt.Sprintf("%s&b2ContentDisposition=%s", urlString, url.QueryEscape(b2cd))
+	}
+	u, err := url.Parse(urlString)
+	if err != nil {
+		return nil, err
+	}
+	return u, nil
 }

@@ -108,7 +108,7 @@ type BucketManager interface {
 }
 
 type LargeFileOrganizer interface {
-	Start(bucketId, fileId string, bs []byte) error
+	Start(bucketId, fileName, fileId string, bs []byte) error
 	Get(fileId string) ([]byte, error)
 	Parts(fileId string) ([]string, error)
 	Finish(fileId string) error
@@ -210,7 +210,7 @@ func (s *Server) GetUploadUrl(ctx context.Context, req *pb.GetUploadUrlRequest) 
 func (s *Server) StartLargeFile(ctx context.Context, req *pb.StartLargeFileRequest) (*pb.StartLargeFileResponse, error) {
 	fileID := uuid.New().String()
 	resp := &pb.StartLargeFileResponse{
-		FileId:      uuid.New().String(),
+		FileId:      fileID,
 		FileName:    req.FileName,
 		BucketId:    req.BucketId,
 		ContentType: req.ContentType,
@@ -220,7 +220,7 @@ func (s *Server) StartLargeFile(ctx context.Context, req *pb.StartLargeFileReque
 	if err != nil {
 		return nil, err
 	}
-	if err := s.LargeFile.Start(req.BucketId, fileID, bs); err != nil {
+	if err := s.LargeFile.Start(req.BucketId, req.FileName, fileID, bs); err != nil {
 		return nil, err
 	}
 	return resp, nil

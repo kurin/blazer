@@ -17,6 +17,7 @@ package bonfire
 
 import (
 	"crypto/sha1"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -56,8 +57,11 @@ func (f FS) Parts(id string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	shas := make([]string, len(fs))
+	shas := make([]string, len(fs)-1)
 	for _, fi := range fs {
+		if fi.Name() == "info" {
+			continue
+		}
 		i, err := strconv.ParseInt(fi.Name(), 10, 32)
 		if err != nil {
 			return nil, err
@@ -77,9 +81,61 @@ func (f FS) Parts(id string) ([]string, error) {
 	return shas, nil
 }
 
-func (f FS) Start(bucketId, fileId string, bs []byte) error { return nil }
-func (f FS) Finish(fileId string) error                     { return nil }
-func (f FS) Get(fileId string) ([]byte, error)              { return nil, nil }
+type fi struct {
+	Name   string
+	Bucket string
+}
+
+func (f FS) Start(bucketId, fileName, fileId string, bs []byte) error {
+	w, err := f.open(filepath.Join(string(f), fileId, "info"))
+	if err != nil {
+		return err
+	}
+	if err := json.NewEncoder(w).Encode(fi{Name: fileName, Bucket: bucketId}); err != nil {
+		w.Close()
+		return err
+	}
+	return w.Close()
+}
+
+func (f FS) Finish(fileId string) error {
+	r, err := os.Open(filepath.Join(string(f), fileId, "info"))
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+	var info fi
+	if err := json.NewDecoder(r).Decode(&info); err != nil {
+		return err
+	}
+	shas, err := f.Parts(fileId) // oh my god this is terrible
+	if err != nil {
+		return err
+	}
+	w, err := f.open(filepath.Join(string(f), info.Bucket, info.Name, fileId))
+	if err != nil {
+		return err
+	}
+	for i := 1; i <= len(shas); i++ {
+		r, err := os.Open(filepath.Join(string(f), fileId, fmt.Sprintf("%d", i)))
+		if err != nil {
+			w.Close()
+			return err
+		}
+		if _, err := io.Copy(w, r); err != nil {
+			w.Close()
+			r.Close()
+			return err
+		}
+		r.Close()
+	}
+	if err := w.Close(); err != nil {
+		return err
+	}
+	return os.RemoveAll(filepath.Join(string(f), fileId))
+}
+
+func (f FS) Get(fileId string) ([]byte, error) { return nil, nil }
 
 type Localhost int
 

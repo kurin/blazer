@@ -16,11 +16,13 @@
 package bonfire
 
 import (
+	"crypto/sha1"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 )
 
@@ -43,6 +45,42 @@ func (f FS) Writer(bucket, name, id string) (io.WriteCloser, error) {
 	return f.open(fp)
 }
 
+func (f FS) Parts(id string) ([]string, error) {
+	dir := filepath.Join(string(f), id)
+	file, err := os.Open(dir)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	fs, err := file.Readdir(0)
+	if err != nil {
+		return nil, err
+	}
+	shas := make([]string, len(fs))
+	for _, fi := range fs {
+		i, err := strconv.ParseInt(fi.Name(), 10, 32)
+		if err != nil {
+			return nil, err
+		}
+		p, err := os.Open(filepath.Join(dir, fi.Name()))
+		if err != nil {
+			return nil, err
+		}
+		sha := sha1.New()
+		if _, err := io.Copy(sha, p); err != nil {
+			p.Close()
+			return nil, err
+		}
+		p.Close()
+		shas[int(i)-1] = fmt.Sprintf("%x", sha.Sum(nil))
+	}
+	return shas, nil
+}
+
+func (f FS) Start(bucketId, fileId string, bs []byte) error { return nil }
+func (f FS) Finish(fileId string) error                     { return nil }
+func (f FS) Get(fileId string) ([]byte, error)              { return nil, nil }
+
 type Localhost int
 
 func (l Localhost) String() string                               { return fmt.Sprintf("http://localhost:%d", l) }
@@ -52,11 +90,7 @@ func (Localhost) CheckCreds(string, string) error                { return nil }
 func (l Localhost) APIRoot(string) string                        { return l.String() }
 func (l Localhost) DownloadRoot(string) string                   { return l.String() }
 func (Localhost) Sizes(string) (int32, int32)                    { return 1e5, 1 }
-func (l Localhost) Host(fileId string) (string, error)           { return l.String(), nil }
-func (Localhost) Start(bucketId, fileId string, bs []byte) error { return nil }
-func (Localhost) Finish(fileId string) error                     { return nil }
-func (Localhost) Get(fileId string) ([]byte, error)              { return nil, nil }
-func (Localhost) Parts(string) ([]string, error)                 { return nil, nil }
+func (l Localhost) UploadPartHost(fileId string) (string, error) { return l.String(), nil }
 
 type LocalBucket struct {
 	Port int

@@ -94,6 +94,9 @@ type AccountManager interface {
 	CheckCreds(token, api string) error
 	APIRoot(acct string) string
 	DownloadRoot(acct string) string
+	UploadPartHost(fileId string) (string, error)
+	UploadHost(id string) (string, error)
+	Sizes(acct string) (recommended, minimum int32)
 }
 
 type BucketManager interface {
@@ -104,13 +107,7 @@ type BucketManager interface {
 	Get(id string) ([]byte, error)
 }
 
-type SimpleFileOrganizer interface {
-	UploadHost(id string) (string, error)
-}
-
 type LargeFileOrganizer interface {
-	Sizes(acct string) (recommended, minimum int32)
-	Host(fileId string) (string, error)
 	Start(bucketId, fileId string, bs []byte) error
 	Get(fileId string) ([]byte, error)
 	Parts(fileId string) ([]string, error)
@@ -121,7 +118,6 @@ type Server struct {
 	Account   AccountManager
 	Bucket    BucketManager
 	LargeFile LargeFileOrganizer
-	Simple    SimpleFileOrganizer
 }
 
 func (s *Server) AuthorizeAccount(ctx context.Context, req *pb.AuthorizeAccountRequest) (*pb.AuthorizeAccountResponse, error) {
@@ -146,7 +142,7 @@ func (s *Server) AuthorizeAccount(ctx context.Context, req *pb.AuthorizeAccountR
 	if err != nil {
 		return nil, err
 	}
-	rec, min := s.LargeFile.Sizes(acct)
+	rec, min := s.Account.Sizes(acct)
 	return &pb.AuthorizeAccountResponse{
 		AuthorizationToken:      token,
 		ApiUrl:                  s.Account.APIRoot(acct),
@@ -201,7 +197,7 @@ func (s *Server) DeleteBucket(ctx context.Context, req *pb.Bucket) (*pb.Bucket, 
 }
 
 func (s *Server) GetUploadUrl(ctx context.Context, req *pb.GetUploadUrlRequest) (*pb.GetUploadUrlResponse, error) {
-	host, err := s.Simple.UploadHost(req.BucketId)
+	host, err := s.Account.UploadHost(req.BucketId)
 	if err != nil {
 		return nil, err
 	}
@@ -231,7 +227,7 @@ func (s *Server) StartLargeFile(ctx context.Context, req *pb.StartLargeFileReque
 }
 
 func (s *Server) GetUploadPartUrl(ctx context.Context, req *pb.GetUploadPartUrlRequest) (*pb.GetUploadPartUrlResponse, error) {
-	host, err := s.LargeFile.Host(req.FileId)
+	host, err := s.Account.UploadPartHost(req.FileId)
 	if err != nil {
 		return nil, err
 	}

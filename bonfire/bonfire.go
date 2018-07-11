@@ -46,6 +46,7 @@ func (f FS) Writer(bucket, name, id string) (io.WriteCloser, error) {
 type Localhost int
 
 func (l Localhost) String() string                               { return fmt.Sprintf("http://localhost:%d", l) }
+func (l Localhost) UploadHost(id string) (string, error)         { return l.String(), nil }
 func (Localhost) Authorize(string, string) (string, error)       { return "ok", nil }
 func (Localhost) CheckCreds(string, string) error                { return nil }
 func (l Localhost) APIRoot(string) string                        { return l.String() }
@@ -55,6 +56,7 @@ func (l Localhost) Host(fileId string) (string, error)           { return l.Stri
 func (Localhost) Start(bucketId, fileId string, bs []byte) error { return nil }
 func (Localhost) Finish(fileId string) error                     { return nil }
 func (Localhost) Get(fileId string) ([]byte, error)              { return nil, nil }
+func (Localhost) Parts(string) ([]string, error)                 { return nil, nil }
 
 type LocalBucket struct {
 	Port int
@@ -111,8 +113,4 @@ func (lb *LocalBucket) Get(id string) ([]byte, error) {
 		return nil, errors.New("not found")
 	}
 	return bs, nil
-}
-
-func (lb LocalBucket) SimpleUploadHost(id string) (string, error) {
-	return fmt.Sprintf("http://localhost:%d", lb.Port), nil
 }

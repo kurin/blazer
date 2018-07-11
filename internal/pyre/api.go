@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"reflect"
 	"strings"
 
@@ -33,10 +34,27 @@ import (
 	pb "github.com/kurin/blazer/internal/pyre/proto"
 )
 
+type apiErr struct {
+	Status  int    `json:"status"`
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
 func serveMuxOptions() []runtime.ServeMuxOption {
-	var opts []runtime.ServeMuxOption
-	opts = append(opts, runtime.WithMarshalerOption("*", &runtime.JSONPb{}))
-	return opts
+	return []runtime.ServeMuxOption{
+		runtime.WithMarshalerOption("*", &runtime.JSONPb{}),
+		runtime.WithProtoErrorHandler(func(ctx context.Context, mux *runtime.ServeMux, m runtime.Marshaler, rw http.ResponseWriter, req *http.Request, err error) {
+			aErr := apiErr{
+				Status:  400,
+				Code:    "uh oh",
+				Message: err.Error(),
+			}
+			rw.WriteHeader(aErr.Status)
+			if err := m.NewEncoder(rw).Encode(aErr); err != nil {
+				fmt.Fprintln(os.Stdout, err)
+			}
+		}),
+	}
 }
 
 func getAuth(ctx context.Context) (string, error) {
@@ -81,7 +99,7 @@ type AccountManager interface {
 type BucketManager interface {
 	Add(id string, bs []byte) error
 	Remove(id string) error
-	Update(id string, bs []byte) error
+	Update(id string, rev int, bs []byte) error
 	List(acct string) ([][]byte, error)
 	Get(id string) ([]byte, error)
 }

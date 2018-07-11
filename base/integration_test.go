@@ -265,7 +265,7 @@ func TestStorage(t *testing.T) {
 	}
 
 	// b2_get_download_authorization
-	if _, err := bucket.GetDownloadAuthorization(ctx, "foo/", 24*time.Hour); err != nil {
+	if _, err := bucket.GetDownloadAuthorization(ctx, "foo/", 24*time.Hour, "attachment"); err != nil {
 		t.Errorf("failed to get download auth token: %v", err)
 	}
 }

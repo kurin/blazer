@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"reflect"
 	"strings"
 
 	"github.com/golang/protobuf/proto"
@@ -80,10 +81,13 @@ type AccountManager interface {
 type BucketManager interface {
 	Add(id string, bs []byte) error
 	Remove(id string) error
-	Update(id string, rev int, bs []byte) error
+	Update(id string, bs []byte) error
 	List(acct string) ([][]byte, error)
 	Get(id string) ([]byte, error)
-	SimpleUploadHost(id string) (string, error) // does this belong here?
+}
+
+type SimpleFileOrganizer interface {
+	UploadHost(id string) (string, error)
 }
 
 type LargeFileOrganizer interface {
@@ -91,6 +95,7 @@ type LargeFileOrganizer interface {
 	Host(fileId string) (string, error)
 	Start(bucketId, fileId string, bs []byte) error
 	Get(fileId string) ([]byte, error)
+	Parts(fileId string) ([]string, error)
 	Finish(fileId string) error
 }
 
@@ -98,6 +103,7 @@ type Server struct {
 	Account   AccountManager
 	Bucket    BucketManager
 	LargeFile LargeFileOrganizer
+	Simple    SimpleFileOrganizer
 }
 
 func (s *Server) AuthorizeAccount(ctx context.Context, req *pb.AuthorizeAccountRequest) (*pb.AuthorizeAccountResponse, error) {
@@ -177,7 +183,7 @@ func (s *Server) DeleteBucket(ctx context.Context, req *pb.Bucket) (*pb.Bucket, 
 }
 
 func (s *Server) GetUploadUrl(ctx context.Context, req *pb.GetUploadUrlRequest) (*pb.GetUploadUrlResponse, error) {
-	host, err := s.Bucket.SimpleUploadHost(req.BucketId)
+	host, err := s.Simple.UploadHost(req.BucketId)
 	if err != nil {
 		return nil, err
 	}
@@ -188,13 +194,22 @@ func (s *Server) GetUploadUrl(ctx context.Context, req *pb.GetUploadUrlRequest) 
 }
 
 func (s *Server) StartLargeFile(ctx context.Context, req *pb.StartLargeFileRequest) (*pb.StartLargeFileResponse, error) {
-	return &pb.StartLargeFileResponse{
+	fileID := uuid.New().String()
+	resp := &pb.StartLargeFileResponse{
 		FileId:      uuid.New().String(),
 		FileName:    req.FileName,
 		BucketId:    req.BucketId,
 		ContentType: req.ContentType,
 		FileInfo:    req.FileInfo,
-	}, nil
+	}
+	bs, err := proto.Marshal(resp)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.LargeFile.Start(req.BucketId, fileID, bs); err != nil {
+		return nil, err
+	}
+	return resp, nil
 }
 
 func (s *Server) GetUploadPartUrl(ctx context.Context, req *pb.GetUploadPartUrlRequest) (*pb.GetUploadPartUrlResponse, error) {
@@ -208,5 +223,15 @@ func (s *Server) GetUploadPartUrl(ctx context.Context, req *pb.GetUploadPartUrlR
 }
 
 func (s *Server) FinishLargeFile(ctx context.Context, req *pb.FinishLargeFileRequest) (*pb.FinishLargeFileResponse, error) {
+	parts, err := s.LargeFile.Parts(req.FileId)
+	if err != nil {
+		return nil, err
+	}
+	if !reflect.DeepEqual(parts, req.PartSha1Array) {
+		return nil, errors.New("sha1 array mismatch")
+	}
+	if err := s.LargeFile.Finish(req.FileId); err != nil {
+		return nil, err
+	}
 	return &pb.FinishLargeFileResponse{}, nil
 }

@@ -23,8 +23,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"sync"
+
+	"github.com/kurin/blazer/internal/pyre"
 )
 
 type FS string
@@ -135,6 +138,37 @@ func (f FS) Finish(fileId string) error {
 	return os.RemoveAll(filepath.Join(string(f), fileId))
 }
 
+func (f FS) ObjectByName(bucket, name string) (pyre.DownloadableObject, error) {
+	dir := filepath.Join(string(f), bucket, name)
+	d, err := os.Open(dir)
+	if err != nil {
+		return nil, err
+	}
+	defer d.Close()
+	fis, err := d.Readdir(0)
+	if err != nil {
+		return nil, err
+	}
+	sort.Slice(fis, func(i, j int) bool { return fis[i].ModTime().Before(fis[j].ModTime()) })
+	o, err := os.Open(filepath.Join(dir, fis[0].Name()))
+	if err != nil {
+		return nil, err
+	}
+	return do{
+		o:    o,
+		size: fis[0].Size(),
+	}, nil
+}
+
+type do struct {
+	size int64
+	o    *os.File
+}
+
+func (d do) Size() int64         { return d.size }
+func (d do) Reader() io.ReaderAt { return d.o }
+func (d do) Close() error        { return d.o.Close() }
+
 func (f FS) Get(fileId string) ([]byte, error) { return nil, nil }
 
 type Localhost int
@@ -153,9 +187,10 @@ type LocalBucket struct {
 
 	mux sync.Mutex
 	b   map[string][]byte
+	nti map[string]string
 }
 
-func (lb *LocalBucket) Add(id string, bs []byte) error {
+func (lb *LocalBucket) AddBucket(id, name string, bs []byte) error {
 	lb.mux.Lock()
 	defer lb.mux.Unlock()
 
@@ -163,11 +198,16 @@ func (lb *LocalBucket) Add(id string, bs []byte) error {
 		lb.b = make(map[string][]byte)
 	}
 
+	if lb.nti == nil {
+		lb.nti = make(map[string]string)
+	}
+
 	lb.b[id] = bs
+	lb.nti[name] = id
 	return nil
 }
 
-func (lb *LocalBucket) Remove(id string) error {
+func (lb *LocalBucket) RemoveBucket(id string) error {
 	lb.mux.Lock()
 	defer lb.mux.Unlock()
 
@@ -179,11 +219,11 @@ func (lb *LocalBucket) Remove(id string) error {
 	return nil
 }
 
-func (lb *LocalBucket) Update(id string, rev int, bs []byte) error {
-	return lb.Add(id, bs)
+func (lb *LocalBucket) UpdateBucket(id string, rev int, bs []byte) error {
+	return errors.New("no")
 }
 
-func (lb *LocalBucket) List(acct string) ([][]byte, error) {
+func (lb *LocalBucket) ListBuckets(acct string) ([][]byte, error) {
 	lb.mux.Lock()
 	defer lb.mux.Unlock()
 
@@ -194,7 +234,7 @@ func (lb *LocalBucket) List(acct string) ([][]byte, error) {
 	return bss, nil
 }
 
-func (lb *LocalBucket) Get(id string) ([]byte, error) {
+func (lb *LocalBucket) GetBucket(id string) ([]byte, error) {
 	lb.mux.Lock()
 	defer lb.mux.Unlock()
 
@@ -203,4 +243,15 @@ func (lb *LocalBucket) Get(id string) ([]byte, error) {
 		return nil, errors.New("not found")
 	}
 	return bs, nil
+}
+
+func (lb *LocalBucket) GetBucketID(name string) (string, error) {
+	lb.mux.Lock()
+	defer lb.mux.Unlock()
+
+	id, ok := lb.nti[name]
+	if !ok {
+		return "", errors.New("not found")
+	}
+	return id, nil
 }

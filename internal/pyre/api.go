@@ -100,11 +100,11 @@ type AccountManager interface {
 }
 
 type BucketManager interface {
-	Add(id string, bs []byte) error
-	Remove(id string) error
-	Update(id string, rev int, bs []byte) error
-	List(acct string) ([][]byte, error)
-	Get(id string) ([]byte, error)
+	AddBucket(id, name string, bs []byte) error
+	RemoveBucket(id string) error
+	UpdateBucket(id string, rev int, bs []byte) error
+	ListBuckets(acct string) ([][]byte, error)
+	GetBucket(id string) ([]byte, error)
 }
 
 type LargeFileOrganizer interface {
@@ -155,7 +155,7 @@ func (s *Server) AuthorizeAccount(ctx context.Context, req *pb.AuthorizeAccountR
 
 func (s *Server) ListBuckets(ctx context.Context, req *pb.ListBucketsRequest) (*pb.ListBucketsResponse, error) {
 	resp := &pb.ListBucketsResponse{}
-	buckets, err := s.Bucket.List(req.AccountId)
+	buckets, err := s.Bucket.ListBuckets(req.AccountId)
 	if err != nil {
 		return nil, err
 	}
@@ -175,14 +175,14 @@ func (s *Server) CreateBucket(ctx context.Context, req *pb.Bucket) (*pb.Bucket, 
 	if err != nil {
 		return nil, err
 	}
-	if err := s.Bucket.Add(req.BucketId, bs); err != nil {
+	if err := s.Bucket.AddBucket(req.BucketId, req.BucketName, bs); err != nil {
 		return nil, err
 	}
 	return req, nil
 }
 
 func (s *Server) DeleteBucket(ctx context.Context, req *pb.Bucket) (*pb.Bucket, error) {
-	bs, err := s.Bucket.Get(req.BucketId)
+	bs, err := s.Bucket.GetBucket(req.BucketId)
 	if err != nil {
 		return nil, err
 	}
@@ -190,7 +190,7 @@ func (s *Server) DeleteBucket(ctx context.Context, req *pb.Bucket) (*pb.Bucket, 
 	if err := proto.Unmarshal(bs, &bucket); err != nil {
 		return nil, err
 	}
-	if err := s.Bucket.Remove(req.BucketId); err != nil {
+	if err := s.Bucket.RemoveBucket(req.BucketId); err != nil {
 		return nil, err
 	}
 	return &bucket, nil

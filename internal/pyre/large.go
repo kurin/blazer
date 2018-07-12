@@ -70,7 +70,7 @@ func (fs *largeFileServer) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		fmt.Println("oh no")
 		return
 	}
-	if _, err := io.Copy(w, r.Body); err != nil {
+	if _, err := io.Copy(w, io.LimitReader(r.Body, req.Size)); err != nil {
 		w.Close()
 		http.Error(rw, err.Error(), 500)
 		fmt.Println("oh no")

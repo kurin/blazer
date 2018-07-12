@@ -223,6 +223,33 @@ message FinishLargeFileResponse {
   int64 upload_timestamp = 10;
 }
 
+message ListFileVersionsRequest {
+  string bucket_id = 1;
+  string start_file_name = 2;
+  string start_file_id = 3;
+  int32 max_file_count = 4;
+  string prefix = 5;
+  string delimiter = 6;
+}
+
+message ListFileVersionsResponse {
+  repeated File files = 1;
+  string next_file_name = 2;
+  string next_file_id = 3;
+}
+
+message File {
+  string file_id = 1;
+  string file_name = 2;
+  int64 content_length = 3;
+  string content_type = 4;
+  string content_sha1 = 5;
+  map<string, string> file_info = 6;
+  string action = 7;
+  int64 size = 8;
+  int64 upload_timestamp = 9;
+}
+
 service PyreService {
   // Used to log in to the B2 API. Returns an authorization token that can be
   // used for account-level operations, and a URL that should be used as the
@@ -292,6 +319,16 @@ service PyreService {
   rpc FinishLargeFile(FinishLargeFileRequest) returns (FinishLargeFileResponse) {
     option (google.api.http) = {
       post: "/b2api/v1/b2_finish_large_file"
+      body: "*"
+    };
+  }
+
+  // Lists all of the versions of all of the files contained in one bucket, in
+  // alphabetical order by file name, and by reverse of date/time uploaded for
+  // versions of files with the same name.
+  rpc ListFileVersions(ListFileVersionsRequest) returns (ListFileVersionsResponse) {
+    option (google.api.http) = {
+      post: "/b2api/v1/b2_list_file_versions"
       body: "*"
     };
   }

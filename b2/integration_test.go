@@ -1020,10 +1020,11 @@ func TestCreateDeleteKey(t *testing.T) {
 	defer done()
 
 	table := []struct {
-		d   time.Duration
-		e   time.Time
-		cap []string
-		pfx string
+		d      time.Duration
+		e      time.Time
+		bucket bool
+		cap    []string
+		pfx    string
 	}{
 		{
 			cap: []string{"deleteKeys"},
@@ -1031,11 +1032,18 @@ func TestCreateDeleteKey(t *testing.T) {
 		{
 			d:   time.Minute,
 			cap: []string{"deleteKeys"},
-			pfx: "/prefox",
+			pfx: "prefox",
 		},
 		{
-			e:   time.Now().Add(time.Minute), // <shrug emojis>
-			cap: []string{"writeFiles", "listFiles"},
+			e:      time.Now().Add(time.Minute), // <shrug emojis>
+			cap:    []string{"writeFiles", "listFiles"},
+			bucket: true,
+		},
+		{
+			d:      time.Minute,
+			cap:    []string{"writeFiles", "listFiles"},
+			pfx:    "prefox",
+			bucket: true,
 		},
 	}
 
@@ -1050,21 +1058,24 @@ func TestCreateDeleteKey(t *testing.T) {
 		if !e.e.IsZero() {
 			opts = append(opts, Deadline(e.e))
 		}
-		key, err := bucket.c.CreateKey(ctx, "whee", opts...)
-		if err != nil {
-			t.Errorf("Client.CreateKey(%v): %v", e, err)
-			continue
+		var key *Key
+		if e.bucket {
+			opts = append(opts, Prefix(e.pfx))
+			bkey, err := bucket.CreateKey(ctx, "whee", opts...)
+			if err != nil {
+				t.Errorf("Bucket.CreateKey(%v, %v): %v", bucket.Name(), e, err)
+				continue
+			}
+			key = bkey
+		} else {
+			gkey, err := bucket.c.CreateKey(ctx, "whee", opts...)
+			if err != nil {
+				t.Errorf("Client.CreateKey(%v): %v", e, err)
+				continue
+			}
+			key = gkey
 		}
 		if err := key.Delete(ctx); err != nil {
-			t.Errorf("key.Delete(): %v", err)
-		}
-		opts = append(opts, Prefix(e.pfx))
-		key2, err := bucket.CreateKey(ctx, "whee", opts...)
-		if err != nil {
-			t.Errorf("Bucket.CreateKey(%v, %v): %v", bucket.Name, e, err)
-			continue
-		}
-		if err := key2.Delete(ctx); err != nil {
 			t.Errorf("key.Delete(): %v", err)
 		}
 	}

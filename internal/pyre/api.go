@@ -94,7 +94,7 @@ type AccountManager interface {
 	CheckCreds(token, api string) error
 	APIRoot(acct string) string
 	DownloadRoot(acct string) string
-	UploadPartHost(fileId string) (string, error)
+	UploadPartHost(fileID string) (string, error)
 	UploadHost(id string) (string, error)
 	Sizes(acct string) (recommended, minimum int32)
 }
@@ -108,16 +108,17 @@ type BucketManager interface {
 }
 
 type LargeFileOrganizer interface {
-	Start(bucketId, fileName, fileId string, bs []byte) error
-	Get(fileId string) ([]byte, error)
-	Parts(fileId string) ([]string, error)
-	Finish(fileId string) error
+	Start(bucketID, fileName, fileID string, bs []byte) error
+	Get(fileID string) ([]byte, error)
+	Parts(fileID string) ([]string, error)
+	Finish(fileID string) error
 }
 
 type Server struct {
 	Account   AccountManager
 	Bucket    BucketManager
 	LargeFile LargeFileOrganizer
+	List      ListManager
 }
 
 func (s *Server) AuthorizeAccount(ctx context.Context, req *pb.AuthorizeAccountRequest) (*pb.AuthorizeAccountResponse, error) {
@@ -249,3 +250,76 @@ func (s *Server) FinishLargeFile(ctx context.Context, req *pb.FinishLargeFileReq
 	}
 	return &pb.FinishLargeFileResponse{}, nil
 }
+
+func (s *Server) ListFileVersions(ctx context.Context, req *pb.ListFileVersionsRequest) (*pb.ListFileVersionsResponse, error) {
+	return nil, nil
+}
+
+//type objTuple struct {
+//	name, version string
+//}
+
+type ListManager interface {
+	// NextN returns the next n objects, sorted by lexicographical order by name,
+	// beginning at and including, if it exists, fileName.  If withPrefix is not
+	// empty, it only returns names that begin with that prefix.  If skipPrefix
+	// is not empty, then the no files with that prefix are returned.  If the two
+	// conflict, skipPrefix wins (i.e., do not return the entry).
+	//
+	// If fewer than n entries are returned, this signifies that no more names
+	// exist that meet these criteria.
+	NextN(bucketID, fileName, withPrefix, skipPrefix string, n int) ([]VersionedObject, error)
+}
+
+type VersionedObject interface {
+	Name() string
+	NextNVersions(begin string, n int) ([]string, error)
+}
+
+//func getNextObjects(lm ListManager, bucket, name, prefix, delimiter string, n int) ([]VersionedObject, error) {
+//	if delimiter == "" {
+//		return lm.NextN(bucket, name, prefix, "", n)
+//	}
+//	afterPfx := strings.TrimPrefix(name, prefix)
+//	i := strings.Index(afterPfx, delimiter)
+//	if i == 0 {
+//
+//	}
+//	if i < 0 {
+//		return lm.NextN(bucket, name, prefix, "", n)
+//	}
+//	skipPfx := name[:len(prefix)+i]
+//	// TO
+//}
+//
+//func listFileVersions(lm ListManager, bucket, name, version, prefix, delimiter string, n int) ([]objTuple, error) {
+//	var tups []objTuple
+//	var got int
+//	for {
+//		objs, err := getNextObjects(bucket, name, prefix, delimiter, n-got)
+//		if err != nil {
+//			return nil, err
+//		}
+//		if len(objs) == 0 {
+//			break
+//		}
+//		for _, o := range objs {
+//			var begin string
+//			if len(tups) == 0 {
+//				begin = version
+//			}
+//			vers, err := lm.NextNVersions(begin, n-got)
+//			if err != nil {
+//				return nil, err
+//			}
+//			got += len(vers)
+//			for _, ver := range vers {
+//				tups = append(tups, objTuple{name: o.Name(), version: ver})
+//			}
+//			if got >= n {
+//				return tups[:n], nil
+//			}
+//		}
+//	}
+//	return tups, nil
+//}

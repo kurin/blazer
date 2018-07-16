@@ -316,10 +316,7 @@ func TestUploadAuthAfterConnectionHang(t *testing.T) {
 	smallSHA1 := fmt.Sprintf("%x", hash.Sum(nil))
 
 	go func() {
-		_, err := ue.UploadFile(ctx, buf, buf.Len(), smallFileName, "application/octet-stream", smallSHA1, nil)
-		if err != io.EOF {
-			t.Fatalf("this ought not to be reachable: err: %v", err)
-		}
+		ue.UploadFile(ctx, buf, buf.Len(), smallFileName, "application/octet-stream", smallSHA1, nil)
 	}()
 
 	<-hung

@@ -34,12 +34,15 @@ type b2RootInterface interface {
 	reupload(error) bool
 	createBucket(context.Context, string, string, map[string]string, []LifecycleRule) (b2BucketInterface, error)
 	listBuckets(context.Context) ([]b2BucketInterface, error)
+	createKey(context.Context, string, []string, time.Duration, string, string) (b2KeyInterface, error)
+	listKeys(context.Context, int, string) ([]b2KeyInterface, string, error)
 }
 
 type b2BucketInterface interface {
 	name() string
 	btype() string
 	attrs() *BucketAttrs
+	id() string
 	updateBucket(context.Context, *BucketAttrs) error
 	deleteBucket(context.Context) error
 	getUploadURL(context.Context) (b2URLInterface, error)
@@ -96,6 +99,14 @@ type b2FilePartInterface interface {
 	size() int64
 }
 
+type b2KeyInterface interface {
+	del(context.Context) error
+	caps() []string
+	name() string
+	expires() time.Time
+	secret() string
+}
+
 type b2Root struct {
 	b *base.B2
 }
@@ -130,6 +141,10 @@ type b2FileInfo struct {
 
 type b2FilePart struct {
 	b *base.FilePart
+}
+
+type b2Key struct {
+	b *base.Key
 }
 
 func (b *b2Root) authorizeAccount(ctx context.Context, account, key string, c clientOptions) error {
@@ -248,6 +263,26 @@ func (b *b2Bucket) updateBucket(ctx context.Context, attrs *BucketAttrs) error {
 	return err
 }
 
+func (b *b2Root) createKey(ctx context.Context, name string, caps []string, valid time.Duration, bucketID string, prefix string) (b2KeyInterface, error) {
+	k, err := b.b.CreateKey(ctx, name, caps, valid, bucketID, prefix)
+	if err != nil {
+		return nil, err
+	}
+	return &b2Key{k}, nil
+}
+
+func (b *b2Root) listKeys(ctx context.Context, max int, next string) ([]b2KeyInterface, string, error) {
+	keys, next, err := b.b.ListKeys(ctx, max, next)
+	if err != nil {
+		return nil, "", err
+	}
+	var k []b2KeyInterface
+	for _, key := range keys {
+		k = append(k, &b2Key{key})
+	}
+	return k, next, nil
+}
+
 func (b *b2Bucket) deleteBucket(ctx context.Context) error {
 	return b.b.DeleteBucket(ctx)
 }
@@ -275,6 +310,8 @@ func (b *b2Bucket) attrs() *BucketAttrs {
 		Type:           BucketType(b.b.Type),
 	}
 }
+
+func (b *b2Bucket) id() string { return b.b.ID }
 
 func (b *b2Bucket) getUploadURL(ctx context.Context) (b2URLInterface, error) {
 	url, err := b.b.GetUploadURL(ctx)
@@ -465,3 +502,9 @@ func (b *b2FileInfo) stats() (string, string, int64, string, map[string]string, 
 func (b *b2FilePart) number() int  { return b.b.Number }
 func (b *b2FilePart) sha1() string { return b.b.SHA1 }
 func (b *b2FilePart) size() int64  { return b.b.Size }
+
+func (b *b2Key) del(ctx context.Context) error { return b.b.Delete(ctx) }
+func (b *b2Key) caps() []string                { return b.b.Capabilities }
+func (b *b2Key) name() string                  { return b.b.Name }
+func (b *b2Key) expires() time.Time            { return b.b.Expires }
+func (b *b2Key) secret() string                { return b.b.Secret }

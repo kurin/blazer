@@ -1014,6 +1014,73 @@ func TestVerifyReader(t *testing.T) {
 	}
 }
 
+func TestCreateDeleteKey(t *testing.T) {
+	ctx := context.Background()
+	bucket, done := startLiveTest(ctx, t)
+	defer done()
+
+	table := []struct {
+		d      time.Duration
+		e      time.Time
+		bucket bool
+		cap    []string
+		pfx    string
+	}{
+		{
+			cap: []string{"deleteKeys"},
+		},
+		{
+			d:   time.Minute,
+			cap: []string{"deleteKeys"},
+			pfx: "prefox",
+		},
+		{
+			e:      time.Now().Add(time.Minute), // <shrug emojis>
+			cap:    []string{"writeFiles", "listFiles"},
+			bucket: true,
+		},
+		{
+			d:      time.Minute,
+			cap:    []string{"writeFiles", "listFiles"},
+			pfx:    "prefox",
+			bucket: true,
+		},
+	}
+
+	for _, e := range table {
+		var opts []KeyOption
+		for _, cap := range e.cap {
+			opts = append(opts, Capability(cap))
+		}
+		if e.d != 0 {
+			opts = append(opts, Lifetime(e.d))
+		}
+		if !e.e.IsZero() {
+			opts = append(opts, Deadline(e.e))
+		}
+		var key *Key
+		if e.bucket {
+			opts = append(opts, Prefix(e.pfx))
+			bkey, err := bucket.CreateKey(ctx, "whee", opts...)
+			if err != nil {
+				t.Errorf("Bucket.CreateKey(%v, %v): %v", bucket.Name(), e, err)
+				continue
+			}
+			key = bkey
+		} else {
+			gkey, err := bucket.c.CreateKey(ctx, "whee", opts...)
+			if err != nil {
+				t.Errorf("Client.CreateKey(%v): %v", e, err)
+				continue
+			}
+			key = gkey
+		}
+		if err := key.Delete(ctx); err != nil {
+			t.Errorf("key.Delete(): %v", err)
+		}
+	}
+}
+
 type object struct {
 	o   *Object
 	err error

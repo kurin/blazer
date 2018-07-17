@@ -252,30 +252,35 @@ func (s *Server) FinishLargeFile(ctx context.Context, req *pb.FinishLargeFileReq
 }
 
 func (s *Server) ListFileVersions(ctx context.Context, req *pb.ListFileVersionsRequest) (*pb.ListFileVersionsResponse, error) {
+	if req.MaxFileCount == 0 {
+		req.MaxFileCount = 1000
+	}
 	var objs []objTuple
 	if req.Delimiter == "" {
-		o, err := listUndelimitedFileVersions(s.List, req.BucketId, req.StartFileName, req.StartFileId, req.Prefix, int(req.MaxFileCount))
+		o, err := listUndelimitedFileVersions(s.List, req.BucketId, req.StartFileName, req.StartFileId, req.Prefix, int(req.MaxFileCount)+1)
 		if err != nil {
 			return nil, err
 		}
 		objs = o
 	} else {
-		o, err := listDelimitedFileVersions(s.List, req.BucketId, req.StartFileName, req.StartFileId, req.Prefix, req.Delimiter, int(req.MaxFileCount))
+		o, err := listDelimitedFileVersions(s.List, req.BucketId, req.StartFileName, req.StartFileId, req.Prefix, req.Delimiter, int(req.MaxFileCount)+1)
 		if err != nil {
 			return nil, err
 		}
 		objs = o
 	}
-	var cname, cver string
 	var files []*pb.File
-	for _, obj := range objs {
+	n := int(req.MaxFileCount)
+	if n > len(objs) {
+		n = len(objs)
+	}
+	for _, obj := range objs[:n] {
 		if obj.version == "" {
 			files = append(files, &pb.File{
 				FileName: obj.name,
 				Action:   "folder",
 			})
 		}
-		cname, cver = obj.name, obj.version+"\000"
 		bs, err := s.File.GetFile(obj.version)
 		if err != nil {
 			return nil, err
@@ -287,10 +292,16 @@ func (s *Server) ListFileVersions(ctx context.Context, req *pb.ListFileVersionsR
 		files = append(files, &f)
 		continue
 	}
+	var nname, nver string
+	if int(req.MaxFileCount)+1 >= len(objs) {
+		o := objs[int(req.MaxFileCount)]
+		nname = o.name
+		nver = o.version
+	}
 	return &pb.ListFileVersionsResponse{
 		Files:        files,
-		NextFileName: cname,
-		NextFileId:   cver,
+		NextFileName: nname,
+		NextFileId:   nver,
 	}, nil
 }
 

@@ -25,6 +25,7 @@ func main() {
 		Account: bonfire.Localhost(8822),
 		File:    fs,
 		Bucket:  bm,
+		List:    fs,
 	}, mux); err != nil {
 		fmt.Println(err)
 		return

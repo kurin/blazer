@@ -26,6 +26,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/kurin/blazer/internal/pyre"
@@ -46,6 +47,9 @@ func (f FS) PartWriter(id string, part int) (io.WriteCloser, error) {
 }
 
 func (f FS) Writer(bucket, name, id string, data []byte) (io.WriteCloser, error) {
+	if err := os.MkdirAll(filepath.Join(string(f), "infos"), 0755); err != nil {
+		return nil, err
+	}
 	if err := ioutil.WriteFile(filepath.Join(string(f), "infos", id), data, 0644); err != nil {
 		return nil, err
 	}
@@ -92,8 +96,65 @@ func (f FS) GetFile(id string) ([]byte, error) {
 	return ioutil.ReadFile(filepath.Join(string(f), "infos", id))
 }
 
-func (f FS) NextN(bucketID, fileName, withPrefix, skipPrefix string, n int) ([]VersionedObject, error) {
+func (f FS) NextN(bucketID, fileName, withPrefix, skipPrefix string, n int) ([]pyre.VersionedObject, error) {
+	fis, err := ioutil.ReadDir(filepath.Join(string(f), bucketID))
+	if err != nil {
+		return nil, err
+	}
+	var matches []pyre.VersionedObject
+	for _, fi := range fis {
+		if fileName != "" && fi.Name() < fileName {
+			continue
+		}
+		if skipPrefix != "" && strings.HasPrefix(fi.Name(), skipPrefix) {
+			continue
+		}
+		if !strings.HasPrefix(fi.Name(), withPrefix) {
+			continue
+		}
+		var o vObj
+		o.name = fi.Name()
+		vers, err := ioutil.ReadDir(filepath.Join(string(f), bucketID, fi.Name()))
+		if err != nil {
+			return nil, err
+		}
+		for _, v := range vers {
+			o.vers = append(o.vers, v.Name())
+		}
+		matches = append(matches, o)
+		if len(matches) >= n {
+			break
+		}
+	}
+	return matches, nil
+}
 
+type vObj struct {
+	name string
+	vers []string
+}
+
+func (v vObj) Name() string { return v.name }
+
+func (v vObj) NextNVersions(begin string, n int) ([]string, error) {
+	var on bool
+	if begin == "" {
+		on = true
+	}
+	var out []string
+	for _, ver := range v.vers {
+		if ver == begin {
+			on = true
+		}
+		if !on {
+			continue
+		}
+		out = append(out, ver)
+		if len(out) >= n {
+			break
+		}
+	}
+	return out, nil
 }
 
 type fi struct {

@@ -93,7 +93,7 @@ func (fs *simpleFileServer) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	w, err := fs.fm.Writer(req.bucket, req.name, id, bs)
 	if err != nil {
 		http.Error(rw, err.Error(), 500)
-		fmt.Println("oh no")
+		fmt.Println("oh no:", err)
 		return
 	}
 	if _, err := io.Copy(w, io.LimitReader(r.Body, req.size)); err != nil {

@@ -42,7 +42,7 @@ type apiErr struct {
 
 func serveMuxOptions() []runtime.ServeMuxOption {
 	return []runtime.ServeMuxOption{
-		runtime.WithMarshalerOption("*", &runtime.JSONPb{}),
+		runtime.WithMarshalerOption("*", &marshaler{}),
 		runtime.WithProtoErrorHandler(func(ctx context.Context, mux *runtime.ServeMux, m runtime.Marshaler, rw http.ResponseWriter, req *http.Request, err error) {
 			aErr := apiErr{
 				Status:  400,
@@ -210,21 +210,26 @@ func (s *Server) GetUploadUrl(ctx context.Context, req *pb.GetUploadUrlRequest) 
 
 func (s *Server) StartLargeFile(ctx context.Context, req *pb.StartLargeFileRequest) (*pb.StartLargeFileResponse, error) {
 	fileID := uuid.New().String()
-	resp := &pb.StartLargeFileResponse{
+	file := &pb.File{
 		FileId:      fileID,
 		FileName:    req.FileName,
-		BucketId:    req.BucketId,
 		ContentType: req.ContentType,
 		FileInfo:    req.FileInfo,
 	}
-	bs, err := proto.Marshal(resp)
+	bs, err := proto.Marshal(file)
 	if err != nil {
 		return nil, err
 	}
 	if err := s.File.StartLarge(req.BucketId, req.FileName, fileID, bs); err != nil {
 		return nil, err
 	}
-	return resp, nil
+	return &pb.StartLargeFileResponse{
+		FileId:      fileID,
+		FileName:    req.FileName,
+		BucketId:    req.BucketId,
+		ContentType: req.ContentType,
+		FileInfo:    req.FileInfo,
+	}, nil
 }
 
 func (s *Server) GetUploadPartUrl(ctx context.Context, req *pb.GetUploadPartUrlRequest) (*pb.GetUploadPartUrlResponse, error) {
@@ -293,7 +298,7 @@ func (s *Server) ListFileVersions(ctx context.Context, req *pb.ListFileVersionsR
 		continue
 	}
 	var nname, nver string
-	if int(req.MaxFileCount)+1 >= len(objs) {
+	if len(objs) >= int(req.MaxFileCount)+1 {
 		o := objs[int(req.MaxFileCount)]
 		nname = o.name
 		nver = o.version

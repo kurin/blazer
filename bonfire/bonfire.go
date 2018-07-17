@@ -163,20 +163,26 @@ type fi struct {
 	Bits   []byte
 }
 
-func (f FS) StartLarge(bucketId, fileName, fileId string, bs []byte) error {
-	w, err := f.open(filepath.Join(string(f), fileId, "info"))
+func (f FS) StartLarge(bucketID, fileName, fileID string, bs []byte) error {
+	if err := os.MkdirAll(filepath.Join(string(f), "infos"), 0755); err != nil {
+		return err
+	}
+	if err := ioutil.WriteFile(filepath.Join(string(f), "infos", fileID), bs, 0644); err != nil {
+		return err
+	}
+	w, err := f.open(filepath.Join(string(f), fileID, "info"))
 	if err != nil {
 		return err
 	}
-	if err := json.NewEncoder(w).Encode(fi{Name: fileName, Bucket: bucketId, Bits: bs}); err != nil {
+	if err := json.NewEncoder(w).Encode(fi{Name: fileName, Bucket: bucketID, Bits: bs}); err != nil {
 		w.Close()
 		return err
 	}
 	return w.Close()
 }
 
-func (f FS) FinishLarge(fileId string) error {
-	r, err := os.Open(filepath.Join(string(f), fileId, "info"))
+func (f FS) FinishLarge(fileID string) error {
+	r, err := os.Open(filepath.Join(string(f), fileID, "info"))
 	if err != nil {
 		return err
 	}
@@ -185,16 +191,16 @@ func (f FS) FinishLarge(fileId string) error {
 	if err := json.NewDecoder(r).Decode(&info); err != nil {
 		return err
 	}
-	shas, err := f.Parts(fileId) // oh my god this is terrible
+	shas, err := f.Parts(fileID) // oh my god this is terrible
 	if err != nil {
 		return err
 	}
-	w, err := f.open(filepath.Join(string(f), info.Bucket, info.Name, fileId))
+	w, err := f.open(filepath.Join(string(f), info.Bucket, info.Name, fileID))
 	if err != nil {
 		return err
 	}
 	for i := 1; i <= len(shas); i++ {
-		r, err := os.Open(filepath.Join(string(f), fileId, fmt.Sprintf("%d", i)))
+		r, err := os.Open(filepath.Join(string(f), fileID, fmt.Sprintf("%d", i)))
 		if err != nil {
 			w.Close()
 			return err
@@ -209,7 +215,7 @@ func (f FS) FinishLarge(fileId string) error {
 	if err := w.Close(); err != nil {
 		return err
 	}
-	return os.RemoveAll(filepath.Join(string(f), fileId))
+	return os.RemoveAll(filepath.Join(string(f), fileID))
 }
 
 func (f FS) ObjectByName(bucket, name string) (pyre.DownloadableObject, error) {
@@ -243,7 +249,7 @@ func (d do) Size() int64         { return d.size }
 func (d do) Reader() io.ReaderAt { return d.o }
 func (d do) Close() error        { return d.o.Close() }
 
-func (f FS) Get(fileId string) ([]byte, error) { return nil, nil }
+func (f FS) Get(fileID string) ([]byte, error) { return nil, nil }
 
 type Localhost int
 
@@ -254,7 +260,7 @@ func (Localhost) CheckCreds(string, string) error                { return nil }
 func (l Localhost) APIRoot(string) string                        { return l.String() }
 func (l Localhost) DownloadRoot(string) string                   { return l.String() }
 func (Localhost) Sizes(string) (int32, int32)                    { return 1e5, 1 }
-func (l Localhost) UploadPartHost(fileId string) (string, error) { return l.String(), nil }
+func (l Localhost) UploadPartHost(fileID string) (string, error) { return l.String(), nil }
 
 type LocalBucket struct {
 	Port int

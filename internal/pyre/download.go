@@ -81,7 +81,6 @@ func (fs *downloadServer) serveWholeObject(rw http.ResponseWriter, obj Downloada
 func (fs *downloadServer) servePartialObject(rw http.ResponseWriter, obj DownloadableObject, off, len int64) {
 	if off >= obj.Size() {
 		http.Error(rw, "hell naw", 416)
-		fmt.Printf("range not good (%d-%d for %d)\n", off, len, obj.Size())
 		return
 	}
 	if off+len > obj.Size() {

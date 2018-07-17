@@ -41,6 +41,32 @@ func (f FS) open(fp string) (io.WriteCloser, error) {
 	return os.Create(fp)
 }
 
+func (f FS) Delete(id string) error {
+	// not the uh most efficient way of going about this
+	buckets, err := ioutil.ReadDir(filepath.Join(string(f), "buckets"))
+	if err != nil {
+		return err
+	}
+	for _, bucket := range buckets {
+		files, err := ioutil.ReadDir(filepath.Join(string(f), "buckets", bucket.Name()))
+		if err != nil {
+			return err
+		}
+		for _, file := range files {
+			vers, err := ioutil.ReadDir(filepath.Join(string(f), "buckets", bucket.Name(), file.Name()))
+			if err != nil {
+				return err
+			}
+			for _, ver := range vers {
+				if ver.Name() == id {
+					return os.Remove(filepath.Join(string(f), "buckets", bucket.Name(), file.Name(), ver.Name()))
+				}
+			}
+		}
+	}
+	return fmt.Errorf("%s: not found", id)
+}
+
 func (f FS) PartWriter(id string, part int) (io.WriteCloser, error) {
 	fp := filepath.Join(string(f), id, fmt.Sprintf("%d", part))
 	return f.open(fp)
@@ -53,7 +79,7 @@ func (f FS) Writer(bucket, name, id string, data []byte) (io.WriteCloser, error)
 	if err := ioutil.WriteFile(filepath.Join(string(f), "infos", id), data, 0644); err != nil {
 		return nil, err
 	}
-	fp := filepath.Join(string(f), bucket, name, id)
+	fp := filepath.Join(string(f), "buckets", bucket, name, id)
 	return f.open(fp)
 }
 
@@ -97,7 +123,7 @@ func (f FS) GetFile(id string) ([]byte, error) {
 }
 
 func (f FS) NextN(bucketID, fileName, withPrefix, skipPrefix string, n int) ([]pyre.VersionedObject, error) {
-	fis, err := ioutil.ReadDir(filepath.Join(string(f), bucketID))
+	fis, err := ioutil.ReadDir(filepath.Join(string(f), "buckets", bucketID))
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +140,7 @@ func (f FS) NextN(bucketID, fileName, withPrefix, skipPrefix string, n int) ([]p
 		}
 		var o vObj
 		o.name = fi.Name()
-		vers, err := ioutil.ReadDir(filepath.Join(string(f), bucketID, fi.Name()))
+		vers, err := ioutil.ReadDir(filepath.Join(string(f), "buckets", bucketID, fi.Name()))
 		if err != nil {
 			return nil, err
 		}
@@ -195,7 +221,7 @@ func (f FS) FinishLarge(fileID string) error {
 	if err != nil {
 		return err
 	}
-	w, err := f.open(filepath.Join(string(f), info.Bucket, info.Name, fileID))
+	w, err := f.open(filepath.Join(string(f), "buckets", info.Bucket, info.Name, fileID))
 	if err != nil {
 		return err
 	}
@@ -219,7 +245,7 @@ func (f FS) FinishLarge(fileID string) error {
 }
 
 func (f FS) ObjectByName(bucket, name string) (pyre.DownloadableObject, error) {
-	dir := filepath.Join(string(f), bucket, name)
+	dir := filepath.Join(string(f), "buckets", bucket, name)
 	d, err := os.Open(dir)
 	if err != nil {
 		return nil, err

@@ -112,6 +112,7 @@ type FileOrganizer interface {
 	GetFile(fileID string) ([]byte, error)
 	Parts(fileID string) ([]string, error)
 	FinishLarge(fileID string) error
+	Delete(fileID string) error
 }
 
 type Server struct {
@@ -254,6 +255,17 @@ func (s *Server) FinishLargeFile(ctx context.Context, req *pb.FinishLargeFileReq
 		return nil, err
 	}
 	return &pb.FinishLargeFileResponse{}, nil
+}
+
+func (s *Server) DeleteFileVersion(ctx context.Context, req *pb.DeleteFileVersionRequest) (*pb.DeleteFileVersionResponse, error) {
+	// note the complete lack of a bucket ID in the request
+	if err := s.File.Delete(req.FileId); err != nil {
+		return nil, err
+	}
+	return &pb.DeleteFileVersionResponse{
+		FileId:   req.FileId,
+		FileName: req.FileName,
+	}, nil
 }
 
 func (s *Server) ListFileVersions(ctx context.Context, req *pb.ListFileVersionsRequest) (*pb.ListFileVersionsResponse, error) {

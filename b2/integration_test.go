@@ -662,7 +662,7 @@ func TestNewBucket(t *testing.T) {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 
-	client, err := NewClient(ctx, id, key)
+	client, err := NewClient(ctx, id, key, APIBase("http://localhost:8822"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -915,6 +915,35 @@ func TestListUnfinishedLargeFiles(t *testing.T) {
 	iter := bucket.List(ctx, ListUnfinished())
 	if !iter.Next() {
 		t.Errorf("ListUnfinishedLargeFiles: got none, want 1 (error %v)", iter.Err())
+	}
+}
+
+func TestDelimiter(t *testing.T) {
+	ctx := context.Background()
+	bucket, done := startLiveTest(ctx, t)
+	defer done()
+
+	for _, str := range []string{"foo/bar/baz1", "foo/bar/baz2", "foo/bar"} {
+		w := bucket.Object(str).NewWriter(ctx)
+		if _, err := io.Copy(w, io.LimitReader(zReader{}, 1)); err != nil {
+			t.Fatal(err)
+		}
+		if err := w.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	want := []string{"foo/bar", "foo/bar/"}
+	var got []string
+	iter := bucket.List(ctx, ListDelimiter("/"), ListPrefix("foo/"))
+	for iter.Next() {
+		got = append(got, iter.Object().Name())
+	}
+	if iter.Err() != nil {
+		t.Fatal(iter.Err())
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("list file names: got %v, want %v", got, want)
 	}
 }
 
@@ -1238,7 +1267,7 @@ func startLiveTest(ctx context.Context, t *testing.T) (*Bucket, func()) {
 	ccport := &ccTripper{rt: defaultTransport, t: t}
 	tport := eofTripper{rt: ccport, t: t}
 	errport := transport.WithFailures(tport, transport.FailureRate(.25), transport.MatchPathSubstring("/b2_get_upload_url"), transport.Response(503))
-	client, err := NewClient(ctx, id, key, FailSomeUploads(), ExpireSomeAuthTokens(), Transport(errport), UserAgent("b2-test"), UserAgent("integration-test"))
+	client, err := NewClient(ctx, id, key, FailSomeUploads(), ExpireSomeAuthTokens(), Transport(errport), UserAgent("b2-test"), UserAgent("integration-test"), APIBase("http://localhost:8822"))
 	if err != nil {
 		t.Fatal(err)
 		return nil, nil

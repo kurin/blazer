@@ -22,14 +22,16 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/golang/protobuf/proto"
 	"github.com/google/uuid"
 	"github.com/kurin/blazer/internal/b2types"
+	pb "github.com/kurin/blazer/internal/pyre/proto"
 )
 
 const uploadFilePrefix = "/b2api/v1/b2_upload_file/"
 
 type SimpleFileManager interface {
-	Writer(bucket, name, id string) (io.WriteCloser, error)
+	Writer(bucket, name, id string, data []byte) (io.WriteCloser, error)
 }
 
 type simpleFileServer struct {
@@ -74,7 +76,21 @@ func (fs *simpleFileServer) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := uuid.New().String()
-	w, err := fs.fm.Writer(req.bucket, req.name, id)
+	data := &pb.File{
+		FileName:      req.name,
+		FileId:        id,
+		ContentLength: req.size,
+		ContentSha1:   req.sha1,
+		FileInfo:      req.info,
+		ContentType:   req.contentType,
+	}
+	bs, err := proto.Marshal(data)
+	if err != nil {
+		http.Error(rw, err.Error(), 500)
+		fmt.Println("oh no")
+		return
+	}
+	w, err := fs.fm.Writer(req.bucket, req.name, id, bs)
 	if err != nil {
 		http.Error(rw, err.Error(), 500)
 		fmt.Println("oh no")

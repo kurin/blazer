@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sort"
@@ -44,7 +45,10 @@ func (f FS) PartWriter(id string, part int) (io.WriteCloser, error) {
 	return f.open(fp)
 }
 
-func (f FS) Writer(bucket, name, id string) (io.WriteCloser, error) {
+func (f FS) Writer(bucket, name, id string, data []byte) (io.WriteCloser, error) {
+	if err := ioutil.WriteFile(filepath.Join(string(f), "infos", id), data, 0644); err != nil {
+		return nil, err
+	}
 	fp := filepath.Join(string(f), bucket, name, id)
 	return f.open(fp)
 }
@@ -84,24 +88,33 @@ func (f FS) Parts(id string) ([]string, error) {
 	return shas, nil
 }
 
+func (f FS) GetFile(id string) ([]byte, error) {
+	return ioutil.ReadFile(filepath.Join(string(f), "infos", id))
+}
+
+func (f FS) NextN(bucketID, fileName, withPrefix, skipPrefix string, n int) ([]VersionedObject, error) {
+
+}
+
 type fi struct {
 	Name   string
 	Bucket string
+	Bits   []byte
 }
 
-func (f FS) Start(bucketId, fileName, fileId string, bs []byte) error {
+func (f FS) StartLarge(bucketId, fileName, fileId string, bs []byte) error {
 	w, err := f.open(filepath.Join(string(f), fileId, "info"))
 	if err != nil {
 		return err
 	}
-	if err := json.NewEncoder(w).Encode(fi{Name: fileName, Bucket: bucketId}); err != nil {
+	if err := json.NewEncoder(w).Encode(fi{Name: fileName, Bucket: bucketId, Bits: bs}); err != nil {
 		w.Close()
 		return err
 	}
 	return w.Close()
 }
 
-func (f FS) Finish(fileId string) error {
+func (f FS) FinishLarge(fileId string) error {
 	r, err := os.Open(filepath.Join(string(f), fileId, "info"))
 	if err != nil {
 		return err

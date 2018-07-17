@@ -107,18 +107,18 @@ type BucketManager interface {
 	GetBucket(id string) ([]byte, error)
 }
 
-type LargeFileOrganizer interface {
-	Start(bucketID, fileName, fileID string, bs []byte) error
-	Get(fileID string) ([]byte, error)
+type FileOrganizer interface {
+	StartLarge(bucketID, fileName, fileID string, bs []byte) error
+	GetFile(fileID string) ([]byte, error)
 	Parts(fileID string) ([]string, error)
-	Finish(fileID string) error
+	FinishLarge(fileID string) error
 }
 
 type Server struct {
-	Account   AccountManager
-	Bucket    BucketManager
-	LargeFile LargeFileOrganizer
-	List      ListManager
+	Account AccountManager
+	Bucket  BucketManager
+	File    FileOrganizer
+	List    ListManager
 }
 
 func (s *Server) AuthorizeAccount(ctx context.Context, req *pb.AuthorizeAccountRequest) (*pb.AuthorizeAccountResponse, error) {
@@ -221,7 +221,7 @@ func (s *Server) StartLargeFile(ctx context.Context, req *pb.StartLargeFileReque
 	if err != nil {
 		return nil, err
 	}
-	if err := s.LargeFile.Start(req.BucketId, req.FileName, fileID, bs); err != nil {
+	if err := s.File.StartLarge(req.BucketId, req.FileName, fileID, bs); err != nil {
 		return nil, err
 	}
 	return resp, nil
@@ -238,21 +238,60 @@ func (s *Server) GetUploadPartUrl(ctx context.Context, req *pb.GetUploadPartUrlR
 }
 
 func (s *Server) FinishLargeFile(ctx context.Context, req *pb.FinishLargeFileRequest) (*pb.FinishLargeFileResponse, error) {
-	parts, err := s.LargeFile.Parts(req.FileId)
+	parts, err := s.File.Parts(req.FileId)
 	if err != nil {
 		return nil, err
 	}
 	if !reflect.DeepEqual(parts, req.PartSha1Array) {
 		return nil, errors.New("sha1 array mismatch")
 	}
-	if err := s.LargeFile.Finish(req.FileId); err != nil {
+	if err := s.File.FinishLarge(req.FileId); err != nil {
 		return nil, err
 	}
 	return &pb.FinishLargeFileResponse{}, nil
 }
 
 func (s *Server) ListFileVersions(ctx context.Context, req *pb.ListFileVersionsRequest) (*pb.ListFileVersionsResponse, error) {
-	return nil, nil
+	var objs []objTuple
+	if req.Delimiter == "" {
+		o, err := listUndelimitedFileVersions(s.List, req.BucketId, req.StartFileName, req.StartFileId, req.Prefix, int(req.MaxFileCount))
+		if err != nil {
+			return nil, err
+		}
+		objs = o
+	} else {
+		o, err := listDelimitedFileVersions(s.List, req.BucketId, req.StartFileName, req.StartFileId, req.Prefix, req.Delimiter, int(req.MaxFileCount))
+		if err != nil {
+			return nil, err
+		}
+		objs = o
+	}
+	var cname, cver string
+	var files []*pb.File
+	for _, obj := range objs {
+		if obj.version == "" {
+			files = append(files, &pb.File{
+				FileName: obj.name,
+				Action:   "folder",
+			})
+		}
+		cname, cver = obj.name, obj.version+"\000"
+		bs, err := s.File.GetFile(obj.version)
+		if err != nil {
+			return nil, err
+		}
+		var f pb.File
+		if err := proto.Unmarshal(bs, &f); err != nil {
+			return nil, err
+		}
+		files = append(files, &f)
+		continue
+	}
+	return &pb.ListFileVersionsResponse{
+		Files:        files,
+		NextFileName: cname,
+		NextFileId:   cver,
+	}, nil
 }
 
 type objTuple struct {
@@ -276,9 +315,15 @@ type VersionedObject interface {
 	NextNVersions(begin string, n int) ([]string, error)
 }
 
-func getDirNames(lm ListManager, bucket, name, prefix, delim string, n int) ([]string, error) {
+type objOrName struct {
+	// My kingdom for a sum type.
+	name string
+	obj  VersionedObject
+}
+
+func getDirNames(lm ListManager, bucket, name, prefix, delim string, n int) ([]objOrName, error) {
 	var sfx string
-	var out []string
+	var out []objOrName
 	for n > 0 {
 		vo, err := lm.NextN(bucket, name, prefix, sfx, 1)
 		if err != nil {
@@ -293,62 +338,77 @@ func getDirNames(lm ListManager, bucket, name, prefix, delim string, n int) ([]s
 		i := strings.Index(suffix, delim)
 		if i < 0 {
 			sfx = ""
-			out = append(out, name)
+			out = append(out, objOrName{name: name, obj: v})
 			name += "\000"
 			n--
 			continue
 		}
 		sfx = v.Name()[:len(prefix)+i+1]
-		out = append(out, sfx)
+		out = append(out, objOrName{name: sfx})
 		n--
 	}
 	return out, nil
 }
 
-//func getNextObjects(lm ListManager, bucket, name, prefix, delimiter string, n int) ([]VersionedObject, error) {
-//	if delimiter == "" {
-//		return lm.NextN(bucket, name, prefix, "", n)
-//	}
-//	afterPfx := strings.TrimPrefix(name, prefix)
-//	i := strings.Index(afterPfx, delimiter)
-//	if i == 0 {
-//
-//	}
-//	if i < 0 {
-//		return lm.NextN(bucket, name, prefix, "", n)
-//	}
-//	skipPfx := name[:len(prefix)+i]
-//	// TO
-//}
-//
-//func listFileVersions(lm ListManager, bucket, name, version, prefix, delimiter string, n int) ([]objTuple, error) {
-//	var tups []objTuple
-//	var got int
-//	for {
-//		objs, err := getNextObjects(bucket, name, prefix, delimiter, n-got)
-//		if err != nil {
-//			return nil, err
-//		}
-//		if len(objs) == 0 {
-//			break
-//		}
-//		for _, o := range objs {
-//			var begin string
-//			if len(tups) == 0 {
-//				begin = version
-//			}
-//			vers, err := lm.NextNVersions(begin, n-got)
-//			if err != nil {
-//				return nil, err
-//			}
-//			got += len(vers)
-//			for _, ver := range vers {
-//				tups = append(tups, objTuple{name: o.Name(), version: ver})
-//			}
-//			if got >= n {
-//				return tups[:n], nil
-//			}
-//		}
-//	}
-//	return tups, nil
-//}
+func listDelimitedFileVersions(lm ListManager, bucket, name, version, prefix, delimiter string, n int) ([]objTuple, error) {
+	var objs []objTuple
+	for n > 0 {
+		bits, err := getDirNames(lm, bucket, name, prefix, delimiter, 1) // revisit this if it's too slow
+		if err != nil {
+			return nil, err
+		}
+		if len(bits) == 0 {
+			break
+		}
+		for _, v := range bits {
+			if strings.HasSuffix(v.name, "/") {
+				objs = append(objs, objTuple{name: v.name})
+				n--
+				continue
+			}
+			vers, err := v.obj.NextNVersions(version, n)
+			if err != nil {
+				return nil, err
+			}
+			version = ""
+			n -= len(vers)
+			for _, ver := range vers {
+				objs = append(objs, objTuple{name: v.name, version: ver})
+			}
+		}
+		name = name + "\000"
+	}
+	if n < 0 {
+		objs = objs[:len(objs)+n]
+	}
+	return objs, nil
+}
+
+func listUndelimitedFileVersions(lm ListManager, bucket, name, version, prefix string, n int) ([]objTuple, error) {
+	var objs []objTuple
+	for n > 0 {
+		vs, err := lm.NextN(bucket, name, prefix, "", 1)
+		if err != nil {
+			return nil, err
+		}
+		if len(vs) == 0 {
+			break
+		}
+		for _, v := range vs {
+			vers, err := v.NextNVersions(version, n)
+			if err != nil {
+				return nil, err
+			}
+			version = ""
+			n -= len(vers)
+			for _, ver := range vers {
+				objs = append(objs, objTuple{name: v.Name(), version: ver})
+			}
+			name = v.Name() + "\000"
+		}
+	}
+	if n < 0 {
+		objs = objs[:len(objs)+n]
+	}
+	return objs, nil
+}

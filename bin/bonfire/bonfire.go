@@ -22,9 +22,9 @@ func main() {
 	bm := &bonfire.LocalBucket{Port: 8822}
 
 	if err := pyre.RegisterServerOnMux(ctx, &pyre.Server{
-		Account:   bonfire.Localhost(8822),
-		LargeFile: fs,
-		Bucket:    bm,
+		Account: bonfire.Localhost(8822),
+		File:    fs,
+		Bucket:  bm,
 	}, mux); err != nil {
 		fmt.Println(err)
 		return

@@ -250,6 +250,17 @@ message File {
   int64 upload_timestamp = 9;
 }
 
+message DeleteFileVersionRequest {
+  string file_name = 1;
+  string file_id = 2;
+}
+
+message DeleteFileVersionResponse {
+  // They're inverted in the reference doc don't @ me.
+  string file_id = 1;
+  string file_name = 2;
+}
+
 service PyreService {
   // Used to log in to the B2 API. Returns an authorization token that can be
   // used for account-level operations, and a URL that should be used as the
@@ -329,6 +340,14 @@ service PyreService {
   rpc ListFileVersions(ListFileVersionsRequest) returns (ListFileVersionsResponse) {
     option (google.api.http) = {
       post: "/b2api/v1/b2_list_file_versions"
+      body: "*"
+    };
+  }
+
+  // Deletes one version of a file from B2.
+  rpc DeleteFileVersion(DeleteFileVersionRequest) returns (DeleteFileVersionResponse) {
+    option (google.api.http) = {
+      post: "/b2api/v1/b2_delete_file_version"
       body: "*"
     };
   }

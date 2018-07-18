@@ -9,36 +9,29 @@ import (
 	"github.com/kurin/blazer/internal/pyre"
 )
 
-type superManager struct {
-	*bonfire.LocalBucket
-	bonfire.FS
-}
-
 func main() {
 	ctx := context.Background()
 	mux := http.NewServeMux()
 
-	fs := bonfire.FS("/tmp/b2")
-	bm := &bonfire.LocalBucket{Port: 8822}
+	lfm, err := bonfire.New("/tmp/b2")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 
 	if err := pyre.RegisterServerOnMux(ctx, &pyre.Server{
-		Account: bonfire.Localhost(8822),
-		File:    fs,
-		Bucket:  bm,
-		List:    fs,
+		Account: lfm,
+		File:    lfm,
+		Bucket:  lfm,
+		List:    lfm,
 	}, mux); err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	sm := superManager{
-		LocalBucket: bm,
-		FS:          fs,
-	}
-
-	pyre.RegisterLargeFileManagerOnMux(fs, mux)
-	pyre.RegisterSimpleFileManagerOnMux(fs, mux)
-	pyre.RegisterDownloadManagerOnMux(sm, mux)
+	pyre.RegisterLargeFileManagerOnMux(lfm, mux)
+	pyre.RegisterSimpleFileManagerOnMux(lfm, mux)
+	pyre.RegisterDownloadManagerOnMux(lfm, mux)
 	fmt.Println("ok")
 	fmt.Println(http.ListenAndServe("localhost:8822", mux))
 }

@@ -100,7 +100,7 @@ type AccountManager interface {
 }
 
 type BucketManager interface {
-	AddBucket(id, name string, bs []byte) error
+	AddBucket(acct, id, name string, bs []byte) error
 	RemoveBucket(id string) error
 	UpdateBucket(id string, rev int, bs []byte) error
 	ListBuckets(acct string) ([][]byte, error)
@@ -177,7 +177,7 @@ func (s *Server) CreateBucket(ctx context.Context, req *pb.Bucket) (*pb.Bucket, 
 	if err != nil {
 		return nil, err
 	}
-	if err := s.Bucket.AddBucket(req.BucketId, req.BucketName, bs); err != nil {
+	if err := s.Bucket.AddBucket(req.AccountId, req.BucketId, req.BucketName, bs); err != nil {
 		return nil, err
 	}
 	return req, nil

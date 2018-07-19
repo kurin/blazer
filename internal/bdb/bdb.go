@@ -29,7 +29,23 @@ type Value struct {
 	bs []byte
 }
 
-func (v *Value) Bytes() []byte { return v.bs }
+func (v *Value) Bytes() []byte  { return v.bs }
+func (v *Value) String() string { return string(v.bs) }
+
+func fpath(p []interface{}) ([]string, error) {
+	var out []string
+	for _, part := range p {
+		switch pt := part.(type) {
+		case string:
+			out = append(out, pt)
+		case *Value:
+			out = append(out, pt.String())
+		default:
+			return nil, errors.New("paths should be string or Value arguments")
+		}
+	}
+	return out, nil
+}
 
 // New returns a new Tx.
 func New(db *bolt.DB) *Tx { return &Tx{db: db} }
@@ -95,48 +111,65 @@ func (b *Tx) mkBucket(tx *bolt.Tx, parts []string) (*bolt.Bucket, error) {
 	return bt, nil
 }
 
-func (b *Tx) Read(path ...string) *Value {
+func (b *Tx) Read(path ...interface{}) *Value {
 	val := &Value{}
 	b.ops = append(b.ops, func(tx *bolt.Tx) error {
-		bt, err := b.bucket(tx, path[:len(path)-1])
+		parts, err := fpath(path)
 		if err != nil {
 			return err
 		}
-		val.bs = bt.Get([]byte(path[len(path)-1]))
+		bt, err := b.bucket(tx, parts[:len(parts)-1])
+		if err != nil {
+			return err
+		}
+		val.bs = bt.Get([]byte(parts[len(parts)-1]))
 		return nil
 	})
 	return val
 }
 
-func (b *Tx) Put(val []byte, path ...string) {
+func (b *Tx) Put(val []byte, path ...interface{}) {
 	b.Mod(func() []byte { return val }, path...)
 }
 
-func (b *Tx) Mod(val func() []byte, path ...string) {
+// Mod is like Put, but it allows the caller to pass a Value.Bytes.
+func (b *Tx) Mod(val func() []byte, path ...interface{}) {
 	b.mutate = true
 	b.ops = append(b.ops, func(tx *bolt.Tx) error {
-		bt, err := b.mkBucket(tx, path[:len(path)-1])
+		parts, err := fpath(path)
 		if err != nil {
 			return err
 		}
-		return bt.Put([]byte(path[len(path)-1]), val())
-	})
-}
-
-func (b *Tx) Delete(path ...string) {
-	b.mutate = true
-	b.ops = append(b.ops, func(tx *bolt.Tx) error {
-		bucket, err := b.bucket(tx, path[:len(path)-1])
+		bt, err := b.mkBucket(tx, parts[:len(parts)-1])
 		if err != nil {
 			return err
 		}
-		return bucket.Delete([]byte(path[len(path)-1]))
+		return bt.Put([]byte(parts[len(parts)-1]), val())
 	})
 }
 
-func (b *Tx) ForEach(f func(k, v []byte) error, path ...string) {
+func (b *Tx) Delete(path ...interface{}) {
+	b.mutate = true
 	b.ops = append(b.ops, func(tx *bolt.Tx) error {
-		bucket, err := b.bucket(tx, path)
+		parts, err := fpath(path)
+		if err != nil {
+			return err
+		}
+		bucket, err := b.bucket(tx, parts[:len(parts)-1])
+		if err != nil {
+			return err
+		}
+		return bucket.Delete([]byte(parts[len(parts)-1]))
+	})
+}
+
+func (b *Tx) ForEach(f func(k, v []byte) error, path ...interface{}) {
+	b.ops = append(b.ops, func(tx *bolt.Tx) error {
+		parts, err := fpath(path)
+		if err != nil {
+			return err
+		}
+		bucket, err := b.bucket(tx, parts)
 		if err != nil {
 			return err
 		}
@@ -144,10 +177,14 @@ func (b *Tx) ForEach(f func(k, v []byte) error, path ...string) {
 	})
 }
 
-func (b *Tx) Inc(path ...string) {
+func (b *Tx) Inc(path ...interface{}) {
 	b.mutate = true
 	b.ops = append(b.ops, func(tx *bolt.Tx) error {
-		bucket, err := b.mkBucket(tx, path[:len(path)-1])
+		parts, err := fpath(path)
+		if err != nil {
+			return err
+		}
+		bucket, err := b.mkBucket(tx, parts[:len(parts)-1])
 		if err != nil {
 			return err
 		}
@@ -155,6 +192,6 @@ func (b *Tx) Inc(path ...string) {
 		if err != nil {
 			return err
 		}
-		return bucket.Put([]byte(path[len(path)-1]), []byte(fmt.Sprintf("%d", n)))
+		return bucket.Put([]byte(parts[len(parts)-1]), []byte(fmt.Sprintf("%d", n)))
 	})
 }

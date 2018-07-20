@@ -15,7 +15,7 @@
 package bdb_test
 
 import (
-	"bytes"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -26,35 +26,33 @@ import (
 	"github.com/kurin/blazer/internal/bdb"
 )
 
-type kv struct {
-	key []interface{}
-	val []byte
+type setter struct {
+	spec bdb.Spec
+	args []fmt.Stringer
+	v    string
+}
+
+type getter struct {
+	spec bdb.Spec
+	w    string
 }
 
 func TestReadWrite(t *testing.T) {
 	table := []struct {
-		kvs  []kv
-		want []kv
+		sets []setter
+		gets []getter
 	}{
 		{
-			kvs: []kv{
+			sets: []setter{
 				{
-					key: []interface{}{"a", "b"},
-					val: []byte("qwer"),
-				},
-				{
-					key: []interface{}{"path", "to", "the", "thing"},
-					val: []byte("lerp"),
+					spec: "/path/to/a/thing",
+					v:    "value",
 				},
 			},
-			want: []kv{
+			gets: []getter{
 				{
-					key: []interface{}{"a", "b"},
-					val: []byte("qwer"),
-				},
-				{
-					key: []interface{}{"path", "to", "the", "thing"},
-					val: []byte("lerp"),
+					spec: "/path/to/a/thing",
+					w:    "value",
 				},
 			},
 		},
@@ -72,8 +70,9 @@ func TestReadWrite(t *testing.T) {
 	defer db.Close()
 	for _, e := range table {
 		tx := bdb.New(db)
-		for _, kvp := range e.kvs {
-			tx.Put(kvp.val, kvp.key...)
+		for _, set := range e.sets {
+			path := set.spec.Bind(set.args...)
+			tx.Put(path, []byte(set.v))
 		}
 		if err := tx.Run(); err != nil {
 			t.Error(err)
@@ -81,17 +80,18 @@ func TestReadWrite(t *testing.T) {
 		}
 		tx = bdb.New(db)
 		var gots []*bdb.Value
-		for _, kvp := range e.want {
-			gots = append(gots, tx.Read(kvp.key...))
+		for _, get := range e.gets {
+			path := get.spec.Bind()
+			gots = append(gots, tx.Read(path))
 		}
 		if err := tx.Run(); err != nil {
 			t.Error(err)
 		}
 		for i := range gots {
-			want := e.want[i].val
-			got := gots[i].Bytes()
-			if !bytes.Equal(got, want) {
-				t.Errorf("%v: bad values: got %q, want %q", e.want[i].key, string(got), string(want))
+			want := e.gets[i].w
+			got := gots[i].String()
+			if got != want {
+				t.Errorf("%v: bad values: got %q, want %q", e.gets[i].spec, got, want)
 			}
 		}
 	}
@@ -110,10 +110,10 @@ func TestFuturePath(t *testing.T) {
 	defer db.Close()
 
 	tx := bdb.New(db)
-	tx.Put([]byte("value"), "path", "to", "the", "thing")
-	tx.Put([]byte("other value"), "a", "value", "b", "c")
-	value := tx.Read("path", "to", "the", "thing")
-	oval := tx.Read("a", value, "b", "c")
+	tx.Put(bdb.Spec("/path/to/the/thing").Bind(), []byte("value"))
+	tx.Put(bdb.Spec("/a/value/b/c").Bind(), []byte("other value"))
+	value := tx.Read(bdb.Spec("/path/to/the/thing").Bind())
+	oval := tx.Read(bdb.Spec("/a/%%value/b/c").Bind(value))
 	if err := tx.Run(); err != nil {
 		t.Fatal(err)
 	}

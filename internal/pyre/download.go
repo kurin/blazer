@@ -24,13 +24,12 @@ import (
 
 type DownloadableObject interface {
 	Size() int64
-	Reader() io.ReaderAt
+	io.ReaderAt
 	io.Closer
 }
 
 type DownloadManager interface {
-	ObjectByName(bucketID, name string) (DownloadableObject, error)
-	GetBucketID(bucket string) (string, error)
+	Download(bucket, name string) (DownloadableObject, error)
 	GetBucket(id string) ([]byte, error)
 }
 
@@ -71,7 +70,7 @@ func parseDownloadHeaders(r *http.Request) (*downloadRequest, error) {
 
 func (fs *downloadServer) serveWholeObject(rw http.ResponseWriter, obj DownloadableObject) {
 	rw.Header().Set("Content-Length", fmt.Sprintf("%d", obj.Size()))
-	sr := io.NewSectionReader(obj.Reader(), 0, obj.Size())
+	sr := io.NewSectionReader(obj, 0, obj.Size())
 	if _, err := io.Copy(rw, sr); err != nil {
 		http.Error(rw, err.Error(), 503)
 		fmt.Println("no reader", err)
@@ -86,7 +85,7 @@ func (fs *downloadServer) servePartialObject(rw http.ResponseWriter, obj Downloa
 	if off+len > obj.Size() {
 		len = obj.Size() - off
 	}
-	sr := io.NewSectionReader(obj.Reader(), off, len)
+	sr := io.NewSectionReader(obj, off, len)
 	rw.Header().Set("Content-Length", fmt.Sprintf("%d", len))
 	rw.WriteHeader(206) // this goes after headers are set
 	if _, err := io.Copy(rw, sr); err != nil {
@@ -109,14 +108,8 @@ func (fs *downloadServer) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	bucket := parts[1]
-	bid, err := fs.dm.GetBucketID(bucket)
-	if err != nil {
-		http.Error(rw, err.Error(), 503)
-		fmt.Println("no bucket:", err)
-		return
-	}
 	file := strings.Join(parts[2:], "/")
-	obj, err := fs.dm.ObjectByName(bid, file)
+	obj, err := fs.dm.Download(bucket, file)
 	if err != nil {
 		http.Error(rw, err.Error(), 503)
 		fmt.Println("no reader", err)

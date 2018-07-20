@@ -72,7 +72,7 @@ func (fs *simpleFileServer) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	req, err := parseUploadHeaders(r)
 	if err != nil {
 		http.Error(rw, err.Error(), 500)
-		fmt.Println("oh no")
+		fmt.Println("oh no (header):", err)
 		return
 	}
 	id := uuid.New().String()
@@ -87,24 +87,24 @@ func (fs *simpleFileServer) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	bs, err := proto.Marshal(data)
 	if err != nil {
 		http.Error(rw, err.Error(), 500)
-		fmt.Println("oh no")
+		fmt.Println("oh no (marshal):", err)
 		return
 	}
 	w, err := fs.fm.Writer(req.bucket, req.name, id, bs)
 	if err != nil {
 		http.Error(rw, err.Error(), 500)
-		fmt.Println("oh no:", err)
+		fmt.Println("oh no (writer):", err)
 		return
 	}
 	if _, err := io.Copy(w, io.LimitReader(r.Body, req.size)); err != nil {
 		w.Close()
 		http.Error(rw, err.Error(), 500)
-		fmt.Println("oh no")
+		fmt.Println("oh no (copy):", err)
 		return
 	}
 	if err := w.Close(); err != nil {
 		http.Error(rw, err.Error(), 500)
-		fmt.Println("oh no")
+		fmt.Println("oh no (close):", err)
 		return
 	}
 	resp := &b2types.UploadFileResponse{

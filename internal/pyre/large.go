@@ -61,24 +61,24 @@ func (fs *largeFileServer) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	req, err := parseUploadPartHeaders(r)
 	if err != nil {
 		http.Error(rw, err.Error(), 500)
-		fmt.Println("oh no")
+		fmt.Println("oh no (headers):", err)
 		return
 	}
 	w, err := fs.fm.PartWriter(req.ID, req.Part)
 	if err != nil {
 		http.Error(rw, err.Error(), 500)
-		fmt.Println("oh no")
+		fmt.Println("oh no (writer):", err)
 		return
 	}
 	if _, err := io.Copy(w, io.LimitReader(r.Body, req.Size)); err != nil {
 		w.Close()
 		http.Error(rw, err.Error(), 500)
-		fmt.Println("oh no")
+		fmt.Println("oh no (copy):", err)
 		return
 	}
 	if err := w.Close(); err != nil {
 		http.Error(rw, err.Error(), 500)
-		fmt.Println("oh no")
+		fmt.Println("oh no (close):", err)
 		return
 	}
 	if err := json.NewEncoder(rw).Encode(req); err != nil {

@@ -16,17 +16,19 @@
 package bonfire
 
 import (
+	"crypto/sha1"
 	"encoding/json"
 	"fmt"
+	"hash"
 	"io"
 	"os"
-	"path"
 	"path/filepath"
-	"strings"
+	"strconv"
 	"time"
 
 	bolt "github.com/coreos/bbolt"
 	"github.com/google/uuid"
+	"github.com/kurin/blazer/internal/bdb"
 	"github.com/kurin/blazer/internal/pyre"
 )
 
@@ -39,7 +41,7 @@ func New(rootDir string) (*LocalDiskManager, error) {
 	if err := os.MkdirAll(rootDir, 0755); err != nil {
 		return nil, err
 	}
-	db, err := bolt.Open(filepath.Join(rootDir, "db.bolt"), 0, nil)
+	db, err := bolt.Open(filepath.Join(rootDir, "db.bolt"), 0600, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +64,7 @@ type tokenInfo struct {
 }
 
 func (l *LocalDiskManager) Authorize(acct, key string) (string, error) {
-	if err := l.db.View(func(tx *bolt.Tx) error {
+	/*if err := l.db.View(func(tx *bolt.Tx) error {
 		acctKey, err := readBucketValue(tx, fmt.Sprintf("/accounts/%s", acct))
 		if err != nil {
 			return err
@@ -73,15 +75,15 @@ func (l *LocalDiskManager) Authorize(acct, key string) (string, error) {
 		return nil
 	}); err != nil {
 		return "", err
-	}
+	}*/
 	token := uuid.New().String()
-	if err := l.db.Update(func(tx *bolt.Tx) error {
-		bs, err := json.Marshal(tokenInfo{Expire: time.Now().Add(time.Hour * 24)})
-		if err != nil {
-			return err
-		}
-		return writeBucketValue(tx, fmt.Sprintf("/accounts/%s/tokens/%s", acct, token), bs)
-	}); err != nil {
+	bs, err := json.Marshal(tokenInfo{Expire: time.Now().Add(time.Hour * 24)})
+	if err != nil {
+		return "", err
+	}
+	tx := bdb.New(l.db)
+	tx.Put(bs, "accounts", acct, "tokens", token)
+	if err := tx.Run(); err != nil {
 		return "", err
 	}
 	return token, nil
@@ -93,117 +95,56 @@ func (l *LocalDiskManager) CheckCreds(token, api string) error {
 }
 
 func (l *LocalDiskManager) AddBucket(acct, id, name string, bs []byte) error {
-	return l.db.Update(func(tx *bolt.Tx) error {
-		// TODO: fail on double create
-		if err := writeBucketValue(tx, fmt.Sprintf("/buckets/id/%s", id), []byte(acct)); err != nil {
-			return err
-		}
-		if err := writeBucketValue(tx, fmt.Sprintf("/buckets/name/%s", name), []byte(acct)); err != nil {
-			return err
-		}
-		if err := writeBucketValue(tx, fmt.Sprintf("/accounts/%s/buckets/name/%s", acct, name), []byte(id)); err != nil {
-			return err
-		}
-		if err := writeBucketValue(tx, fmt.Sprintf("/accounts/%s/buckets/id/%s", acct, id), []byte(name)); err != nil {
-			return err
-		}
-		return writeBucketValue(tx, fmt.Sprintf("/accounts/%s/buckets/data/%s", acct, id), bs)
-	})
+	tx := bdb.New(l.db)
+	tx.Put([]byte(acct), "buckets", "by-id", id, "acct")
+	tx.Put([]byte(name), "buckets", "by-id", id, "name")
+	tx.Put([]byte(id), "buckets", "by-name", name, "id")
+	tx.Put([]byte(name), "accounts", acct, "buckets", id, "name")
+	tx.Put(bs, "accounts", acct, "buckets", id, "data")
+	return tx.Run()
 }
 
 func (l *LocalDiskManager) GetBucket(id string) ([]byte, error) {
-	var bs []byte
-	if err := l.db.View(func(tx *bolt.Tx) error {
-		acct, err := readBucketValue(tx, fmt.Sprintf("/buckets/%s", id))
-		if err != nil {
-			return err
-		}
-		data, err := readBucketValue(tx, fmt.Sprintf("/accounts/%s/buckets/data/%s", string(acct), id))
-		if err != nil {
-			return err
-		}
-		bs = data
-		return nil
-	}); err != nil {
+	tx := bdb.New(l.db)
+	acct := tx.Read("buckets", id, "acct")
+	data := tx.Read("accounts", acct, "buckets", id, "data")
+	if err := tx.Run(); err != nil {
 		return nil, err
 	}
-	return bs, nil
+	return data.Bytes(), nil
 }
 
 func (l *LocalDiskManager) ListBuckets(acct string) ([][]byte, error) {
 	var out [][]byte
-	if err := l.db.View(func(tx *bolt.Tx) error {
-		return forEach(tx, fmt.Sprintf("/accounts/%s/buckets/name", acct), func(k, v []byte) error {
-			id := string(v)
-			data, err := readBucketValue(tx, fmt.Sprintf("/accounts/%s/buckets/data/%s", acct, id))
-			if err != nil {
-				return err
-			}
-			out = append(out, data)
-			return nil
-		})
-	}); err != nil {
+	tx := bdb.New(l.db)
+	tx.ForEach(func(k, v []byte) error {
+		out = append(out, v)
+		return nil
+	}, "accounts", acct, "buckets")
+	if err := tx.Run(); err != nil {
+		if bdb.BucketNotExist(err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	return out, nil
 }
 
 func (l *LocalDiskManager) RemoveBucket(id string) error {
-	return l.db.Update(func(tx *bolt.Tx) error {
-		acctb, err := readBucketValue(tx, fmt.Sprintf("/buckets/id/%s", id))
-		if err != nil {
-			return err
-		}
-		acct := string(acctb)
-		nameb, err := readBucketValue(tx, fmt.Sprintf("/accounts/%s/buckets/id/%s", acct, id))
-		if err != nil {
-			return err
-		}
-		name := string(nameb)
-		if err := deleteBucketValue(tx, fmt.Sprintf("/buckets/id/%s", id)); err != nil {
-			return err
-		}
-		if err := deleteBucketValue(tx, fmt.Sprintf("/buckets/name/%s", name)); err != nil {
-			return err
-		}
-		if err := deleteBucketValue(tx, fmt.Sprintf("/accounts/%s/buckets/name/%s", acct, name)); err != nil {
-			return err
-		}
-		if err := deleteBucketValue(tx, fmt.Sprintf("/accounts/%s/buckets/id/%s", acct, id)); err != nil {
-			return err
-		}
-		return deleteBucketValue(tx, fmt.Sprintf("/accounts/%s/buckets/data/%s", acct, id))
-	})
+	tx := bdb.New(l.db)
+	acct := tx.Read("buckets", "by-id", id, "acct")
+	name := tx.Read("buckets", "by-id", id, "name")
+	tx.Delete("buckets", "by-id", id)
+	tx.Delete("buckets", "by-name", name)
+	tx.Delete("accounts", acct, "buckets", id)
+	return tx.Run()
 }
 
 func (l *LocalDiskManager) UpdateBucket(id string, rev int, bs []byte) error {
-	return l.db.Update(func(tx *bolt.Tx) error {
-		// todo: enforce rev
-		acct, err := readBucketValue(tx, fmt.Sprintf("/buckets/id/%s", id))
-		if err != nil {
-			return err
-		}
-		return writeBucketValue(tx, fmt.Sprintf("/accounts/%s/buckets/data/%s", string(acct), id), bs)
-	})
-}
-
-func (l *LocalDiskManager) GetBucketID(name string) (string, error) {
-	var id string
-	if err := l.db.View(func(tx *bolt.Tx) error {
-		acctb, err := readBucketValue(tx, fmt.Sprintf("/buckets/name/%s", name))
-		if err != nil {
-			return err
-		}
-		idb, err := readBucketValue(tx, fmt.Sprintf("/accounts/%s/buckets/name/%s", string(acctb), name))
-		if err != nil {
-			return err
-		}
-		id = string(idb)
-		return nil
-	}); err != nil {
-		return "", err
-	}
-	return id, nil
+	tx := bdb.New(l.db)
+	acct := tx.Read("buckets", "by-id", id, "acct")
+	tx.Put(bs, "accounts", acct, "buckets", id, "data")
+	return tx.Run()
 }
 
 type simpleWriter struct {
@@ -213,49 +154,25 @@ type simpleWriter struct {
 }
 
 func (s simpleWriter) Close() error {
-	if err := s.db.Update(func(tx *bolt.Tx) error {
-		data, err := readBucketValue(tx, fmt.Sprintf("/in-progress/%d", s.id))
-		if err != nil {
-			return err
-		}
-		acctb, err := readBucketValue(tx, fmt.Sprintf("/buckets/name/%s", s.bucket))
-		if err != nil {
-			return err
-		}
-		acct := string(acctb)
-		bucketb, err := readBucketValue(tx, fmt.Sprintf("/accounts/%s/buckets/name/%s", acct, s.bucket))
-		if err != nil {
-			return err
-		}
-		bucketID := string(bucketb)
-		// Look up file by ID.
-		if err := writeBucketValue(tx, fmt.Sprintf("/files/id/%d", s.id), acctb); err != nil {
-			return err
-		}
-		// Look up bucket by file ID.
-		if err := writeBucketValue(tx, fmt.Sprintf("/accounts/%s/files/id/%s", acct, s.id), []byte(s.bucket)); err != nil {
-			return err
-		}
-		// Look up file data by file ID.
-		if err := writeBucketValue(tx, fmt.Sprintf("/accounts/%s/buckets/%s/files/id/%s", acct, bucketID, s.id), data); err != nil {
-			return err
-		}
-		// Look up file ID by bucket and file name.
-		if err := writeSequence(tx, fmt.Sprintf("/accounts/%s/buckets/%s/files/name/%s/%s", acct, bucketID, s.name, s.id)); err != nil {
-			return err
-		}
-		return nil
-	}); err != nil {
-		s.WriteCloser.Close()
+	tx := bdb.New(s.db)
+	acct := tx.Read("buckets", "by-id", s.bucket, "acct")
+	bucketName := tx.Read("buckets", "by-id", s.bucket, "name")
+	data := tx.Read("in-progress", s.id)
+	tx.Delete("in-progress", s.id)
+	tx.Mod(acct.Bytes, "files", "by-id", s.id, "acct")
+	tx.Mod(data.Bytes, "accounts", acct, "buckets", s.bucket, "files", "by-id", s.id, "meta")
+	tx.Put([]byte(s.id), "buckets", "by-name", bucketName, "live", s.name)
+	tx.Inc("accounts", acct, "buckets", s.bucket, "files", "by-name", s.name, s.id)
+	if err := tx.Run(); err != nil {
 		return err
 	}
 	return s.WriteCloser.Close()
 }
 
 func (l *LocalDiskManager) Writer(bucket, name, id string, data []byte) (io.WriteCloser, error) {
-	if err := l.db.Update(func(tx *bolt.Tx) error {
-		return writeBucketValue(tx, fmt.Sprintf("/in-progress/%s", id), data)
-	}); err != nil {
+	tx := bdb.New(l.db)
+	tx.Put(data, "in-progress", id)
+	if err := tx.Run(); err != nil {
 		return nil, err
 	}
 	wc, err := os.Create(filepath.Join(l.root, id))
@@ -271,94 +188,126 @@ func (l *LocalDiskManager) Writer(bucket, name, id string, data []byte) (io.Writ
 	}, nil
 }
 
-func (l *LocalDiskManager) Delete(id string) error                                { return nil }
-func (l *LocalDiskManager) StartLarge(bucketID, name, id string, bs []byte) error { return nil }
-func (l *LocalDiskManager) Parts(id string) ([]string, error)                     { return nil, nil }
-func (l *LocalDiskManager) FinishLarge(id string) error                           { return nil }
-func (l *LocalDiskManager) GetFile(id string) ([]byte, error)                     { return nil, nil }
+func (l *LocalDiskManager) Delete(id string) error { return nil }
+
+func (l *LocalDiskManager) StartLarge(bucketID, name, id string, bs []byte) error {
+	tx := bdb.New(l.db)
+	tx.Put(bs, "in-progress-large", id, "meta")
+	tx.Put([]byte(name), "in-progress-large", id, "name")
+	tx.Put([]byte(bucketID), "in-progress-large", id, "bucket")
+	return tx.Run()
+}
+
+func (l *LocalDiskManager) Parts(id string) ([]string, error) {
+	m := map[string]string{}
+	tx := bdb.New(l.db)
+	tx.ForEach(func(k, v []byte) error {
+		m[string(k)] = string(v)
+		return nil
+	}, "in-progress-large", id, "parts")
+	if err := tx.Run(); err != nil {
+		return nil, err
+	}
+	parts := make([]string, len(m))
+	for num, sha := range m {
+		n, err := strconv.ParseInt(num, 10, 64)
+		if err != nil {
+			return nil, err
+		}
+		parts[int(n)-1] = sha
+	}
+	return parts, nil
+}
+
+func (l *LocalDiskManager) FinishLarge(id string) error {
+	tx := bdb.New(l.db)
+	bucket := tx.Read("in-progress-large", id, "bucket")
+	name := tx.Read("in-progress-large", id, "name")
+	data := tx.Read("in-progress-large", id, "meta")
+	acct := tx.Read("buckets", "by-id", bucket, "acct")
+	bucketName := tx.Read("buckets", "by-id", bucket, "name")
+	tx.Delete("in-progress-large", id)
+	tx.Mod(acct.Bytes, "files", "by-id", id, "acct")
+	tx.Mod(data.Bytes, "accounts", acct, "buckets", bucket, "files", "by-id", id, "meta")
+	tx.Put([]byte(id), "buckets", "by-name", bucketName, "live", name)
+	tx.Inc("accounts", acct, "buckets", bucket, "files", "by-name", name, id)
+	/*tx.Atomic(func() error {
+		return nil
+	})*/
+	return tx.Run()
+}
+
+func (l *LocalDiskManager) GetFile(id string) ([]byte, error) { return nil, nil }
 func (l *LocalDiskManager) NextN(bucketID, name, pfx, spfx string, n int) ([]pyre.VersionedObject, error) {
 	return nil, nil
 }
-func (l *LocalDiskManager) PartWriter(id string, part int) (io.WriteCloser, error) { return nil, nil }
-func (l *LocalDiskManager) ObjectByName(bucketID, name string) (pyre.DownloadableObject, error) {
-	return nil, nil
+
+type partObj struct {
+	f    *os.File
+	db   *bolt.DB
+	id   string
+	part int
+	h    hash.Hash
 }
 
-func getBucket(tx *bolt.Tx, path string) (*bolt.Bucket, error) {
-	for strings.HasPrefix(path, "/") {
-		path = strings.TrimPrefix(path, "/")
-	}
-	parts := strings.Split(path, "/")
-	var b *bolt.Bucket
-	for _, part := range parts[:len(parts)-1] {
-		if b == nil {
-			b = tx.Bucket([]byte(part))
-		} else {
-			b = b.Bucket([]byte(part))
-		}
-		if b == nil {
-			return nil, fmt.Errorf("no such value")
-		}
-	}
-	return b, nil
+func (p partObj) Write(b []byte) (int, error) {
+	return io.MultiWriter(p.f, p.h).Write(b)
 }
 
-func readBucketValue(tx *bolt.Tx, key string) ([]byte, error) {
-	bucket, err := getBucket(tx, path.Dir(key))
+func (p partObj) Close() error {
+	tx := bdb.New(p.db)
+	tx.Put([]byte(fmt.Sprintf("%x", p.h.Sum(nil))), "in-progress-large", p.id, "parts", fmt.Sprintf("%d", p.part))
+	if err := tx.Run(); err != nil {
+		p.f.Close()
+		return err
+	}
+	return p.f.Close()
+}
+
+func (l *LocalDiskManager) PartWriter(id string, part int) (io.WriteCloser, error) {
+	if err := os.MkdirAll(filepath.Join(l.root, id), 0755); err != nil {
+		return nil, err
+	}
+	path := filepath.Join(l.root, id, fmt.Sprintf("%d", part))
+	f, err := os.Create(path)
 	if err != nil {
 		return nil, err
 	}
-	val := bucket.Get([]byte(path.Base(key)))
-	if val == nil {
-		return nil, fmt.Errorf("no such value")
+	tx := bdb.New(l.db)
+	tx.Put([]byte(path), "files", "by-id", id, "parts", fmt.Sprintf("%d"))
+	if err := tx.Run(); err != nil {
+		f.Close()
+		return nil, err
 	}
-	return val, nil
+	return partObj{
+		f:    f,
+		db:   l.db,
+		id:   id,
+		part: part,
+		h:    sha1.New(),
+	}, nil
 }
 
-func deleteBucketValue(tx *bolt.Tx, key string) error {
-	bucket, err := getBucket(tx, path.Dir(key))
-	if err != nil {
-		return err
-	}
-	return bucket.Delete([]byte(path.Base(key)))
+type obj struct {
+	*os.File
+	size int64
 }
 
-func writeBucketValue(tx *bolt.Tx, path string, val []byte) error {
-	for strings.HasPrefix(path, "/") {
-		path = strings.TrimPrefix(path, "/")
-	}
-	parts := strings.Split(path, "/")
-	var b *bolt.Bucket
-	for _, part := range parts[:len(parts)-1] {
-		var err error
-		if b == nil {
-			b, err = tx.CreateBucketIfNotExists([]byte(part))
-		} else {
-			b, err = b.CreateBucketIfNotExists([]byte(part))
-		}
-		if err != nil {
-			return err
-		}
-	}
-	return b.Put([]byte(parts[len(parts)-1]), []byte(val))
-}
+func (o obj) Size() int64 { return o.size }
 
-func forEach(tx *bolt.Tx, path string, f func(k, v []byte) error) error {
-	bucket, err := getBucket(tx, path)
-	if err != nil {
-		return err
+func (l *LocalDiskManager) Download(bucket, name string) (pyre.DownloadableObject, error) {
+	tx := bdb.New(l.db)
+	live := tx.Read("buckets", "by-name", bucket, "live", name)
+	if err := tx.Run(); err != nil {
+		return nil, err
 	}
-	return bucket.ForEach(f)
-}
-
-func writeSequence(tx *bolt.Tx, key string) error {
-	bucket, err := getBucket(tx, path.Dir(key))
+	f, err := os.Open(filepath.Join(l.root, live.String()))
 	if err != nil {
-		return err
+		return nil, err
 	}
-	n, err := bucket.NextSequence()
+	fi, err := f.Stat()
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return bucket.Put([]byte(path.Base(key)), []byte(fmt.Sprintf("%d", n)))
+	return obj{File: f, size: fi.Size()}, nil
 }

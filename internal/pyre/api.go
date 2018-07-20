@@ -147,6 +147,7 @@ func (s *Server) AuthorizeAccount(ctx context.Context, req *pb.AuthorizeAccountR
 	rec, min := s.Account.Sizes(acct)
 	return &pb.AuthorizeAccountResponse{
 		AuthorizationToken:      token,
+		AccountId:               acct,
 		ApiUrl:                  s.Account.APIRoot(acct),
 		DownloadUrl:             s.Account.DownloadRoot(acct),
 		RecommendedPartSize:     rec,

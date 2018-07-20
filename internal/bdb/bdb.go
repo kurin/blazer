@@ -26,11 +26,28 @@ import (
 // Value represents a read from a bolt key.  It is not valid until after Run has
 // been called.
 type Value struct {
-	bs []byte
+	bs    []byte
+	valid bool
 }
 
-func (v *Value) Bytes() []byte  { return v.bs }
-func (v *Value) String() string { return string(v.bs) }
+func (v *Value) set(b []byte) {
+	v.bs = b
+	v.valid = true
+}
+
+func (v *Value) Bytes() []byte {
+	if !v.valid {
+		panic("not valid")
+	}
+	return v.bs
+}
+
+func (v *Value) String() string {
+	if !v.valid {
+		panic("not valid")
+	}
+	return string(v.bs)
+}
 
 func fpath(p []interface{}) ([]string, error) {
 	var out []string
@@ -74,8 +91,21 @@ func (b *Tx) Run() error {
 	})
 }
 
+type bucketErr struct {
+	msg   string
+	exist bool
+}
+
+func (b bucketErr) Error() string { return b.msg }
+
 // BucketNotExist is returned for bucket non-existence.
-var BucketNotExist = errors.New("no such bucket")
+func BucketNotExist(err error) bool {
+	berr, ok := err.(bucketErr)
+	if !ok {
+		return false
+	}
+	return berr.exist
+}
 
 func (b *Tx) bucket(tx *bolt.Tx, parts []string) (*bolt.Bucket, error) {
 	var bt *bolt.Bucket
@@ -86,11 +116,11 @@ func (b *Tx) bucket(tx *bolt.Tx, parts []string) (*bolt.Bucket, error) {
 			bt = bt.Bucket([]byte(p))
 		}
 		if bt == nil {
-			return nil, BucketNotExist
+			return nil, bucketErr{msg: fmt.Sprintf("%s: no such bucket", p), exist: true}
 		}
 	}
 	if bt == nil {
-		return nil, BucketNotExist
+		return nil, bucketErr{msg: fmt.Sprintf("(unnamed): no such bucket"), exist: true}
 	}
 	return bt, nil
 }
@@ -122,7 +152,7 @@ func (b *Tx) Read(path ...interface{}) *Value {
 		if err != nil {
 			return err
 		}
-		val.bs = bt.Get([]byte(parts[len(parts)-1]))
+		val.set(bt.Get([]byte(parts[len(parts)-1])))
 		return nil
 	})
 	return val
@@ -159,7 +189,11 @@ func (b *Tx) Delete(path ...interface{}) {
 		if err != nil {
 			return err
 		}
-		return bucket.Delete([]byte(parts[len(parts)-1]))
+		toDel := []byte(parts[len(parts)-1])
+		if bucket.Bucket(toDel) == nil {
+			return bucket.Delete(toDel)
+		}
+		return bucket.DeleteBucket(toDel)
 	})
 }
 
@@ -194,4 +228,8 @@ func (b *Tx) Inc(path ...interface{}) {
 		}
 		return bucket.Put([]byte(parts[len(parts)-1]), []byte(fmt.Sprintf("%d", n)))
 	})
+}
+
+func (b *Tx) Atomic(fn func() error) {
+	b.ops = append(b.ops, func(*bolt.Tx) error { return fn() })
 }

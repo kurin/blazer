@@ -41,6 +41,11 @@ type Path struct {
 // elements.
 type Spec string
 
+// Specf is like Sprintf for Specs.
+func Specf(s string, args ...interface{}) Spec {
+	return Spec(fmt.Sprintf(s, args...))
+}
+
 // Bind assigns the given arguments to a PathSpec and returns a Path.
 func (s Spec) Bind(args ...fmt.Stringer) *Path {
 	return &Path{
@@ -52,7 +57,7 @@ func (s Spec) Bind(args ...fmt.Stringer) *Path {
 func (p *Path) parse() error {
 	spec := string(p.spec)
 	if !strings.HasPrefix(spec, "/") {
-		fmt.Errorf("%q: malformed path", spec)
+		return fmt.Errorf("%q: malformed path", spec)
 	}
 	parts := strings.Split(spec, "/")
 	var arg int
@@ -82,11 +87,11 @@ func (p *Path) parse() error {
 			return fmt.Errorf("%q: not enough arguments bound to spec", spec)
 		}
 		bound := p.args[arg].String()
+		arg++
 		if bound == "" {
 			return fmt.Errorf("%q: error binding %q: empty argument", spec, last)
 		}
 		last = bound
-		return nil
 	}
 	if last == "" {
 		return fmt.Errorf("%q: malformed path", spec)

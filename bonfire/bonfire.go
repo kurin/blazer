@@ -82,7 +82,7 @@ func (l *LocalDiskManager) Authorize(acct, key string) (string, error) {
 		return "", err
 	}
 	tx := bdb.New(l.db)
-	tx.Put(bs, "accounts", acct, "tokens", token)
+	tx.Put(bdb.Specf("/accounts/%s/tokens/%s", acct, token).Bind(), bs)
 	if err := tx.Run(); err != nil {
 		return "", err
 	}
@@ -96,18 +96,18 @@ func (l *LocalDiskManager) CheckCreds(token, api string) error {
 
 func (l *LocalDiskManager) AddBucket(acct, id, name string, bs []byte) error {
 	tx := bdb.New(l.db)
-	tx.Put([]byte(acct), "buckets", "by-id", id, "acct")
-	tx.Put([]byte(name), "buckets", "by-id", id, "name")
-	tx.Put([]byte(id), "buckets", "by-name", name, "id")
-	tx.Put([]byte(name), "accounts", acct, "buckets", id, "name")
-	tx.Put(bs, "accounts", acct, "buckets", id, "data")
+	tx.Put(bdb.Specf("/buckets/by-id/%s/acct", id).Bind(), []byte(acct))
+	tx.Put(bdb.Specf("/buckets/by-id/%s/name", id).Bind(), []byte(name))
+	tx.Put(bdb.Specf("/buckets/by-name/%s/id", name).Bind(), []byte(id))
+	tx.Put(bdb.Specf("/accounts/%s/buckets/%s/name", acct, id).Bind(), []byte(name))
+	tx.Put(bdb.Specf("/accounts/%s/buckets/%s/data", acct, id).Bind(), bs)
 	return tx.Run()
 }
 
 func (l *LocalDiskManager) GetBucket(id string) ([]byte, error) {
 	tx := bdb.New(l.db)
-	acct := tx.Read("buckets", id, "acct")
-	data := tx.Read("accounts", acct, "buckets", id, "data")
+	acct := tx.Read(bdb.Specf("/buckets/%s/acct", id).Bind())
+	data := tx.Read(bdb.Specf("/accounts/%%acct/buckets/%s/data", id).Bind(acct))
 	if err := tx.Run(); err != nil {
 		return nil, err
 	}
@@ -115,9 +115,9 @@ func (l *LocalDiskManager) GetBucket(id string) ([]byte, error) {
 }
 
 func (l *LocalDiskManager) ListBuckets(acct string) ([][]byte, error) {
-	var out [][]byte
+	/*var out [][]byte
 	tx := bdb.New(l.db)
-	tx.ForEach(func(k, v []byte) error {
+	tx.ForEach(specfunc(k, v []byte) error {
 		out = append(out, v)
 		return nil
 	}, "accounts", acct, "buckets")
@@ -127,23 +127,24 @@ func (l *LocalDiskManager) ListBuckets(acct string) ([][]byte, error) {
 		}
 		return nil, err
 	}
-	return out, nil
+	return out, nil*/
+	return nil, nil
 }
 
 func (l *LocalDiskManager) RemoveBucket(id string) error {
 	tx := bdb.New(l.db)
-	acct := tx.Read("buckets", "by-id", id, "acct")
-	name := tx.Read("buckets", "by-id", id, "name")
-	tx.Delete("buckets", "by-id", id)
-	tx.Delete("buckets", "by-name", name)
-	tx.Delete("accounts", acct, "buckets", id)
+	acct := tx.Read(bdb.Specf("/buckets/by-id/%s/acct", id).Bind())
+	name := tx.Read(bdb.Specf("/buckets/by-id/%s/name", id).Bind())
+	tx.Delete(bdb.Specf("/buckets/by-id/%s", id).Bind())
+	tx.Delete(bdb.Spec("/buckets/by-name/%%name").Bind(name))
+	tx.Delete(bdb.Specf("/accounts/%%acct/buckets/%s", id).Bind(acct))
 	return tx.Run()
 }
 
 func (l *LocalDiskManager) UpdateBucket(id string, rev int, bs []byte) error {
 	tx := bdb.New(l.db)
-	acct := tx.Read("buckets", "by-id", id, "acct")
-	tx.Put(bs, "accounts", acct, "buckets", id, "data")
+	acct := tx.Read(bdb.Specf("/buckets/by-id/%s/acct", id).Bind())
+	tx.Put(bdb.Specf("/accounts/%%acct/buckets/%s/data", id).Bind(acct), bs)
 	return tx.Run()
 }
 
@@ -155,14 +156,14 @@ type simpleWriter struct {
 
 func (s simpleWriter) Close() error {
 	tx := bdb.New(s.db)
-	acct := tx.Read("buckets", "by-id", s.bucket, "acct")
-	bucketName := tx.Read("buckets", "by-id", s.bucket, "name")
-	data := tx.Read("in-progress", s.id)
-	tx.Delete("in-progress", s.id)
-	tx.Mod(acct.Bytes, "files", "by-id", s.id, "acct")
-	tx.Mod(data.Bytes, "accounts", acct, "buckets", s.bucket, "files", "by-id", s.id, "meta")
-	tx.Put([]byte(s.id), "buckets", "by-name", bucketName, "live", s.name)
-	tx.Inc("accounts", acct, "buckets", s.bucket, "files", "by-name", s.name, s.id)
+	acct := tx.Read(bdb.Specf("/buckets/by-id/%s/acct", s.bucket).Bind())
+	bucketName := tx.Read(bdb.Specf("/buckets/by-id/%s/name", s.bucket).Bind())
+	data := tx.Read(bdb.Specf("/in-progress/%s", s.id).Bind())
+	tx.Delete(bdb.Specf("/in-progress/%s", s.id).Bind())
+	tx.Mod(bdb.Specf("/files/by-id/%s/acct", s.id).Bind(), acct)
+	tx.Mod(bdb.Specf("/accounts/%%acct/buckets/%s/files/by-id/%s/meta", s.bucket, s.id).Bind(acct), data)
+	tx.Put(bdb.Specf("/buckets/by-name/%%bucket/live/%s", s.name).Bind(bucketName), []byte(s.id))
+	tx.Inc(bdb.Specf("/accounts/%%acct/buckets/%s/files/by-name/%s/%s", s.bucket, s.name, s.id).Bind(acct))
 	if err := tx.Run(); err != nil {
 		return err
 	}
@@ -171,7 +172,7 @@ func (s simpleWriter) Close() error {
 
 func (l *LocalDiskManager) Writer(bucket, name, id string, data []byte) (io.WriteCloser, error) {
 	tx := bdb.New(l.db)
-	tx.Put(data, "in-progress", id)
+	tx.Put(bdb.Specf("/in-progress/%s", id).Bind(), data)
 	if err := tx.Run(); err != nil {
 		return nil, err
 	}
@@ -192,19 +193,19 @@ func (l *LocalDiskManager) Delete(id string) error { return nil }
 
 func (l *LocalDiskManager) StartLarge(bucketID, name, id string, bs []byte) error {
 	tx := bdb.New(l.db)
-	tx.Put(bs, "in-progress-large", id, "meta")
-	tx.Put([]byte(name), "in-progress-large", id, "name")
-	tx.Put([]byte(bucketID), "in-progress-large", id, "bucket")
+	tx.Put(bdb.Specf("/in-progress-large/%s/meta", id).Bind(), bs)
+	tx.Put(bdb.Specf("/in-progress-large/%s/name", id).Bind(), []byte(name))
+	tx.Put(bdb.Specf("/in-progress-large/%s/bucket", id).Bind(), []byte(bucketID))
 	return tx.Run()
 }
 
 func (l *LocalDiskManager) Parts(id string) ([]string, error) {
 	m := map[string]string{}
 	tx := bdb.New(l.db)
-	tx.ForEach(func(k, v []byte) error {
+	tx.ForEach(bdb.Specf("/in-progress-large/%s/parts", id).Bind(), func(k, v []byte) error {
 		m[string(k)] = string(v)
 		return nil
-	}, "in-progress-large", id, "parts")
+	})
 	if err := tx.Run(); err != nil {
 		return nil, err
 	}
@@ -221,16 +222,16 @@ func (l *LocalDiskManager) Parts(id string) ([]string, error) {
 
 func (l *LocalDiskManager) FinishLarge(id string) error {
 	tx := bdb.New(l.db)
-	bucket := tx.Read("in-progress-large", id, "bucket")
-	name := tx.Read("in-progress-large", id, "name")
-	data := tx.Read("in-progress-large", id, "meta")
-	acct := tx.Read("buckets", "by-id", bucket, "acct")
-	bucketName := tx.Read("buckets", "by-id", bucket, "name")
-	tx.Delete("in-progress-large", id)
-	tx.Mod(acct.Bytes, "files", "by-id", id, "acct")
-	tx.Mod(data.Bytes, "accounts", acct, "buckets", bucket, "files", "by-id", id, "meta")
-	tx.Put([]byte(id), "buckets", "by-name", bucketName, "live", name)
-	tx.Inc("accounts", acct, "buckets", bucket, "files", "by-name", name, id)
+	bucket := tx.Read(bdb.Specf("/in-progress-large/%s/bucket", id).Bind())
+	name := tx.Read(bdb.Specf("/in-progress-large/%s/name", id).Bind())
+	data := tx.Read(bdb.Specf("/in-progress-large/%s/meta", id).Bind())
+	acct := tx.Read(bdb.Specf("/buckets/by-id/%%bucket/acct").Bind(bucket))
+	bucketName := tx.Read(bdb.Specf("/buckets/by-id/%%bucket/name").Bind(bucket))
+	tx.Delete(bdb.Specf("/in-progress-large/%s", id).Bind())
+	tx.Mod(bdb.Specf("/files/by-id/%s/acct", id).Bind(), acct)
+	tx.Mod(bdb.Specf("/accounts/%%acct/buckets/%%bucket/files/by-id/%s/meta", id).Bind(acct, bucket), data)
+	tx.Put(bdb.Specf("/buckets/by-name/%%bname/live/%%name").Bind(bucketName, name), []byte(id))
+	tx.Inc(bdb.Specf("/accounts/%%acct/buckets/%%bucket/files/by-name/%%name").Bind(acct, bucket, name))
 	/*tx.Atomic(func() error {
 		return nil
 	})*/
@@ -256,7 +257,7 @@ func (p partObj) Write(b []byte) (int, error) {
 
 func (p partObj) Close() error {
 	tx := bdb.New(p.db)
-	tx.Put([]byte(fmt.Sprintf("%x", p.h.Sum(nil))), "in-progress-large", p.id, "parts", fmt.Sprintf("%d", p.part))
+	tx.Put(bdb.Specf("/in-progress-large/%s/parts/%d", p.id, p.part).Bind(), []byte(fmt.Sprintf("%x", p.h.Sum(nil))))
 	if err := tx.Run(); err != nil {
 		p.f.Close()
 		return err
@@ -274,7 +275,7 @@ func (l *LocalDiskManager) PartWriter(id string, part int) (io.WriteCloser, erro
 		return nil, err
 	}
 	tx := bdb.New(l.db)
-	tx.Put([]byte(path), "files", "by-id", id, "parts", fmt.Sprintf("%d"))
+	tx.Put(bdb.Specf("/files/by-id/%s/parts/%d", id, part).Bind(), []byte(path))
 	if err := tx.Run(); err != nil {
 		f.Close()
 		return nil, err
@@ -297,7 +298,7 @@ func (o obj) Size() int64 { return o.size }
 
 func (l *LocalDiskManager) Download(bucket, name string) (pyre.DownloadableObject, error) {
 	tx := bdb.New(l.db)
-	live := tx.Read("buckets", "by-name", bucket, "live", name)
+	live := tx.Read(bdb.Specf("/buckets/by-name/%s/live/%s", bucket, name).Bind())
 	if err := tx.Run(); err != nil {
 		return nil, err
 	}

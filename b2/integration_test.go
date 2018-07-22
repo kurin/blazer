@@ -1014,7 +1014,7 @@ func TestVerifyReader(t *testing.T) {
 	}
 }
 
-func TestListWithKey(t *testing.T) {
+func TestListBucketsWithKey(t *testing.T) {
 	ctx := context.Background()
 	bucket, done := startLiveTest(ctx, t)
 	defer done()
@@ -1030,6 +1030,43 @@ func TestListWithKey(t *testing.T) {
 	}
 	if _, err := client.Bucket(ctx, bucket.Name()); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestListBucketContentsWithKey(t *testing.T) {
+	ctx := context.Background()
+	bucket, done := startLiveTest(ctx, t)
+	defer done()
+
+	for _, path := range []string{"foo/bar", "foo/baz", "foo", "bar", "baz"} {
+		if _, _, err := writeFile(ctx, bucket, path, 1, 1e8); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	key, err := bucket.CreateKey(ctx, "testKey", Capabilities("listBuckets", "listFiles"), Prefix("foo/"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, err := NewClient(ctx, key.ID(), key.Secret())
+	if err != nil {
+		t.Fatal(err)
+	}
+	obucket, err := client.Bucket(ctx, bucket.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	iter := obucket.List(ctx)
+	var got []string
+	for iter.Next() {
+		got = append(got, iter.Object().Name())
+	}
+	if iter.Err() != nil {
+		t.Fatal(iter.Err())
+	}
+	want := []string{"foo/bar", "foo/baz"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("error listing objects with restricted key: got %v, want %v", got, want)
 	}
 }
 

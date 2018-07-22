@@ -84,12 +84,12 @@ func (c *create) Execute(ctx context.Context, f *flag.FlagSet, _ ...interface{})
 		cr = bucket
 	}
 
-	key, err := cr.CreateKey(ctx, name, opts...)
+	b2key, err := cr.CreateKey(ctx, name, opts...)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		return subcommands.ExitFailure
 	}
-	fmt.Printf("key=%s, secret=%s\n", key.ID(), key.Secret())
+	fmt.Printf("key=%s, secret=%s\n", b2key.ID(), b2key.Secret())
 	return subcommands.ExitSuccess
 }
 

@@ -1014,6 +1014,25 @@ func TestVerifyReader(t *testing.T) {
 	}
 }
 
+func TestListWithKey(t *testing.T) {
+	ctx := context.Background()
+	bucket, done := startLiveTest(ctx, t)
+	defer done()
+
+	key, err := bucket.CreateKey(ctx, "testKey", Capabilities("listBuckets"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	client, err := NewClient(ctx, os.Getenv(apiID), key.Secret())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.Bucket(ctx, bucket.Name()); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestCreateDeleteKey(t *testing.T) {
 	ctx := context.Background()
 	bucket, done := startLiveTest(ctx, t)
@@ -1049,9 +1068,7 @@ func TestCreateDeleteKey(t *testing.T) {
 
 	for _, e := range table {
 		var opts []KeyOption
-		for _, cap := range e.cap {
-			opts = append(opts, Capability(cap))
-		}
+		opts = append(opts, Capabilities(e.cap...))
 		if e.d != 0 {
 			opts = append(opts, Lifetime(e.d))
 		}

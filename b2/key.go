@@ -69,10 +69,10 @@ func Deadline(t time.Time) KeyOption {
 	return Lifetime(d)
 }
 
-// Capability requests a key with the given capability.
-func Capability(cap string) KeyOption {
+// Capabilities requests a key with the given capability.
+func Capabilities(caps ...string) KeyOption {
 	return func(k *keyOptions) {
-		k.caps = append(k.caps, cap)
+		k.caps = append(k.caps, caps...)
 	}
 }
 

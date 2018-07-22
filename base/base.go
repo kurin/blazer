@@ -269,6 +269,7 @@ type B2 struct {
 	minPartSize int
 	opts        *b2Options
 	bucket      string // restricted to this bucket if present
+	pfx         string // restricted to objects with this prefix if present
 }
 
 // Update replaces the B2 object with a new one, in-place.
@@ -430,6 +431,7 @@ func AuthorizeAccount(ctx context.Context, account, key string, opts ...AuthOpti
 		downloadURI: b2resp.DownloadURI,
 		minPartSize: b2resp.PartSize,
 		bucket:      b2resp.Allowed.Bucket,
+		pfx:         b2resp.Allowed.Prefix,
 		opts:        b2opts,
 	}, nil
 }
@@ -970,6 +972,9 @@ func (b *Bucket) ListUnfinishedLargeFiles(ctx context.Context, count int, contin
 
 // ListFileNames wraps b2_list_file_names.
 func (b *Bucket) ListFileNames(ctx context.Context, count int, continuation, prefix, delimiter string) ([]*File, string, error) {
+	if prefix == "" {
+		prefix = b.b2.pfx
+	}
 	b2req := &b2types.ListFileNamesRequest{
 		Count:        count,
 		Continuation: continuation,

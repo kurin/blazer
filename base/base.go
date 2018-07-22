@@ -268,6 +268,7 @@ type B2 struct {
 	downloadURI string
 	minPartSize int
 	opts        *b2Options
+	bucket      string // restricted to this bucket if present
 }
 
 // Update replaces the B2 object with a new one, in-place.
@@ -428,6 +429,7 @@ func AuthorizeAccount(ctx context.Context, account, key string, opts ...AuthOpti
 		apiURI:      b2resp.URI,
 		downloadURI: b2resp.DownloadURI,
 		minPartSize: b2resp.PartSize,
+		bucket:      b2resp.Allowed.Bucket,
 		opts:        b2opts,
 	}, nil
 }
@@ -614,6 +616,7 @@ func (b *Bucket) BaseURL() string {
 func (b *B2) ListBuckets(ctx context.Context) ([]*Bucket, error) {
 	b2req := &b2types.ListBucketsRequest{
 		AccountID: b.accountID,
+		Bucket:    b.bucket,
 	}
 	b2resp := &b2types.ListBucketsResponse{}
 	headers := map[string]string{

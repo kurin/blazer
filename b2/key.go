@@ -47,6 +47,10 @@ func (k *Key) Delete(ctx context.Context) error { return k.k.del(ctx) }
 // operations.
 func (k *Key) Secret() string { return k.k.secret() }
 
+// ID returns the application key ID.  This, plus the secret, is necessary to
+// authenticate to B2.
+func (k *Key) ID() string { return k.k.id() }
+
 type keyOptions struct {
 	caps     []string
 	prefix   string

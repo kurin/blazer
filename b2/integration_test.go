@@ -1024,7 +1024,7 @@ func TestListWithKey(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	client, err := NewClient(ctx, os.Getenv(apiID), key.Secret())
+	client, err := NewClient(ctx, key.ID(), key.Secret())
 	if err != nil {
 		t.Fatal(err)
 	}

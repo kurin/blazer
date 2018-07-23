@@ -1015,6 +1015,9 @@ func (b *Bucket) ListFileNames(ctx context.Context, count int, continuation, pre
 
 // ListFileVersions wraps b2_list_file_versions.
 func (b *Bucket) ListFileVersions(ctx context.Context, count int, startName, startID, prefix, delimiter string) ([]*File, string, string, error) {
+	if prefix == "" {
+		prefix = b.b2.pfx
+	}
 	b2req := &b2types.ListFileVersionsRequest{
 		BucketID:  b.ID,
 		Count:     count,

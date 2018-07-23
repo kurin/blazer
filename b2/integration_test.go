@@ -1068,6 +1068,12 @@ func TestListBucketContentsWithKey(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("error listing objects with restricted key: got %v, want %v", got, want)
 	}
+	iter2 := obucket.List(ctx, ListHidden())
+	for iter2.Next() {
+	}
+	if iter2.Err() != nil {
+		t.Error(iter2.Err())
+	}
 }
 
 func TestCreateDeleteKey(t *testing.T) {

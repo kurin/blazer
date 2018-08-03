@@ -6,7 +6,9 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/kurin/blazer/b2"
 )
@@ -121,6 +123,38 @@ func TestOperationJSONLive(t *testing.T) {
 	}); err != nil {
 		t.Error(err)
 	}
+}
+
+func TestMutex(t *testing.T) {
+	ctx := context.Background()
+	bucket, done := startLiveTest(ctx, t)
+	defer done()
+
+	g := NewGroup(bucket, "tester")
+	m := g.Mutex(ctx, "mootex")
+	var a int32
+	var wg sync.WaitGroup
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			for j := 0; j < 5; j++ {
+				m.Lock()
+				new := atomic.AddInt32(&a, 1)
+				if new != 1 {
+					t.Fatalf("two threads locked at once")
+				}
+				time.Sleep(20 * time.Millisecond)
+				new = atomic.AddInt32(&a, -1)
+				if new != 0 {
+					t.Fatalf("two threads locked at once")
+				}
+				t.Logf("thread %d: lock %d", i, j)
+				m.Unlock()
+			}
+		}(i)
+	}
+	wg.Wait()
 }
 
 func startLiveTest(ctx context.Context, t *testing.T) (*b2.Bucket, func()) {

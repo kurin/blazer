@@ -27,6 +27,7 @@ import (
 	"io"
 	"io/ioutil"
 	"reflect"
+	"time"
 
 	"github.com/kurin/blazer/b2"
 )
@@ -54,6 +55,16 @@ type Group struct {
 	name string
 	b    *b2.Bucket
 	ba   *b2.BucketAttrs
+}
+
+// Mutex returns a new mutex on the given group.  Only one caller can hold the
+// lock on a mutex with a given name, for a given group.
+func (g *Group) Mutex(ctx context.Context, name string) *Mutex {
+	return &Mutex{
+		g:    g,
+		name: name,
+		ctx:  ctx,
+	}
 }
 
 // Operate calls f with the contents of the group object given by name, and
@@ -335,6 +346,44 @@ func (g *Group) List(ctx context.Context) ([]string, error) {
 	return l, nil
 }
 
+// A Mutex is a sync.Locker that is backed by data in B2.
+type Mutex struct {
+	g    *Group
+	name string
+	ctx  context.Context
+}
+
+// Lock locks the mutex.  If the mutex is already locked, lock will wait,
+// polling at 1 second intervals, until it can acquire the lock.
+func (m *Mutex) Lock() {
+	cont := errors.New("continue")
+	for {
+		err := m.g.Operate(m.ctx, m.name, func(b []byte) ([]byte, error) {
+			if len(b) != 0 {
+				return nil, cont
+			}
+			return []byte{1}, nil
+		})
+		if err == nil {
+			return
+		}
+		if err != cont {
+			panic(err)
+		}
+		time.Sleep(time.Second)
+	}
+}
+
+// Unlock unconditionally unlocks the mutex.  This allows programs to clear
+// stale locks.
+func (m *Mutex) Unlock() {
+	if err := m.g.Operate(m.ctx, m.name, func([]byte) ([]byte, error) {
+		return nil, nil
+	}); err != nil {
+		panic(err)
+	}
+}
+
 type consistentInfo struct {
 	Version int
 
@@ -349,7 +398,7 @@ type consistentInfo struct {
 	//
 	// However, it is still necessary for higher level constructs to confirm that
 	// the serial number they expect is good.  The writer does this, for example,
-	// but comparing the "key" of the file it is replacing.
+	// by comparing the "key" of the file it is replacing.
 	Serial    int
 	Locations map[string]string
 }

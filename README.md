@@ -25,7 +25,7 @@ import "github.com/kurin/blazer/b2"
 
 ```go
 func copyFile(ctx context.Context, bucket *b2.Bucket, src, dst string) error {
-	f, err := file.Open(src)
+	f, err := os.Open(src)
 	if err != nil {
 		return err
 	}
@@ -52,7 +52,7 @@ Uploading a large file with multiple HTTP connections is simple:
 
 ```go
 func copyFile(ctx context.Context, bucket *b2.Bucket, writers int, src, dst string) error {
-	f, err := file.Open(src)
+	f, err := os.Open(src)
 	if err != nil {
 		return err
 	}
@@ -80,7 +80,7 @@ func downloadFile(ctx context.Context, bucket *b2.Bucket, downloads int, src, ds
 	r := bucket.Object(src).NewReader(ctx)
 	defer r.Close()
 
-	f, err := file.Create(dst)
+	f, err := os.Create(dst)
 	if err != nil {
 		return err
 	}
@@ -99,7 +99,7 @@ func downloadFile(ctx context.Context, bucket *b2.Bucket, downloads int, src, ds
 func printObjects(ctx context.Context, bucket *b2.Bucket) error {
 	iterator := bucket.List(ctx)
 	for iterator.Next() {
-		fmt.Println(itrator.Object())
+		fmt.Println(iterator.Object())
 	}
 	return iterator.Err()
 }

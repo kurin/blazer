@@ -321,6 +321,13 @@ func (rb *requestBody) getBody() io.Reader {
 	if rb == nil {
 		return nil
 	}
+	if rb.getSize() == 0 {
+		// https://github.com/kurin/blazer/issues/57
+		// When body is non-nil, but the request's ContentLength is 0, it is
+		// replaced with -1, which causes the client to send a chunked encoding,
+		// which confuses B2.  This causes an error when
+		return http.NoBody
+	}
 	return rb.body
 }
 

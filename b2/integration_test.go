@@ -370,7 +370,9 @@ func TestFileBufferLive(t *testing.T) {
 
 	w.UseFileBuffer = true
 
-	w.Write(nil)
+	if _, err := io.CopyN(w, r, 1); err != nil {
+		t.Fatalf("CopyN: %v", err)
+	}
 	wb, ok := w.w.(*fileBuffer)
 	if !ok {
 		t.Fatalf("writer isn't using file buffer: %T", w.w)

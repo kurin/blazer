@@ -221,6 +221,9 @@ func (w *Writer) init() {
 
 // Write satisfies the io.Writer interface.
 func (w *Writer) Write(p []byte) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
 	w.init()
 	if err := w.getErr(); err != nil {
 		return 0, err
@@ -443,6 +446,8 @@ func (w *Writer) ReadFrom(r io.Reader) (int64, error) {
 func (w *Writer) Close() error {
 	w.done.Do(func() {
 		if !w.everStarted {
+			w.init()
+			w.setErr(w.simpleWriteFile())
 			return
 		}
 		defer w.o.b.c.removeWriter(w)

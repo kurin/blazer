@@ -1141,6 +1141,29 @@ func TestCreateDeleteKey(t *testing.T) {
 	}
 }
 
+func TestEmptyObject(t *testing.T) {
+	ctx := context.Background()
+	bucket, done := startLiveTest(ctx, t)
+	defer done()
+
+	obj := bucket.Object("empty")
+	w := obj.NewWriter(ctx)
+	if _, err := w.Write([]byte{}); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	attrs, err := obj.Attrs(ctx)
+	if err != nil {
+		t.Fatalf("Attrs: %v", err)
+	}
+	if attrs.Size != 0 {
+		t.Fatalf("Unexpected object size: got %d, want 0", attrs.Size)
+	}
+}
+
 type object struct {
 	o   *Object
 	err error

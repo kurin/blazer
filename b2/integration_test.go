@@ -26,6 +26,7 @@ import (
 	"net/http"
 	"os"
 	"reflect"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -1140,6 +1141,43 @@ func TestCreateDeleteKey(t *testing.T) {
 		if err := key.Delete(ctx); err != nil {
 			t.Errorf("key.Delete(): %v", err)
 		}
+	}
+}
+
+func TestListKeys(t *testing.T) {
+	ctx := context.Background()
+	bucket, done := startLiveTest(ctx, t)
+	defer done()
+
+	n := 20
+
+	for i := 0; i < n; i++ {
+		key, err := bucket.CreateKey(ctx, fmt.Sprintf("%d-list-key-test", i), Capabilities("listBuckets"))
+		if err != nil {
+			t.Fatalf("CreateKey(%d): %v", i, err)
+		}
+		defer key.Delete(ctx)
+	}
+
+	var got []string
+	var cur string
+	for {
+		ks, c, err := bucket.c.ListKeys(ctx, 10, cur)
+		if err != nil && err != io.EOF {
+			t.Fatalf("ListKeys(): %v", err)
+		}
+		for _, k := range ks {
+			if strings.HasSuffix(k.Name(), "list-key-test") {
+				got = append(got, k.Name())
+			}
+		}
+		cur = c
+		if err == io.EOF {
+			break
+		}
+	}
+	if len(got) != n {
+		t.Errorf("ListKeys(): got %d, want %d: %v", len(got), n, got)
 	}
 }
 

@@ -132,7 +132,11 @@ func (c *Client) ListKeys(ctx context.Context, count int, cursor string) ([]*Key
 			k: k,
 		})
 	}
-	return keys, next, nil
+	var rerr error
+	if next == "" {
+		rerr = io.EOF
+	}
+	return keys, next, rerr
 }
 
 // CreateKey creates a scoped application key that is valid only for this bucket.

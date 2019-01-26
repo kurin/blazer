@@ -281,6 +281,20 @@ func TestResumeWriter(t *testing.T) {
 	}
 }
 
+func TestResumeWriterWithoutExtantFile(t *testing.T) {
+	ctx := context.Background()
+	bucket, done := startLiveTest(ctx, t)
+	defer done()
+
+	r := io.LimitReader(zReader{}, 15e6)
+	w := bucket.Object("foo").NewWriter(ctx)
+	w.ChunkSize = 5e6
+	w.Resume = true
+	if _, err := io.Copy(w, r); err != nil {
+		t.Fatalf("io.Copy: %v", err)
+	}
+}
+
 func TestAttrs(t *testing.T) {
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)

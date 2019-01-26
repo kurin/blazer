@@ -303,21 +303,28 @@ func (w *Writer) getLargeFile() (beLargeFileInterface, error) {
 		}
 		return w.o.b.b.startLargeFile(w.ctx, w.name, ctype, w.info)
 	}
+	var got bool
+	iter := w.o.b.List(w.ctx, ListPrefix(w.name), ListUnfinished())
+	var fi beFileInterface
+	for iter.Next() {
+		obj := iter.Object()
+		if obj.Name() == w.name {
+			got = true
+			fi = obj.f
+		}
+	}
+	if iter.Err() != nil {
+		return nil, iter.Err()
+	}
+	if !got {
+		w.Resume = false
+		return w.getLargeFile()
+	}
+
 	next := 1
 	seen := make(map[int]string)
 	var size int64
-	var fi beFileInterface
 	for {
-		cur := &Cursor{name: w.name}
-		objs, _, err := w.o.b.ListObjects(w.ctx, 1, cur)
-		if err != nil {
-			return nil, err
-		}
-		if len(objs) < 1 || objs[0].name != w.name {
-			w.Resume = false
-			return w.getLargeFile()
-		}
-		fi = objs[0].f
 		parts, n, err := fi.listParts(w.ctx, next, 100)
 		if err != nil {
 			return nil, err

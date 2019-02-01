@@ -124,7 +124,3 @@ be found via the BaseURL method:
 ```go
 base := bucket.BaseURL()
 ```
-
----
-
-This is not an official Google product.

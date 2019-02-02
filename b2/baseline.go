@@ -76,6 +76,7 @@ type b2FileInterface interface {
 type b2LargeFileInterface interface {
 	finishLargeFile(context.Context) (b2FileInterface, error)
 	getUploadPartURL(context.Context) (b2FileChunkInterface, error)
+	cancel(context.Context) error
 }
 
 type b2FileChunkInterface interface {
@@ -472,6 +473,10 @@ func (b *b2LargeFile) getUploadPartURL(ctx context.Context) (b2FileChunkInterfac
 		return nil, err
 	}
 	return &b2FileChunk{c}, nil
+}
+
+func (b *b2LargeFile) cancel(ctx context.Context) error {
+	return b.b.CancelLargeFile(ctx)
 }
 
 func (b *b2FileChunk) reload(ctx context.Context) error {

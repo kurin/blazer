@@ -685,6 +685,7 @@ func TestReadWrite(t *testing.T) {
 func TestLargeFileCancellation(t *testing.T) {
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
 	client := &Client{
 		backend: &beRoot{

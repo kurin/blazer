@@ -95,6 +95,7 @@ type beFile struct {
 type beLargeFileInterface interface {
 	finishLargeFile(context.Context) (beFileInterface, error)
 	getUploadPartURL(context.Context) (beFileChunkInterface, error)
+	cancel(context.Context) error
 }
 
 type beLargeFile struct {
@@ -652,6 +653,16 @@ func (b *beLargeFile) finishLargeFile(ctx context.Context) (beFileInterface, err
 		return nil, err
 	}
 	return file, nil
+}
+
+func (b *beLargeFile) cancel(ctx context.Context) error {
+	f := func() error {
+		g := func() error {
+			return b.b2largeFile.cancel(ctx)
+		}
+		return withReauth(ctx, b.ri, g)
+	}
+	return withBackoff(ctx, b.ri, f)
 }
 
 func (b *beFileChunk) reload(ctx context.Context) error {

@@ -65,7 +65,9 @@ type Writer struct {
 
 	csize       int
 	ctx         context.Context
-	cancel      context.CancelFunc
+	cancel      context.CancelFunc // cancels ctx
+	ctxf        func() context.Context
+	errf        func(error)
 	ready       chan chunk
 	wg          sync.WaitGroup
 	start       sync.Once
@@ -100,11 +102,19 @@ func (w *Writer) setErr(err error) {
 	}
 	w.emux.Lock()
 	defer w.emux.Unlock()
-	if w.err == nil {
-		blog.V(1).Infof("error writing %s: %v", w.name, err)
-		w.err = err
-		w.cancel()
+	if w.err != nil {
+		return
 	}
+	blog.V(1).Infof("error writing %s: %v", w.name, err)
+	w.err = err
+	w.cancel()
+	if w.ctxf == nil {
+		return
+	}
+	if w.errf == nil {
+		w.errf = func(error) {}
+	}
+	w.errf(w.file.cancel(w.ctxf()))
 }
 
 func (w *Writer) getErr() error {
@@ -525,6 +535,18 @@ type WriterOption func(*Writer)
 func WithAttrsOption(attrs *Attrs) WriterOption {
 	return func(w *Writer) {
 		w.WithAttrs(attrs)
+	}
+}
+
+// WithCancelOnError requests the writer, if it has started a large file
+// upload, to call b2_cancel_large_file on any permanent error.  It calls ctxf
+// to obtain a context with which to cancel the file; this is to allow callers
+// to set specific timeouts.  If errf is non-nil, then it is called with the
+// (possibly nil) output of b2_cancel_large_file.
+func WithCancelOnError(ctxf func() context.Context, errf func(error)) WriterOption {
+	return func(w *Writer) {
+		w.ctxf = ctxf
+		w.errf = errf
 	}
 }
 

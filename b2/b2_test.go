@@ -287,6 +287,8 @@ func (t *testLargeFile) getUploadPartURL(context.Context) (b2FileChunkInterface,
 	}, nil
 }
 
+func (t *testLargeFile) cancel(ctx context.Context) error { return ctx.Err() }
+
 type testFileChunk struct {
 	parts map[int][]byte
 	errs  *errCont
@@ -677,6 +679,49 @@ func TestReadWrite(t *testing.T) {
 
 	if err := readFile(ctx, lobj, wshaL, 1e7, 10); err != nil {
 		t.Error(err)
+	}
+}
+
+func TestLargeFileCancellation(t *testing.T) {
+	ctx := context.Background()
+	ctx, cancel := context.WithCancel(ctx)
+
+	client := &Client{
+		backend: &beRoot{
+			b2i: &testRoot{
+				bucketMap: make(map[string]map[string]string),
+				errs:      &errCont{},
+			},
+		},
+	}
+
+	b, err := client.NewBucket(ctx, bucketName, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var called bool
+	w := b.Object("foo").NewWriter(ctx, WithCancelOnError(func() context.Context { return context.Background() }, func(err error) {
+		called = true
+		if err != nil {
+			t.Errorf("expected no error, got %v", err)
+		}
+	}))
+	w.ChunkSize = 10
+
+	for i := 0; i < 10; i++ {
+		r := io.LimitReader(zReader{}, 20)
+		if _, err := io.Copy(w, r); err != nil && err != context.Canceled {
+			t.Errorf("Copy: %v", err)
+		}
+		cancel()
+	}
+
+	if err := w.Close(); err != context.Canceled {
+		t.Errorf("expected cancelled context; got %v", err)
+	}
+
+	if !called {
+		t.Errorf("error callback not called")
 	}
 }
 

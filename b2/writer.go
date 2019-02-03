@@ -69,6 +69,7 @@ type Writer struct {
 	ctxf        func() context.Context
 	errf        func(error)
 	ready       chan chunk
+	cdone       chan struct{}
 	wg          sync.WaitGroup
 	start       sync.Once
 	once        sync.Once
@@ -157,61 +158,63 @@ func (w *Writer) thread() {
 			return
 		}
 		for {
-			chunk, ok := <-w.ready
-			if !ok {
+			var cnk chunk
+			select {
+			case cnk = <-w.ready:
+			case <-w.cdone:
 				return
 			}
-			if sha, ok := w.seen[chunk.id]; ok {
-				if sha != chunk.buf.Hash() {
+			if sha, ok := w.seen[cnk.id]; ok {
+				if sha != cnk.buf.Hash() {
 					w.setErr(errors.New("resumable upload was requested, but chunks don't match"))
 					return
 				}
-				chunk.buf.Close()
-				w.completeChunk(chunk.id)
-				blog.V(2).Infof("skipping chunk %d", chunk.id)
+				cnk.buf.Close()
+				w.completeChunk(cnk.id)
+				blog.V(2).Infof("skipping chunk %d", cnk.id)
 				continue
 			}
-			blog.V(2).Infof("thread %d handling chunk %d", id, chunk.id)
-			r, err := chunk.buf.Reader()
+			blog.V(2).Infof("thread %d handling chunk %d", id, cnk.id)
+			r, err := cnk.buf.Reader()
 			if err != nil {
 				w.setErr(err)
 				return
 			}
-			mr := &meteredReader{r: r, size: chunk.buf.Len()}
-			w.registerChunk(chunk.id, mr)
+			mr := &meteredReader{r: r, size: cnk.buf.Len()}
+			w.registerChunk(cnk.id, mr)
 			sleep := time.Millisecond * 15
 		redo:
-			n, err := fc.uploadPart(w.ctx, mr, chunk.buf.Hash(), chunk.buf.Len(), chunk.id)
-			if n != chunk.buf.Len() || err != nil {
+			n, err := fc.uploadPart(w.ctx, mr, cnk.buf.Hash(), cnk.buf.Len(), cnk.id)
+			if n != cnk.buf.Len() || err != nil {
 				if w.o.b.r.reupload(err) {
 					if err := sleepCtx(w.ctx, sleep); err != nil {
 						w.setErr(err)
-						w.completeChunk(chunk.id)
-						chunk.buf.Close() // TODO: log error
+						w.completeChunk(cnk.id)
+						cnk.buf.Close() // TODO: log error
 					}
 					sleep *= 2
 					if sleep > time.Second*15 {
 						sleep = time.Second * 15
 					}
-					blog.V(1).Infof("b2 writer: wrote %d of %d: error: %v; retrying", n, chunk.buf.Len(), err)
+					blog.V(1).Infof("b2 writer: wrote %d of %d: error: %v; retrying", n, cnk.buf.Len(), err)
 					f, err := w.file.getUploadPartURL(w.ctx)
 					if err != nil {
 						w.setErr(err)
-						w.completeChunk(chunk.id)
-						chunk.buf.Close() // TODO: log error
+						w.completeChunk(cnk.id)
+						cnk.buf.Close() // TODO: log error
 						return
 					}
 					fc = f
 					goto redo
 				}
 				w.setErr(err)
-				w.completeChunk(chunk.id)
-				chunk.buf.Close() // TODO: log error
+				w.completeChunk(cnk.id)
+				cnk.buf.Close() // TODO: log error
 				return
 			}
-			w.completeChunk(chunk.id)
-			chunk.buf.Close() // TODO: log error
-			blog.V(2).Infof("chunk %d handled", chunk.id)
+			w.completeChunk(cnk.id)
+			cnk.buf.Close() // TODO: log error
+			blog.V(2).Infof("chunk %d handled", cnk.id)
 		}
 	}()
 }
@@ -381,6 +384,7 @@ func (w *Writer) sendChunk() error {
 		}
 		w.file = lf
 		w.ready = make(chan chunk)
+		w.cdone = make(chan struct{})
 		if w.ConcurrentUploads < 1 {
 			w.ConcurrentUploads = 1
 		}
@@ -392,6 +396,8 @@ func (w *Writer) sendChunk() error {
 		return err
 	}
 	select {
+	case <-w.cdone:
+		return nil
 	case w.ready <- chunk{
 		id:  w.cidx + 1,
 		buf: w.w,
@@ -497,7 +503,9 @@ func (w *Writer) Close() error {
 				return
 			}
 		}
-		close(w.ready)
+		// See https://github.com/kurin/blazer/issues/60 for why we use a special
+		// channel for this.
+		close(w.cdone)
 		w.wg.Wait()
 		f, err := w.file.finishLargeFile(w.ctx)
 		if err != nil {

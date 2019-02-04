@@ -517,11 +517,7 @@ func (w *Writer) Close() error {
 	return w.getErr()
 }
 
-// WithAttrs sets the writable attributes of the resulting file to given
-// values.  WithAttrs must be called before the first call to Write.
-//
-// DEPRECATED: Use WithAttrsOption instead.
-func (w *Writer) WithAttrs(attrs *Attrs) *Writer {
+func (w *Writer) withAttrs(attrs *Attrs) *Writer {
 	w.contentType = attrs.ContentType
 	w.info = make(map[string]string)
 	for k, v := range attrs.Info {
@@ -542,7 +538,7 @@ type WriterOption func(*Writer)
 // WithAttrs attaches the given Attrs to the writer.
 func WithAttrsOption(attrs *Attrs) WriterOption {
 	return func(w *Writer) {
-		w.WithAttrs(attrs)
+		w.withAttrs(attrs)
 	}
 }
 

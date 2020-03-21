@@ -1018,6 +1018,7 @@ func (b *Bucket) ListFileNames(ctx context.Context, count int, continuation, pre
 			Info: &FileInfo{
 				Name:        f.Name,
 				SHA1:        f.SHA1,
+				MD5:         f.MD5,
 				Size:        f.Size,
 				ContentType: f.ContentType,
 				Info:        f.Info,
@@ -1061,6 +1062,7 @@ func (b *Bucket) ListFileVersions(ctx context.Context, count int, startName, sta
 			Info: &FileInfo{
 				Name:        f.Name,
 				SHA1:        f.SHA1,
+				MD5:         f.MD5,
 				Size:        f.Size,
 				ContentType: f.ContentType,
 				Info:        f.Info,
@@ -1199,6 +1201,7 @@ func (b *Bucket) HideFile(ctx context.Context, name string) (*File, error) {
 type FileInfo struct {
 	Name        string
 	SHA1        string
+	MD5         string
 	Size        int64
 	ContentType string
 	Info        map[string]string
@@ -1224,6 +1227,7 @@ func (f *File) GetFileInfo(ctx context.Context) (*FileInfo, error) {
 	f.Info = &FileInfo{
 		Name:        b2resp.Name,
 		SHA1:        b2resp.SHA1,
+		MD5:         b2resp.MD5,
 		Size:        b2resp.Size,
 		ContentType: b2resp.ContentType,
 		Info:        b2resp.Info,

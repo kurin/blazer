@@ -46,10 +46,11 @@ const (
 )
 
 type b2err struct {
-	msg    string
-	method string
-	retry  int
-	code   int
+	msg     string
+	method  string
+	retry   int
+	code    int
+	msgCode string
 }
 
 func (e b2err) Error() string {
@@ -107,6 +108,15 @@ func Code(err error) (int, string) {
 	return e.code, e.msg
 }
 
+// MsgCode returns the error code, msgCode and message.
+func MsgCode(err error) (int, string, string) {
+	e, ok := err.(b2err)
+	if !ok {
+		return 0, "", ""
+	}
+	return e.code, e.msgCode, e.msg
+}
+
 const (
 	// ReAuthenticate indicates that the B2 account authentication tokens have
 	// expired, and should be refreshed with a new call to AuthorizeAccount.
@@ -153,10 +163,11 @@ func mkErr(resp *http.Response) error {
 		retryAfter = int(r)
 	}
 	return b2err{
-		msg:    msgBody,
-		retry:  retryAfter,
-		code:   resp.StatusCode,
-		method: resp.Request.Header.Get("X-Blazer-Method"),
+		msg:     msgBody,
+		retry:   retryAfter,
+		code:    resp.StatusCode,
+		msgCode: msg.Code,
+		method:  resp.Request.Header.Get("X-Blazer-Method"),
 	}
 }
 
@@ -704,14 +715,14 @@ type File struct {
 	Status    string
 	Timestamp time.Time
 	Info      *FileInfo
-	id        string
+	ID        string
 	b2        *B2
 }
 
 // File returns a bare File struct, but with the appropriate id and b2
 // interfaces.
 func (b *Bucket) File(id, name string) *File {
-	return &File{id: id, b2: b.b2, Name: name}
+	return &File{ID: id, b2: b.b2, Name: name}
 }
 
 // UploadFile wraps b2_upload_file.
@@ -735,7 +746,7 @@ func (url *URL) UploadFile(ctx context.Context, r io.Reader, size int, name, con
 		Size:      int64(size),
 		Timestamp: millitime(b2resp.Timestamp),
 		Status:    b2resp.Action,
-		id:        b2resp.FileID,
+		ID:        b2resp.FileID,
 		b2:        url.b2,
 	}, nil
 }
@@ -744,7 +755,7 @@ func (url *URL) UploadFile(ctx context.Context, r io.Reader, size int, name, con
 func (f *File) DeleteFileVersion(ctx context.Context) error {
 	b2req := &b2types.DeleteFileVersionRequest{
 		Name:   f.Name,
-		FileID: f.id,
+		FileID: f.ID,
 	}
 	headers := map[string]string{
 		"Authorization": f.b2.authToken,
@@ -754,7 +765,7 @@ func (f *File) DeleteFileVersion(ctx context.Context) error {
 
 // LargeFile holds information necessary to implement B2 large file support.
 type LargeFile struct {
-	id string
+	ID string
 	b2 *B2
 
 	mu     sync.Mutex
@@ -778,7 +789,7 @@ func (b *Bucket) StartLargeFile(ctx context.Context, name, contentType string, i
 		return nil, err
 	}
 	return &LargeFile{
-		id:     b2resp.ID,
+		ID:     b2resp.ID,
 		b2:     b.b2,
 		hashes: make(map[int]string),
 	}, nil
@@ -787,7 +798,7 @@ func (b *Bucket) StartLargeFile(ctx context.Context, name, contentType string, i
 // CancelLargeFile wraps b2_cancel_large_file.
 func (l *LargeFile) CancelLargeFile(ctx context.Context) error {
 	b2req := &b2types.CancelLargeFileRequest{
-		ID: l.id,
+		ID: l.ID,
 	}
 	headers := map[string]string{
 		"Authorization": l.b2.authToken,
@@ -805,7 +816,7 @@ type FilePart struct {
 // ListParts wraps b2_list_parts.
 func (f *File) ListParts(ctx context.Context, next, count int) ([]*FilePart, int, error) {
 	b2req := &b2types.ListPartsRequest{
-		ID:    f.id,
+		ID:    f.ID,
 		Start: next,
 		Count: count,
 	}
@@ -836,7 +847,7 @@ func (f *File) CompileParts(size int64, seen map[int]string) *LargeFile {
 		s[k] = v
 	}
 	return &LargeFile{
-		id:     f.id,
+		ID:     f.ID,
 		b2:     f.b2,
 		size:   size,
 		hashes: s,
@@ -862,7 +873,7 @@ type getUploadPartURLResponse struct {
 // GetUploadPartURL wraps b2_get_upload_part_url.
 func (l *LargeFile) GetUploadPartURL(ctx context.Context) (*FileChunk, error) {
 	b2req := &getUploadPartURLRequest{
-		ID: l.id,
+		ID: l.ID,
 	}
 	b2resp := &getUploadPartURLResponse{}
 	headers := map[string]string{
@@ -918,7 +929,7 @@ func (l *LargeFile) FinishLargeFile(ctx context.Context) (*File, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	b2req := &b2types.FinishLargeFileRequest{
-		ID:     l.id,
+		ID:     l.ID,
 		Hashes: make([]string, len(l.hashes)),
 	}
 	b2resp := &b2types.FinishLargeFileResponse{}
@@ -939,7 +950,7 @@ func (l *LargeFile) FinishLargeFile(ctx context.Context) (*File, error) {
 		Size:      l.size,
 		Timestamp: millitime(b2resp.Timestamp),
 		Status:    b2resp.Action,
-		id:        b2resp.FileID,
+		ID:        b2resp.FileID,
 		b2:        l.b2,
 	}, nil
 }
@@ -965,7 +976,7 @@ func (b *Bucket) ListUnfinishedLargeFiles(ctx context.Context, count int, contin
 			Name:      f.Name,
 			Timestamp: millitime(f.Timestamp),
 			b2:        b.b2,
-			id:        f.FileID,
+			ID:        f.FileID,
 			Info: &FileInfo{
 				Name:        f.Name,
 				ContentType: f.ContentType,
@@ -1007,13 +1018,14 @@ func (b *Bucket) ListFileNames(ctx context.Context, count int, continuation, pre
 			Info: &FileInfo{
 				Name:        f.Name,
 				SHA1:        f.SHA1,
+				MD5:         f.MD5,
 				Size:        f.Size,
 				ContentType: f.ContentType,
 				Info:        f.Info,
 				Status:      f.Action,
 				Timestamp:   millitime(f.Timestamp),
 			},
-			id: f.FileID,
+			ID: f.FileID,
 			b2: b.b2,
 		})
 	}
@@ -1050,13 +1062,14 @@ func (b *Bucket) ListFileVersions(ctx context.Context, count int, startName, sta
 			Info: &FileInfo{
 				Name:        f.Name,
 				SHA1:        f.SHA1,
+				MD5:         f.MD5,
 				Size:        f.Size,
 				ContentType: f.ContentType,
 				Info:        f.Info,
 				Status:      f.Action,
 				Timestamp:   millitime(f.Timestamp),
 			},
-			id: f.FileID,
+			ID: f.FileID,
 			b2: b.b2,
 		})
 	}
@@ -1180,7 +1193,7 @@ func (b *Bucket) HideFile(ctx context.Context, name string) (*File, error) {
 		Name:      name,
 		Timestamp: millitime(b2resp.Timestamp),
 		b2:        b.b2,
-		id:        b2resp.ID,
+		ID:        b2resp.ID,
 	}, nil
 }
 
@@ -1188,6 +1201,7 @@ func (b *Bucket) HideFile(ctx context.Context, name string) (*File, error) {
 type FileInfo struct {
 	Name        string
 	SHA1        string
+	MD5         string
 	Size        int64
 	ContentType string
 	Info        map[string]string
@@ -1198,7 +1212,7 @@ type FileInfo struct {
 // GetFileInfo wraps b2_get_file_info.
 func (f *File) GetFileInfo(ctx context.Context) (*FileInfo, error) {
 	b2req := &b2types.GetFileInfoRequest{
-		ID: f.id,
+		ID: f.ID,
 	}
 	b2resp := &b2types.GetFileInfoResponse{}
 	headers := map[string]string{
@@ -1213,6 +1227,7 @@ func (f *File) GetFileInfo(ctx context.Context) (*FileInfo, error) {
 	f.Info = &FileInfo{
 		Name:        b2resp.Name,
 		SHA1:        b2resp.SHA1,
+		MD5:         b2resp.MD5,
 		Size:        b2resp.Size,
 		ContentType: b2resp.ContentType,
 		Info:        b2resp.Info,

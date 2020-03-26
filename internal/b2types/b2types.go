@@ -211,6 +211,7 @@ type GetFileInfoResponse struct {
 	BucketID    string            `json:"bucketId,omitempty"`
 	Size        int64             `json:"contentLength,omitempty"`
 	SHA1        string            `json:"contentSha1,omitempty"`
+	MD5         string            `json:"contentMd5,omitempty"`
 	ContentType string            `json:"contentType,omitempty"`
 	Info        map[string]string `json:"fileInfo,omitempty"`
 	Action      string            `json:"action,omitempty"`

@@ -342,7 +342,7 @@ func TestAttrs(t *testing.T) {
 	for _, e := range table {
 		for _, attrs := range attrlist {
 			o := bucket.Object(e.name)
-			w := o.NewWriter(ctx).WithAttrs(attrs)
+			w := o.NewWriter(ctx, WithAttrsOption(attrs))
 			w.ChunkSize = 5e6
 			if _, err := io.Copy(w, io.LimitReader(zReader{}, e.size)); err != nil {
 				t.Error(err)
@@ -1004,10 +1004,11 @@ func TestVerifyReader(t *testing.T) {
 
 	for _, e := range table {
 		o := bucket.Object(e.name)
-		w := o.NewWriter(ctx)
+		var opts []WriterOption
 		if e.fakeSHA != "" {
-			w = w.WithAttrs(&Attrs{SHA1: e.fakeSHA})
+			opts = append(opts, WithAttrsOption(&Attrs{SHA1: e.fakeSHA}))
 		}
+		w := o.NewWriter(ctx, opts...)
 		w.ChunkSize = 5e6
 		if _, err := io.Copy(w, io.LimitReader(zReader{}, e.size)); err != nil {
 			t.Error(err)

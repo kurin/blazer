@@ -50,7 +50,7 @@ type b2BucketInterface interface {
 	listFileNames(context.Context, int, string, string, string) ([]b2FileInterface, string, error)
 	listFileVersions(context.Context, int, string, string, string, string) ([]b2FileInterface, string, string, error)
 	listUnfinishedLargeFiles(context.Context, int, string) ([]b2FileInterface, string, error)
-	downloadFileByName(context.Context, string, int64, int64) (b2FileReaderInterface, error)
+	downloadFileByName(context.Context, string, int64, int64, bool) (b2FileReaderInterface, error)
 	hideFile(context.Context, string) (b2FileInterface, error)
 	getDownloadAuthorization(context.Context, string, time.Duration, string) (string, error)
 	baseURL() string
@@ -367,8 +367,8 @@ func (b *b2Bucket) listUnfinishedLargeFiles(ctx context.Context, count int, cont
 	return files, cont, nil
 }
 
-func (b *b2Bucket) downloadFileByName(ctx context.Context, name string, offset, size int64) (b2FileReaderInterface, error) {
-	fr, err := b.b.DownloadFileByName(ctx, name, offset, size)
+func (b *b2Bucket) downloadFileByName(ctx context.Context, name string, offset, size int64, header bool) (b2FileReaderInterface, error) {
+	fr, err := b.b.DownloadFileByName(ctx, name, offset, size, header)
 	if err != nil {
 		code, _ := base.Code(err)
 		switch code {

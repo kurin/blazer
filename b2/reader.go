@@ -132,7 +132,7 @@ func (r *Reader) thread() {
 			}
 			var b backoff
 		redo:
-			fr, err := r.o.b.b.downloadFileByName(r.ctx, r.name, offset, size)
+			fr, err := r.o.b.b.downloadFileByName(r.ctx, r.name, offset, size, false)
 			if err == errNoMoreContent {
 				// this read generated a 416 so we are entirely past the end of the object
 				r.readOffEnd = true

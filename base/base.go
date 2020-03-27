@@ -197,10 +197,10 @@ func logRequest(req *http.Request, args []byte) {
 	hstr := strings.Join(headers, ";")
 	method := req.Header.Get("X-Blazer-Method")
 	if args != nil {
-		blog.V(2).Infof(">> %s uri: %v headers: {%s} args: (%s)", method, req.URL, hstr, string(args))
+		blog.V(2).Infof(">> %s %v: %v headers: {%s} args: (%s)", method, req.Method, req.URL, hstr, string(args))
 		return
 	}
-	blog.V(2).Infof(">> %s uri: %v {%s} (no args)", method, req.URL, hstr)
+	blog.V(2).Infof(">> %s %v: %v {%s} (no args)", method, req.Method, req.URL, hstr)
 }
 
 var authRegexp = regexp.MustCompile(`"authorizationToken": ".[^"]*"`)
@@ -1115,9 +1115,13 @@ func mkRange(offset, size int64) string {
 }
 
 // DownloadFileByName wraps b2_download_file_by_name.
-func (b *Bucket) DownloadFileByName(ctx context.Context, name string, offset, size int64) (*FileReader, error) {
+func (b *Bucket) DownloadFileByName(ctx context.Context, name string, offset, size int64, header bool) (*FileReader, error) {
 	uri := fmt.Sprintf("%s/file/%s/%s", b.b2.downloadURI, b.Name, escape(name))
-	req, err := http.NewRequest("GET", uri, nil)
+	method := "GET"
+	if header {
+		method = "HEAD"
+	}
+	req, err := http.NewRequest(method, uri, nil)
 	if err != nil {
 		return nil, err
 	}

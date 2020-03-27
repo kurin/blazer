@@ -229,7 +229,7 @@ func TestStorage(t *testing.T) {
 	}
 
 	// b2_download_file_by_name
-	fr, err := bucket.DownloadFileByName(ctx, smallFileName, 0, 0)
+	fr, err := bucket.DownloadFileByName(ctx, smallFileName, 0, 0, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -638,7 +638,7 @@ func TestUploadDownloadFilenameEscaping(t *testing.T) {
 	}()
 
 	// b2_download_file_by_name
-	fr, err := bucket.DownloadFileByName(ctx, filename, 0, 0)
+	fr, err := bucket.DownloadFileByName(ctx, filename, 0, 0, false)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -21,6 +21,25 @@ import "github.com/kurin/blazer/b2"
 
 ## Examples
 
+### Getting started
+```go
+id := "B2_ACCOUNT_ID"
+key := "B2_ACCOUNT_KEY"
+
+ctx := context.Background()
+
+// b2_authorize_account
+b2, err := b2.NewClient(ctx, id, key)
+if err != nil {
+	log.Fatalln(e)
+}
+
+buckets, err := b2.ListBuckets(ctx)
+if err != nil {
+	log.Fatalln(e)
+}
+```
+
 ### Copy a file into B2
 
 ```go

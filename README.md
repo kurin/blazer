@@ -19,6 +19,8 @@ scales.
 import "github.com/kurin/blazer/b2"
 ```
 
+Except see https://www.backblaze.com/blog/backblaze-b2-s3-compatible-api/; you probably don't need this library anymore.
+
 ## Examples
 
 ### Getting started

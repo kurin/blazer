@@ -632,11 +632,13 @@ func (b *Bucket) BaseURL() string {
 	return b.b2.downloadURI
 }
 
-// ListBuckets wraps b2_list_buckets.
-func (b *B2) ListBuckets(ctx context.Context) ([]*Bucket, error) {
+// ListBuckets wraps b2_list_buckets.  If name is non-empty, only that bucket
+// will be returned if it exists; else nothing will be returned.
+func (b *B2) ListBuckets(ctx context.Context, name string) ([]*Bucket, error) {
 	b2req := &b2types.ListBucketsRequest{
 		AccountID: b.accountID,
 		Bucket:    b.bucket,
+		Name:      name,
 	}
 	b2resp := &b2types.ListBucketsResponse{}
 	headers := map[string]string{

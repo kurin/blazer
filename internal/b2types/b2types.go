@@ -76,6 +76,7 @@ type DeleteBucketRequest struct {
 type ListBucketsRequest struct {
 	AccountID string `json:"accountId"`
 	Bucket    string `json:"bucketId,omitempty"`
+	Name      string `json:"bucketName,omitempty"`
 }
 
 type ListBucketsResponse struct {

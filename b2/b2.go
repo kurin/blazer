@@ -282,7 +282,7 @@ func (p *urlPool) put(u beURLInterface) {
 
 // Bucket returns a bucket if it exists.
 func (c *Client) Bucket(ctx context.Context, name string) (*Bucket, error) {
-	buckets, err := c.backend.listBuckets(ctx)
+	buckets, err := c.backend.listBuckets(ctx, name)
 	if err != nil {
 		return nil, err
 	}
@@ -306,7 +306,7 @@ func (c *Client) Bucket(ctx context.Context, name string) (*Bucket, error) {
 // if it does not already exist.  If attrs is nil, it is created as a private
 // bucket with no info metadata and no lifecycle rules.
 func (c *Client) NewBucket(ctx context.Context, name string, attrs *BucketAttrs) (*Bucket, error) {
-	buckets, err := c.backend.listBuckets(ctx)
+	buckets, err := c.backend.listBuckets(ctx, name)
 	if err != nil {
 		return nil, err
 	}
@@ -337,7 +337,7 @@ func (c *Client) NewBucket(ctx context.Context, name string, attrs *BucketAttrs)
 
 // ListBuckets returns all the available buckets.
 func (c *Client) ListBuckets(ctx context.Context) ([]*Bucket, error) {
-	bs, err := c.backend.listBuckets(ctx)
+	bs, err := c.backend.listBuckets(ctx, "")
 	if err != nil {
 		return nil, err
 	}

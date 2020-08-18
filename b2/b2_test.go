@@ -131,7 +131,7 @@ func (t *testRoot) createBucket(_ context.Context, name, _ string, _ map[string]
 	}, nil
 }
 
-func (t *testRoot) listBuckets(context.Context) ([]b2BucketInterface, error) {
+func (t *testRoot) listBuckets(context.Context, string) ([]b2BucketInterface, error) {
 	var b []b2BucketInterface
 	for k, v := range t.bucketMap {
 		b = append(b, &testBucket{

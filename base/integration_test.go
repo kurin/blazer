@@ -108,7 +108,7 @@ func TestStorage(t *testing.T) {
 	}
 
 	// b2_list_buckets
-	buckets, err := b2.ListBuckets(ctx)
+	buckets, err := b2.ListBuckets(ctx, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,6 +121,15 @@ func TestStorage(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("%s: new bucket not found", bname)
+	}
+
+	buckets, err = b2.ListBuckets(ctx, bname)
+	if len(buckets) != 1 {
+		t.Errorf("excpected exactly 1 bucket, got %d", len(buckets))
+	} else {
+		if buckets[0].Name != bname {
+			t.Errorf("got %s, want %s", bname, buckets[0].Name)
+		}
 	}
 
 	// b2_get_upload_url

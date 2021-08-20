@@ -1,8 +1,8 @@
 Blazer
 ====
 
-[![GoDoc](https://godoc.org/github.com/renatocron/blazer/b2?status.svg)](https://godoc.org/github.com/renatocron/blazer/b2)
-[![Build Status](https://travis-ci.org/renatocron/blazer.svg)](https://travis-ci.org/renatocron/blazer)
+[![GoDoc](https://godoc.org/github.com/kurin/blazer/b2?status.svg)](https://godoc.org/github.com/kurin/blazer/b2)
+[![Build Status](https://travis-ci.org/kurin/blazer.svg)](https://travis-ci.org/kurin/blazer)
 
 Blazer is a Golang client library for Backblaze's B2 object storage service.
 It is designed for simple integration with existing applications that may
@@ -16,7 +16,7 @@ aspects, making it suitable to upload very large files, or over multi-day time
 scales.
 
 ```go
-import "github.com/renatocron/blazer/b2"
+import "github.com/kurin/blazer/b2"
 ```
 
 Except see https://www.backblaze.com/blog/backblaze-b2-s3-compatible-api/; you probably don't need this library anymore.

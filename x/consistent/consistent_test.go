@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kurin/blazer/b2"
+	"github.com/renatocron/blazer/b2"
 )
 
 const (

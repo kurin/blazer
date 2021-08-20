@@ -31,8 +31,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kurin/blazer/internal/blog"
-	"github.com/kurin/blazer/x/transport"
+	"github.com/renatocron/blazer/internal/blog"
+	"github.com/renatocron/blazer/x/transport"
 )
 
 const (

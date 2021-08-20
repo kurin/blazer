@@ -36,8 +36,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/kurin/blazer/internal/b2types"
-	"github.com/kurin/blazer/internal/blog"
+	"github.com/renatocron/blazer/internal/b2types"
+	"github.com/renatocron/blazer/internal/blog"
 )
 
 const (
@@ -333,7 +333,7 @@ func (rb *requestBody) getBody() io.Reader {
 		return nil
 	}
 	if rb.getSize() == 0 {
-		// https://github.com/kurin/blazer/issues/57
+		// https://github.com/renatocron/blazer/issues/57
 		// When body is non-nil, but the request's ContentLength is 0, it is
 		// replaced with -1, which causes the client to send a chunked encoding,
 		// which confuses B2.

@@ -77,6 +77,7 @@ type beURL struct {
 
 type beFileInterface interface {
 	name() string
+	id() string
 	size() int64
 	timestamp() time.Time
 	status() string
@@ -540,6 +541,10 @@ func (b *beFile) size() int64 {
 
 func (b *beFile) name() string {
 	return b.b2file.name()
+}
+
+func (b *beFile) id() string {
+	return b.b2file.id()
 }
 
 func (b *beFile) timestamp() time.Time {

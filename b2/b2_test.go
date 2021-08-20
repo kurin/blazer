@@ -319,6 +319,7 @@ type testFile struct {
 	files map[string]string
 }
 
+func (t *testFile) id() string           { return t.n }
 func (t *testFile) name() string         { return t.n }
 func (t *testFile) size() int64          { return t.s }
 func (t *testFile) timestamp() time.Time { return t.t }

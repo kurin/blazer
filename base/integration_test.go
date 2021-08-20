@@ -26,7 +26,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kurin/blazer/x/transport"
+	"github.com/renatocron/blazer/x/transport"
 
 	"context"
 )

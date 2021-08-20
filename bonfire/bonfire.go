@@ -27,7 +27,7 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/renatocron/blazer/internal/pyre"
+	"github.com/kurin/blazer/internal/pyre"
 )
 
 type FS string

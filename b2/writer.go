@@ -23,7 +23,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/renatocron/blazer/internal/blog"
+	"github.com/kurin/blazer/internal/blog"
 )
 
 // Writer writes data into Backblaze.  It automatically switches to the large
@@ -503,7 +503,7 @@ func (w *Writer) Close() error {
 				return
 			}
 		}
-		// See https://github.com/renatocron/blazer/issues/60 for why we use a special
+		// See https://github.com/kurin/blazer/issues/60 for why we use a special
 		// channel for this.
 		close(w.cdone)
 		w.wg.Wait()

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/renatocron/blazer/bonfire"
-	"github.com/renatocron/blazer/internal/pyre"
+	"github.com/kurin/blazer/bonfire"
+	"github.com/kurin/blazer/internal/pyre"
 )
 
 type superManager struct {

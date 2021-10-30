@@ -17,9 +17,12 @@ package base
 import (
 	"bytes"
 	"crypto/sha1"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"reflect"
 	"strings"
@@ -436,6 +439,27 @@ func TestDeadlineExceededContextCancelsHTTPRequest(t *testing.T) {
 	defer cancel()
 	if _, err := ue.UploadFile(cctx, buf, buf.Len(), smallFileName, "application/octet-stream", smallSHA1, nil); err != context.DeadlineExceeded {
 		t.Errorf("expected deadline exceeded error, but got %v", err)
+	}
+}
+
+func TestUnknownCA(t *testing.T) {
+	id := os.Getenv(apiID)
+	key := os.Getenv(apiKey)
+	if id == "" || key == "" {
+		t.Skipf("B2_ACCOUNT_ID or B2_SECRET_KEY unset; skipping integration tests")
+	}
+	ctx := context.Background()
+
+	tport := &http.Transport{
+		TLSClientConfig: &tls.Config{RootCAs: x509.NewCertPool()},
+	}
+
+	_, err := AuthorizeAccount(ctx, id, key, Transport(tport))
+	if err == nil {
+		t.Error("expected an error, got none")
+	}
+	if Action(err) != Punt {
+		t.Errorf("Action(%v): got %v, want Punt", err, Action(err))
 	}
 }
 

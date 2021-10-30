@@ -23,6 +23,7 @@ package base
 import (
 	"bytes"
 	"context"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -309,6 +310,10 @@ func makeNetRequest(ctx context.Context, req *http.Request, rt http.RoundTripper
 	default:
 		method := req.Header.Get("X-Blazer-Method")
 		blog.V(2).Infof(">> %s uri: %v err: %v", method, req.URL, err)
+		switch err.(type) {
+		case x509.UnknownAuthorityError:
+			return nil, err
+		}
 		return nil, b2err{
 			msg:   err.Error(),
 			retry: 1,

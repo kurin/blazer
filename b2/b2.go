@@ -438,6 +438,11 @@ func (o *Object) Name() string {
 	return o.name
 }
 
+// ID returns an object's id
+func (o *Object) ID() string {
+	return o.f.id()
+}
+
 // Attrs returns an object's attributes.
 func (o *Object) Attrs(ctx context.Context) (*Attrs, error) {
 	if err := o.ensure(ctx); err != nil {

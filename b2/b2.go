@@ -620,7 +620,6 @@ func (discard) Write(p []byte) (int, error) {
 func (b *Bucket) getObject(ctx context.Context, name string) (*Object, error) {
 	fr, err := b.b.downloadFileByName(ctx, name, 0, 0, true)
 	if err != nil {
-		fmt.Printf("%v: %T\n", err, err)
 		return nil, err
 	}
 	io.Copy(discard{}, fr)

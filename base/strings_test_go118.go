@@ -1,4 +1,4 @@
-// +build !go1.18
+// +build go1.18
 
 package base
 
@@ -37,18 +37,18 @@ func TestEncodeDecode(t *testing.T) {
 }
 
 // hook for go-fuzz: https://github.com/dvyukov/go-fuzz
-func Fuzz(data []byte) int {
-	orig := string(data)
-	escaped := escape(orig)
+func Fuzz(f *testing.F) {
+	f.Fuzz(func(t *testing.T, data []byte) {
+		orig := string(data)
+		escaped := escape(orig)
 
-	unescaped, err := unescape(escaped)
-	if err != nil {
-		return 0
-	}
+		unescaped, err := unescape(escaped)
+		if err != nil {
+			t.SkipNow()
+		}
 
-	if unescaped != orig {
-		panic(fmt.Sprintf("unescaped: \"%#v\", != orig: \"%#v\"", unescaped, orig))
-	}
-
-	return 1
+		if unescaped != orig {
+			panic(fmt.Sprintf("unescaped: \"%#v\", != orig: \"%#v\"", unescaped, orig))
+		}
+	})
 }
